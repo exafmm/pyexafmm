@@ -79,6 +79,20 @@ def get_key_from_point(point, level, x0, r0):
     return get_key(vec)
 
 @_numba.njit(cache=True)
+def get_keys_from_points_array(points, level, x0, r0):
+    """Get keys from array of points."""
+    npoints = len(points)
+    keys = _np.empty(npoints, dtype=_np.int64)
+    vecs = _np.empty((npoints, 4), dtype=_np.int64)
+    vecs[:,-1] = level
+    xmin = x0 - r0
+    dx = 2 * r0 / (1 << level)
+    vecs[:,:3] = _np.floor((points - xmin) / dx).astype(_np.int64)
+    for index in range(npoints):
+        keys[index] = get_key(vecs[index, :])
+    return keys
+
+@_numba.njit(cache=True)
 def get_center_from_4d_index(vec, x0, r0):
     """Get center of box from 4d index."""
     xmin = x0 - r0

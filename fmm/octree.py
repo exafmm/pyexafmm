@@ -10,7 +10,7 @@ import numba as _numba
 class Octree(object):
     """Data structure for handling Octrees."""
 
-    def __init__(self, sources, targets, maximum_level, center, radius):
+    def __init__(self, sources, targets, maximum_level):
         """
         Initialize an Octree.
 
@@ -22,8 +22,18 @@ class Octree(object):
             An (N, 3) float64 array of N vertices
         """
 
-        self._center = center
-        self._radius = radius
+        tree_min = _np.min(
+            _np.vstack([_np.min(sources, axis=0), _np.min(targets, axis=0)]), axis=0
+        )
+        tree_max = _np.max(
+            _np.vstack([_np.max(sources, axis=0), _np.max(targets, axis=0)]), axis=0
+        )
+
+        self._center = (tree_min + tree_max) / 2
+        self._radius = (
+            _np.max([_np.max(self.center - tree_min), _np.max(tree_max - self.center)])
+            * 1.00001
+        )
         self._maximum_level = maximum_level
         self._sources = sources
         self._targets = targets
@@ -35,15 +45,23 @@ class Octree(object):
         self._target_leaf_nodes, self._targets_by_leafs, self._target_index_ptr = self._assign_points_to_leaf_nodes(
             self._targets
         )
-        self._non_empty_source_nodes = self._compute_set_of_all_non_empty_nodes(
+
+        self._non_empty_source_nodes, self._source_node_to_index = self._compute_set_of_all_non_empty_nodes(
             self._source_leaf_nodes
         )
-        self._non_empty_target_nodes = self._compute_set_of_all_non_empty_nodes(
+        self._non_empty_target_nodes, self._target_node_to_index = self._compute_set_of_all_non_empty_nodes(
             self._target_leaf_nodes
         )
 
         self._target_neighbors = _numba_compute_neighbors(
             self._non_empty_target_nodes, self._non_empty_source_nodes
+        )
+
+        self._interaction_list = _numba_compute_interaction_list(
+            self._non_empty_target_nodes,
+            self._target_neighbors,
+            self._non_empty_source_nodes,
+            self._target_node_to_index,
         )
 
     @property
@@ -121,6 +139,21 @@ class Octree(object):
         """Return non-empty target nodes."""
         return self._non_empty_target_nodes
 
+    @property
+    def interaction_list(self):
+        """Return interaction list."""
+        return self._interaction_list
+
+    @property
+    def source_node_to_index(self):
+        """Return index of a given source node key."""
+        return self._source_node_to_index
+
+    @property
+    def target_node_to_index(self):
+        """Return index of a given target node key."""
+        return self._target_node_to_index
+
     def parent(self, node_index):
         """Return the parent index of a node."""
         return _hilbert.get_parent(node_index)
@@ -128,9 +161,7 @@ class Octree(object):
     def children(self, node_index):
         """Return an iterator over the child indices."""
 
-        first = node_index << 3
-        last = 7 + (node_index << 3)
-        return list(range(first, 1 + last))
+        return _hilbert.get_children(node_index)
 
     def nodes_per_side(self, level):
         """Return number of nodes along each dimension."""
@@ -143,7 +174,7 @@ class Octree(object):
     def _assign_points_to_leaf_nodes(self, points):
         """Assign points to leaf nodes."""
 
-        assigned_nodes = _numba_assign_points_to_nodes(
+        assigned_nodes = _hilbert.get_keys_from_points_array(
             points, self.maximum_level, self.center, self.radius
         )
 
@@ -176,10 +207,16 @@ class Octree(object):
                 all_nodes.add(parent)
         all_nodes.add(0)
 
-        return _np.array(list(all_nodes), dtype=_np.int64)
+        final_list = _np.array(list(all_nodes), dtype=_np.int64)
+        inverse_list = _numba.typed.Dict.empty(
+            key_type=_numba.types.int64, value_type=_numba.types.int64
+        )
+        for index, item in enumerate(final_list):
+            inverse_list[item] = index
+
+        return final_list, inverse_list
 
 
-@_numba.njit(cache=True)
 def _numba_assign_points_to_nodes(points, level, x0, r0):
     """Assign points to leaf nodes."""
 
@@ -240,3 +277,40 @@ def _numba_compute_neighbors(nodes, comparison_nodes):
                         neighbors[index, count] = -1
     return neighbors
 
+
+@_numba.njit(cache=True)
+def _numba_compute_interaction_list(
+    target_nodes, target_source_neighbors, all_source_nodes, target_node_to_index
+):
+    """Compute the interaction list."""
+
+    def find_neighbors(array, node_index, neighbor_child):
+        """Find node in neighbors array."""
+        for index in range(27):
+            if array[node_index, index] == neighbor_child:
+                return True
+        return False
+
+    nnodes = len(target_nodes)
+
+    source_nodes_set = set(all_source_nodes)
+
+    interaction_list = -_np.ones((nnodes, 27, 8), dtype=_np.int64)
+    for node_index, node in enumerate(target_nodes):
+        level = _hilbert.get_level(node)
+        if level < 2:
+            continue
+        parent = _hilbert.get_parent(node)
+        for neighbor_index, neighbor in enumerate(
+            target_source_neighbors[target_node_to_index[parent]]
+        ):
+            if neighbor == -1:
+                continue
+            for child_index, neighbor_child in enumerate(
+                _hilbert.get_children(neighbor)
+            ):
+                if neighbor_child in source_nodes_set and not find_neighbors(
+                    target_source_neighbors, node_index, neighbor_child
+                ):
+                    interaction_list[node, neighbor_index, child_index] = neighbor_child
+    return interaction_list
