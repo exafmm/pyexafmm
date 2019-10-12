@@ -98,7 +98,7 @@ def test_correct_keys_assigned_to_leafs(octree):
             dist = np.max(np.abs(node_center - octree.sources[source_index]))
             assert dist <= max_dist
 
-def test_interaction_list(octree):
+def test_interaction_list_assignment(octree):
     """Check that the interaction list has been correctly assigned."""
 
     nnodes = octree.interaction_list.shape[0]
@@ -123,8 +123,4 @@ def test_interaction_list(octree):
                         assert octree.interaction_list[node_index, neighbor_index, child_index] == child
                     else:
                         assert octree.interaction_list[node_index, neighbor_index, child_index] == -1
-
-            
-
-
 

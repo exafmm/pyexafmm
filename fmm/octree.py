@@ -22,45 +22,59 @@ class Octree(object):
             An (N, 3) float64 array of N vertices
         """
 
-        tree_min = _np.min(
-            _np.vstack([_np.min(sources, axis=0), _np.min(targets, axis=0)]), axis=0
-        )
-        tree_max = _np.max(
-            _np.vstack([_np.max(sources, axis=0), _np.max(targets, axis=0)]), axis=0
-        )
-
-        self._center = (tree_min + tree_max) / 2
-        self._radius = (
-            _np.max([_np.max(self.center - tree_min), _np.max(tree_max - self.center)])
-            * 1.00001
-        )
         self._maximum_level = maximum_level
         self._sources = sources
         self._targets = targets
 
-        self._source_leaf_nodes, self._sources_by_leafs, self._source_index_ptr = self._assign_points_to_leaf_nodes(
-            self._sources
-        )
+        self._center, self._radius = compute_bounds(sources, targets)
 
-        self._target_leaf_nodes, self._targets_by_leafs, self._target_index_ptr = self._assign_points_to_leaf_nodes(
-            self._targets
-        )
+        self._source_node_to_index = None
+        self._target_node_to_index = None
 
-        self._non_empty_source_nodes, self._source_node_to_index = self._compute_set_of_all_non_empty_nodes(
-            self._source_leaf_nodes
-        )
-        self._non_empty_target_nodes, self._target_node_to_index = self._compute_set_of_all_non_empty_nodes(
-            self._target_leaf_nodes
-        )
+        self._non_empty_source_nodes = None
+        self._non_empty_target_nodes = None
+
+        self._source_leaf_nodes = None
+        self._sources_by_leafs = None
+        self._source_index_ptr = None
+
+        self._target_leaf_nodes = None
+        self._targets_by_leafs = None
+        self._target_index_ptr = None
+
+        self._target_neighbors = None
+        self._interaction_list = None
+
+        (
+            self._source_leaf_nodes,
+            self._sources_by_leafs,
+            self._source_index_ptr,
+        ) = self._assign_points_to_leaf_nodes(sources)
+
+        (
+            self._target_leaf_nodes,
+            self._targets_by_leafs,
+            self._target_index_ptr,
+        ) = self._assign_points_to_leaf_nodes(targets)
+
+        (
+            self._non_empty_source_nodes,
+            self._source_node_to_index
+        ) = self._enumerate_non_empty_nodes(self._source_leaf_nodes)
+
+        (
+            self._non_empty_target_nodes,
+            self._target_node_to_index
+        ) = self._enumerate_non_empty_nodes(self._target_leaf_nodes)
 
         self._target_neighbors = _numba_compute_neighbors(
-            self._non_empty_target_nodes, self._non_empty_source_nodes
+            self._non_empty_target_nodes, self._source_node_to_index
         )
 
         self._interaction_list = _numba_compute_interaction_list(
             self._non_empty_target_nodes,
             self._target_neighbors,
-            self._non_empty_source_nodes,
+            self._source_node_to_index,
             self._target_node_to_index,
         )
 
@@ -195,26 +209,30 @@ class Octree(object):
 
         return nodes, point_indices_by_node, index_ptr
 
-    def _compute_set_of_all_non_empty_nodes(self, leaf_nodes):
-        """Compute all non-empty nodes across the tree."""
+    def _enumerate_non_empty_nodes(self, leaf_nodes):
+        """Enumerate all non-empty nodes across the tree."""
 
-        all_nodes = set(leaf_nodes)
+        nleafs = len(leaf_nodes)
 
+        node_map = -_np.ones(
+            _hilbert.get_number_of_all_nodes(self.maximum_level), dtype=_np.int64
+        )
+
+        node_map[leaf_nodes] = range(nleafs)
+
+        count = nleafs
         for node in leaf_nodes:
             parent = node
             while parent != 0:
                 parent = self.parent(parent)
-                all_nodes.add(parent)
-        all_nodes.add(0)
+                if node_map[parent] == -1:
+                    node_map[parent] = count
+                    count += 1
 
-        final_list = _np.array(list(all_nodes), dtype=_np.int64)
-        inverse_list = _numba.typed.Dict.empty(
-            key_type=_numba.types.int64, value_type=_numba.types.int64
-        )
-        for index, item in enumerate(final_list):
-            inverse_list[item] = index
+        list_of_nodes = _np.flatnonzero(node_map != -1)
+        indices = _np.argsort(node_map[list_of_nodes])
 
-        return final_list, inverse_list
+        return list_of_nodes[indices], node_map
 
 
 def _numba_assign_points_to_nodes(points, level, x0, r0):
@@ -236,7 +254,7 @@ def _in_range(n1, n2, n3, bound):
 
 
 @_numba.njit(cache=True)
-def _numba_compute_neighbors(nodes, comparison_nodes):
+def _numba_compute_neighbors(target_nodes, source_node_map):
     """
     Compute all non-empty neighbors for the given nodes.
 
@@ -246,13 +264,12 @@ def _numba_compute_neighbors(nodes, comparison_nodes):
 
     """
 
-    comp_set = set(comparison_nodes)
-    nnodes = len(nodes)
+    nnodes = len(target_nodes)
 
     neighbors = _np.empty((nnodes, 27), dtype=_np.int64)
 
     offset = _np.zeros(4, dtype=_np.int64)
-    for index, node in enumerate(nodes):
+    for index, node in enumerate(target_nodes):
         vec = _hilbert.get_4d_index_from_key(node)
         nodes_per_side = 1 << vec[3]
         count = -1
@@ -269,7 +286,7 @@ def _numba_compute_neighbors(nodes, comparison_nodes):
                         nodes_per_side,
                     ):
                         neighbor_key = _hilbert.get_key(neighbor_vec)
-                        if neighbor_key in comp_set:
+                        if source_node_map[neighbor_key] != -1:
                             neighbors[index, count] = neighbor_key
                         else:
                             neighbors[index, count] = -1
@@ -280,7 +297,7 @@ def _numba_compute_neighbors(nodes, comparison_nodes):
 
 @_numba.njit(cache=True)
 def _numba_compute_interaction_list(
-    target_nodes, target_source_neighbors, all_source_nodes, target_node_to_index
+    target_nodes, target_source_neighbors, source_node_to_index, target_node_to_index
 ):
     """Compute the interaction list."""
 
@@ -292,8 +309,6 @@ def _numba_compute_interaction_list(
         return False
 
     nnodes = len(target_nodes)
-
-    source_nodes_set = set(all_source_nodes)
 
     interaction_list = -_np.ones((nnodes, 27, 8), dtype=_np.int64)
     for node_index, node in enumerate(target_nodes):
@@ -309,8 +324,26 @@ def _numba_compute_interaction_list(
             for child_index, neighbor_child in enumerate(
                 _hilbert.get_children(neighbor)
             ):
-                if neighbor_child in source_nodes_set and not find_neighbors(
+                if source_node_to_index[neighbor_child] != -1 and not find_neighbors(
                     target_source_neighbors, node_index, neighbor_child
                 ):
-                    interaction_list[node, neighbor_index, child_index] = neighbor_child
+                    interaction_list[node_index, neighbor_index, child_index] = neighbor_child
     return interaction_list
+
+
+def compute_bounds(sources, targets):
+    """Compute center and radius of arrays of sources and targets."""
+    min_bound = _np.min(
+        _np.vstack([_np.min(sources, axis=0), _np.min(targets, axis=0)]), axis=0
+    )
+    max_bound = _np.max(
+        _np.vstack([_np.max(sources, axis=0), _np.max(targets, axis=0)]), axis=0
+    )
+
+    center = (min_bound + max_bound) / 2
+    radius = (
+        _np.max([_np.max(center - min_bound), _np.max(max_bound - center)])
+        * 1.00001
+    )
+
+    return center, radius
