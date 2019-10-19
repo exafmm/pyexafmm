@@ -1,3 +1,7 @@
+<h1 align='center'>
+PyExaFMM
+</h1>
+
 The goal of PyExaFMM is to develop a version of ExaFMM that is written
 in Python as much as possible without sacrificing performance.
 
@@ -13,6 +17,3 @@ Planned development milestones:
     further optimisations using PyOpenCL
 4.) Support for distributed compute devices
 5.) Offloading on Nvidia GPUs with PyCuda
-
-
-
