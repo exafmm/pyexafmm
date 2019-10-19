@@ -16,6 +16,14 @@ It is envisioned that the library mainly uses Numpy, Numba, Numexpr, and Multipr
 
 ## Install
 
-```
+```bash
+# For using package
 python setup.py install
+
+# For developing on package
+pip install -e .[dev]
 ```
+
+## CLI
+
+...

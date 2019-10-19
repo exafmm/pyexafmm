@@ -25,11 +25,15 @@ setup(
     extras_require={
         'dev': [
             'pytest==3.6.4',
-            'pytest-cov==2.6.0',
-            'pylint==2.4.3'
+            'pylint==2.4.3',
+            'tox==3.14.0'
         ]
     },
     setup_requires=[
         'pytest-runner'
-    ]
+    ],
+    entry_points='''
+        [console_scripts]
+        ci=ci.cli:cli
+    '''
 )
