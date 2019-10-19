@@ -15,7 +15,7 @@ setup(
     version=ABOUT['__version__'],
     description=ABOUT['__description__'],
     packages=find_packages(
-        exclude=['*.tests']
+        exclude=['*.test']
     ),
     install_requires=[
         'llvmlite==0.30.0',
@@ -26,7 +26,8 @@ setup(
     extras_require={
         'dev': [
             'pytest==3.6.4',
-            'pytest-cov==2.6.0'
+            'pytest-cov==2.6.0',
+            'pylint==2.4.3'
         ]
     },
     setup_requires=[
