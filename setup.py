@@ -26,7 +26,8 @@ setup(
         'dev': [
             'pytest==3.6.4',
             'pylint==2.4.3',
-            'tox==3.14.0'
+            'tox==3.14.0',
+            'click==7.0',
         ]
     },
     setup_requires=[
