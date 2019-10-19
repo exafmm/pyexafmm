@@ -1,10 +1,10 @@
 """Implementation of an octree in Python."""
 
-import fmm.hilbert as _hilbert
-import fmm.utils as _utils
+import fmm.hilbert as hilbert
+import fmm.utils as utils
 
-import numpy as _np
-import numba as _numba
+import numpy as np 
+import numba
 
 
 class Octree:
@@ -165,12 +165,12 @@ class Octree:
 
     def parent(self, node_index):
         """Return the parent index of a node."""
-        return _hilbert.get_parent(node_index)
+        return hilbert.get_parent(node_index)
 
     def children(self, node_index):
         """Return an iterator over the child indices."""
 
-        return _hilbert.get_children(node_index)
+        return hilbert.get_children(node_index)
 
     def nodes_per_side(self, level):
         """Return number of nodes along each dimension."""
@@ -183,11 +183,11 @@ class Octree:
     def _assign_points_to_leaf_nodes(self, points):
         """Assign points to leaf nodes."""
 
-        assigned_nodes = _hilbert.get_keys_from_points_array(
+        assigned_nodes = hilbert.get_keys_from_points_array(
             points, self.maximum_level, self.center, self.radius
         )
 
-        point_indices_by_node = _np.argsort(assigned_nodes)
+        point_indices_by_node = np.argsort(assigned_nodes)
 
         index_ptr = []
         nodes = []
@@ -209,8 +209,8 @@ class Octree:
 
         nleafs = len(leaf_nodes)
 
-        node_map = -_np.ones(
-            _hilbert.get_number_of_all_nodes(self.maximum_level), dtype=_np.int64
+        node_map = - np.ones(
+            hilbert.get_number_of_all_nodes(self.maximum_level), dtype=_np.int64
         )
 
         node_map[leaf_nodes] = range(nleafs)
@@ -224,8 +224,8 @@ class Octree:
                     node_map[parent] = count
                     count += 1
 
-        list_of_nodes = _np.flatnonzero(node_map != -1)
-        indices = _np.argsort(node_map[list_of_nodes])
+        list_of_nodes = np.flatnonzero(node_map != -1)
+        indices = np.argsort(node_map[list_of_nodes])
 
         return list_of_nodes[indices], node_map
 
@@ -234,9 +234,9 @@ def _numba_assign_points_to_nodes(points, level, x0, r0):
     """Assign points to leaf nodes."""
 
     npoints = len(points)
-    assigned_nodes = _np.empty(npoints, dtype=_np.int64)
+    assigned_nodes = np.empty(npoints, dtype=np.int64)
     for index in range(npoints):
-        assigned_nodes[index] = _hilbert.get_key_from_point(
+        assigned_nodes[index] = hilbert.get_key_from_point(
             points[index], level, x0, r0
         )
     return assigned_nodes
@@ -261,11 +261,11 @@ def _numba_compute_neighbors(target_nodes, source_node_map):
 
     nnodes = len(target_nodes)
 
-    neighbors = _np.empty((nnodes, 27), dtype=_np.int64)
+    neighbors = np.empty((nnodes, 27), dtype=np.int64)
 
-    offset = _np.zeros(4, dtype=_np.int64)
+    offset = np.zeros(4, dtype=np.int64)
     for index, node in enumerate(target_nodes):
-        vec = _hilbert.get_4d_index_from_key(node)
+        vec = hilbert.get_4d_index_from_key(node)
         nodes_per_side = 1 << vec[3]
         count = -1
         for i in range(-1, 2):
@@ -280,7 +280,7 @@ def _numba_compute_neighbors(target_nodes, source_node_map):
                         neighbor_vec[2],
                         nodes_per_side,
                     ):
-                        neighbor_key = _hilbert.get_key(neighbor_vec)
+                        neighbor_key = hilbert.get_key(neighbor_vec)
                         if source_node_map[neighbor_key] != -1:
                             neighbors[index, count] = neighbor_key
                         else:
@@ -305,19 +305,19 @@ def _numba_compute_interaction_list(
 
     nnodes = len(target_nodes)
 
-    interaction_list = -_np.ones((nnodes, 27, 8), dtype=_np.int64)
+    interaction_list = -np.ones((nnodes, 27, 8), dtype=np.int64)
     for node_index, node in enumerate(target_nodes):
-        level = _hilbert.get_level(node)
+        level = hilbert.get_level(node)
         if level < 2:
             continue
-        parent = _hilbert.get_parent(node)
+        parent = hilbert.get_parent(node)
         for neighbor_index, neighbor in enumerate(
             target_source_neighbors[target_node_to_index[parent]]
         ):
             if neighbor == -1:
                 continue
             for child_index, neighbor_child in enumerate(
-                _hilbert.get_children(neighbor)
+                hilbert.get_children(neighbor)
             ):
                 if source_node_to_index[neighbor_child] != -1 and not find_neighbors(
                     target_source_neighbors, node_index, neighbor_child
@@ -328,16 +328,16 @@ def _numba_compute_interaction_list(
 
 def compute_bounds(sources, targets):
     """Compute center and radius of arrays of sources and targets."""
-    min_bound = _np.min(
-        _np.vstack([_np.min(sources, axis=0), _np.min(targets, axis=0)]), axis=0
+    min_bound = np.min(
+        np.vstack([np.min(sources, axis=0), np.min(targets, axis=0)]), axis=0
     )
-    max_bound = _np.max(
-        _np.vstack([_np.max(sources, axis=0), _np.max(targets, axis=0)]), axis=0
+    max_bound = np.max(
+        np.vstack([np.max(sources, axis=0), np.max(targets, axis=0)]), axis=0
     )
 
     center = (min_bound + max_bound) / 2
     radius = (
-        _np.max([_np.max(center - min_bound), _np.max(max_bound - center)])
+        np.max([np.max(center - min_bound), np.max(max_bound - center)])
         * 1.00001
     )
 
