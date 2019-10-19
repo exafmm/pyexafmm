@@ -139,11 +139,6 @@ class Octree:
         return self._target_index_ptr
 
     @property
-    def target_neighbors(self):
-        """Return array of target node neighbors."""
-        return self._target_neighbors
-
-    @property
     def non_empty_source_nodes(self):
         """Return non-empty source nodes."""
         return self._non_empty_source_nodes
