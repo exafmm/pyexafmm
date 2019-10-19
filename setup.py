@@ -18,7 +18,6 @@ setup(
         exclude=['*.test']
     ),
     install_requires=[
-        'llvmlite==0.30.0',
         'numba==0.46.0',
         'numpy==1.17.3'
 

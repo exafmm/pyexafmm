@@ -1,7 +1,7 @@
 """Implementation of an octree in Python."""
 
-from . import hilbert as _hilbert
-from . import utils as _utils
+import fmm.hilbert as _hilbert
+import fmm.utils as _utils
 
 import numpy as _np
 import numba as _numba
