@@ -7,7 +7,7 @@ import numpy as _np
 import numba as _numba
 
 
-class Octree(object):
+class Octree:
     """Data structure for handling Octrees."""
 
     def __init__(self, sources, targets, maximum_level):
