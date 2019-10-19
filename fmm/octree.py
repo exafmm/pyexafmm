@@ -210,7 +210,7 @@ class Octree:
         nleafs = len(leaf_nodes)
 
         node_map = - np.ones(
-            hilbert.get_number_of_all_nodes(self.maximum_level), dtype=_np.int64
+            hilbert.get_number_of_all_nodes(self.maximum_level), dtype=np.int64
         )
 
         node_map[leaf_nodes] = range(nleafs)
@@ -242,13 +242,13 @@ def _numba_assign_points_to_nodes(points, level, x0, r0):
     return assigned_nodes
 
 
-@_numba.njit(cache=True)
+@numba.njit(cache=True)
 def _in_range(n1, n2, n3, bound):
     """Check if 0 <= n1, n2, n3 < bound."""
     return n1 >= 0 and n1 < bound and n2 >= 0 and n2 < bound and n3 >= 0 and n3 < bound
 
 
-@_numba.njit(cache=True)
+@numba.njit(cache=True)
 def _numba_compute_neighbors(target_nodes, source_node_map):
     """
     Compute all non-empty neighbors for the given nodes.
@@ -290,7 +290,7 @@ def _numba_compute_neighbors(target_nodes, source_node_map):
     return neighbors
 
 
-@_numba.njit(cache=True)
+@numba.njit(cache=True)
 def _numba_compute_interaction_list(
     target_nodes, target_source_neighbors, source_node_to_index, target_node_to_index
 ):
