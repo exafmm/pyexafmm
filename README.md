@@ -26,4 +26,12 @@ pip install -e .[dev]
 
 ## CLI
 
-...
+```bash
+ci [OPTIONS] COMMAND [ARGS]
+```
+
+|Command    | Action |
+|---	    |---	 |
+| `build`	| Build dev version in current python env |
+| `test`	| Run test suite	|
+| `lint`	| Run project linter 	|
