@@ -19,7 +19,7 @@ def cli():
 )
 def build():
     click.echo('Building and installing')
-    subprocess.run(['pip', 'install', '-e. [dev]'])
+    subprocess.run(['pip', 'install', '-e.[dev]'])
 
 
 @click.command(
