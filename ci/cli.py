@@ -1,23 +1,41 @@
+import os
+import subprocess
+
 import click
 
-@click.command()
-@click.option('--count', default=1, help='Number of greetings.')
-@click.option('--name', prompt='Your name',
-              help='The person to greet.')
-def cli(count, name):
-    """Simple program that greets NAME for a total of COUNT times."""
-    for x in range(count):
-        click.echo('Hello %s!' % name)
+HERE = os.path.abspath(os.path.dirname(__file__))
+TOX_FILEPATH = os.path.join(HERE, 'tox.ini')
+HELP_TEXT = """
+    Command Line Interface for PyExaFMM
+"""
 
 
-@click.command()
+@click.group(help=HELP_TEXT)
+def cli():
+    pass
+
+@click.command(
+    help='Build dev version in current python env'
+)
 def build():
-    pass
+    click.echo('Building and installing')
+    subprocess.run(['pip', 'install', '-e. [dev]'])
 
-@click.command()
+
+@click.command(
+    help='Run test suite'
+)
 def test():
-    pass
+    click.echo('Running test suite')    
+    subprocess.run(['pytest', 'fmm'])
 
-@click.command()
+@click.command(
+    help='Run linter'
+)
 def lint():
-    pass
+    click.echo('Running linter')
+    subprocess.run(['pylint', 'fmm', TOX_FILEPATH])
+
+cli.add_command(build)
+cli.add_command(test)
+cli.add_command(lint)
