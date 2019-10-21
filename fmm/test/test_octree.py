@@ -1,4 +1,4 @@
-from fmm import hilbert
+import fmm.hilbert as hilbert
 
 import numpy as np
 import pytest

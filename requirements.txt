@@ -1,0 +1,27 @@
+astroid==2.3.2
+atomicwrites==1.3.0
+attrs==19.3.0
+Click==7.0
+filelock==3.0.12
+-e git+git@github.com:exafmm/pyexafmm.git@441ced5328a67c44ddb0ccc5529522f720a8902e#egg=fmm
+importlib-metadata==0.23
+isort==4.3.21
+lazy-object-proxy==1.4.2
+llvmlite==0.30.0
+mccabe==0.6.1
+more-itertools==7.2.0
+numba==0.46.0
+numpy==1.17.3
+packaging==19.2
+pluggy==0.7.1
+py==1.8.0
+pylint==2.4.3
+pyparsing==2.4.2
+pytest==3.6.4
+six==1.12.0
+toml==0.10.0
+tox==3.14.0
+typed-ast==1.4.0
+virtualenv==16.7.6
+wrapt==1.11.2
+zipp==0.6.0
