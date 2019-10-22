@@ -1,10 +1,8 @@
 """Implementation of an octree in Python."""
+import numba
+import numpy as np
 
 import fmm.hilbert as hilbert
-import fmm.utils as utils
-
-import numpy as np 
-import numba
 
 
 class Octree:
@@ -245,7 +243,7 @@ def _numba_assign_points_to_nodes(points, level, x0, r0):
 @numba.njit(cache=True)
 def _in_range(n1, n2, n3, bound):
     """Check if 0 <= n1, n2, n3 < bound."""
-    return n1 >= 0 and n1 < bound and n2 >= 0 and n2 < bound and n3 >= 0 and n3 < bound
+    return (0 <= n1 < bound) and (0 <= n2 < bound) and (0 <= n3 < bound)
 
 
 @numba.njit(cache=True)
@@ -275,10 +273,10 @@ def _numba_compute_neighbors(target_nodes, source_node_map):
                     offset[:3] = i, j, k
                     neighbor_vec = vec + offset
                     if _in_range(
-                        neighbor_vec[0],
-                        neighbor_vec[1],
-                        neighbor_vec[2],
-                        nodes_per_side,
+                            neighbor_vec[0],
+                            neighbor_vec[1],
+                            neighbor_vec[2],
+                            nodes_per_side,
                     ):
                         neighbor_key = hilbert.get_key(neighbor_vec)
                         if source_node_map[neighbor_key] != -1:
@@ -292,7 +290,7 @@ def _numba_compute_neighbors(target_nodes, source_node_map):
 
 @numba.njit(cache=True)
 def _numba_compute_interaction_list(
-    target_nodes, target_source_neighbors, source_node_to_index, target_node_to_index
+        target_nodes, target_source_neighbors, source_node_to_index, target_node_to_index
 ):
     """Compute the interaction list."""
 
@@ -312,15 +310,15 @@ def _numba_compute_interaction_list(
             continue
         parent = hilbert.get_parent(node)
         for neighbor_index, neighbor in enumerate(
-            target_source_neighbors[target_node_to_index[parent]]
+                target_source_neighbors[target_node_to_index[parent]]
         ):
             if neighbor == -1:
                 continue
             for child_index, neighbor_child in enumerate(
-                hilbert.get_children(neighbor)
+                    hilbert.get_children(neighbor)
             ):
                 if source_node_to_index[neighbor_child] != -1 and not find_neighbors(
-                    target_source_neighbors, node_index, neighbor_child
+                        target_source_neighbors, node_index, neighbor_child
                 ):
                     interaction_list[node_index, neighbor_index, child_index] = neighbor_child
     return interaction_list
