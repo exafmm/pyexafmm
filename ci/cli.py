@@ -1,10 +1,12 @@
-import os
+from pathlib import Path
 import subprocess
 
 import click
 
-HERE = os.path.abspath(os.path.dirname(__file__))
-TOX_FILEPATH = os.path.join(HERE, 'tox.ini')
+HERE = Path(__file__)
+PARDIR = HERE.parent.parent
+TOX_FILEPATH = PARDIR.joinpath('tox.ini')
+
 HELP_TEXT = """
     Command Line Interface for PyExaFMM
 """
