@@ -1,11 +1,6 @@
-from pathlib import Path
 import subprocess
 
 import click
-
-HERE = Path(__file__)
-PARDIR = HERE.parent.parent
-TOX_FILEPATH = PARDIR.joinpath('tox.ini')
 
 HELP_TEXT = """
     Command Line Interface for PyExaFMM
@@ -36,7 +31,7 @@ def test():
 )
 def lint():
     click.echo('Running linter')
-    subprocess.run(['pylint', 'fmm', TOX_FILEPATH])
+    subprocess.run(['tox'])
 
 cli.add_command(build)
 cli.add_command(test)

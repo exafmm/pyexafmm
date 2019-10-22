@@ -1,7 +1,11 @@
-import fmm.hilbert as hilbert
-
+"""
+Tests for Octree data structure
+"""
 import numpy as np
 import pytest
+
+import fmm.hilbert as hilbert
+from fmm.octree import Octree
 
 NPOINTS = 10000
 MAXIMUM_LEVEL = 3
@@ -10,7 +14,6 @@ MAXIMUM_LEVEL = 3
 @pytest.fixture
 def octree():
     """Fill up an octree."""
-    from fmm.octree import Octree
 
     rand = np.random.RandomState(0)
 
@@ -25,7 +28,7 @@ def test_source_leaf_assignment(octree):
 
     for index, source_node in enumerate(octree.source_leaf_nodes):
         for point_index in octree.sources_by_leafs[
-            octree.source_index_ptr[index] : octree.source_index_ptr[1 + index]
+                octree.source_index_ptr[index] : octree.source_index_ptr[1 + index]
         ]:
             expected = source_node
             actual = hilbert.get_key_from_point(
@@ -42,7 +45,7 @@ def test_target_leaf_assignment(octree):
 
     for index, target_node in enumerate(octree.target_leaf_nodes):
         for point_index in octree.targets_by_leafs[
-            octree.target_index_ptr[index] : octree.target_index_ptr[1 + index]
+                octree.target_index_ptr[index] : octree.target_index_ptr[1 + index]
         ]:
             expected = target_node
             actual = hilbert.get_key_from_point(
@@ -93,7 +96,7 @@ def test_correct_keys_assigned_to_leafs(octree):
             vec, octree.center, octree.radius
         )
         for source_index in octree.sources_by_leafs[
-            octree.source_index_ptr[index] : octree.source_index_ptr[index + 1]
+                octree.source_index_ptr[index] : octree.source_index_ptr[index + 1]
         ]:
             dist = np.max(np.abs(node_center - octree.sources[source_index]))
             assert dist <= max_dist
@@ -101,13 +104,13 @@ def test_correct_keys_assigned_to_leafs(octree):
 def test_interaction_list_assignment(octree):
     """Check that the interaction list has been correctly assigned."""
 
-    nnodes = octree.interaction_list.shape[0]
     source_nodes_set = set(octree.non_empty_source_nodes)
 
 
     for node_index, node in enumerate(octree.non_empty_target_nodes):
         level = hilbert.get_level(node)
-        if level < 2: continue
+        if level < 2:
+            continue
         parent = hilbert.get_parent(node)
         parent_neighbors = octree.target_neighbors[octree.target_node_to_index[parent]]
         node_neighbors = octree.target_neighbors[octree.target_node_to_index[node]]
@@ -120,7 +123,6 @@ def test_interaction_list_assignment(octree):
                 # There are sources in the neighbor
                 for child_index, child in enumerate(hilbert.get_children(parent_neighbor)):
                     if child in source_nodes_set and child not in set(node_neighbors):
-                        assert octree.interaction_list[node_index, neighbor_index, child_index] == child
+                        assert octree.interaction_list[node_index, neighbor_index, child_index] == child  # pylint: disable=C0301
                     else:
-                        assert octree.interaction_list[node_index, neighbor_index, child_index] == -1
-
+                        assert octree.interaction_list[node_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
