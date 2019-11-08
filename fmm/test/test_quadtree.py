@@ -4,88 +4,48 @@ Tests for Quadtree
 import numpy as np
 import pytest
 
-from fmm.quadtree import Node, partition, find_bounds
+from fmm.quadtree import Node, Quadtree, partition, find_bounds
+
+SOURCES = np.array((0, 0)).reshape(1, 2)
+TARGETS = np.array((1, 1)).reshape(1, 2)
+NODE_BOUNDS = (-0.1, 1.1, -0.1, 1.1)
 
 
 @pytest.mark.parametrize(
-    'sources, targets',
+    "sources, targets, bounds",
     [
-        (np.random.rand(10, 2), np.random.rand(10, 2))
+        (SOURCES, TARGETS, NODE_BOUNDS)
     ]
 )
-def test_init(sources, targets):
-    """Test that Node object is properly initialised"""
+def test_node_init(sources, targets, bounds):
+    """Test instantiation of Node object"""
+    n = Node(sources, targets, bounds)
 
-    n = Node(sources, targets)
-
-    assert len(n.sources) == 10
-    assert len(n.targets) == 10
-
+    assert n.parent is None
+    assert np.array_equal(n.sources, sources)
+    assert np.array_equal(n.targets, targets)
+    assert n.bounds == bounds
 
 @pytest.mark.parametrize(
-    'sources, targets',
+    "sources, targets, bounds",
     [
-        (np.random.rand(10, 2), np.random.rand(10, 2))
+        (SOURCES, TARGETS, NODE_BOUNDS)
     ]
 )
-def test_bounds(sources, targets):
-    """Test that bounds make physical sense"""
+def test_node_children(sources, targets, bounds):
+    """Test the finding of node children"""
+    n = Node(sources, targets, bounds)
 
-    n = Node(sources, targets)
+    # Test that partition takes place
+    assert len(n.children) == 4
 
-    left, right, bottom, top = n.bounds
-
-    assert left <= right
-    assert bottom <= top
-
-
-@pytest.mark.parametrize(
-    'sources, targets, expected',
-    [
-        (
-            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
-            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
-            [(0, 0.5, 0.5, 1), (0.5, 1, 0.5, 1), (0, 0.5, 0, 0.5), (0.5, 1, 0, 0.5)]
-        )
-    ]
-)
-def test_partition(sources, targets, expected):
+    # Test that parent is assigned
+    assert n.children[0].parent is n
     
-    n = Node(sources, targets)
-    p = partition(n.bounds)
-    
-    assert p == expected
-    assert type(p) == list
+    # Check that sources and targets are partitioned amongst children
+    north_west, north_east, south_west, south_east = n.children
 
-
-@pytest.mark.parametrize(
-    'sources, targets',
-    [
-        (
-            np.array((0,1)), np.array((0,1))
-        )
-    ]
-)
-def test_find_bounds(sources, targets):
-    sources = sources.reshape(1, 2)
-    targets = targets.reshape(1, 2)
-    print(find_bounds(sources, targets))
-    assert True
-
-
-@pytest.mark.parametrize(
-    'sources, targets',
-    [
-        (
-            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
-            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
-        )
-    ]
-)
-def test_children(sources, targets):
-    n = Node(sources, targets)
-    # [print(c.bounds) for c in n.children]
-    # [print(c.parent) for c in n.children]
-    [print(c.targets) for c in n.children]
-
-    assert False
+    # From our choice of targets and sources expect following two nodes to
+    # containt targets/sources
+    assert np.array_equal(sources, south_west.sources)
+    assert np.array_equal(targets, north_east.targets)

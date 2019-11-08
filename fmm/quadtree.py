@@ -63,7 +63,12 @@ class Node:
             child_sources = np.array(child_sources).reshape((n_sources, 2))
             child_targets = np.array(child_targets).reshape((n_targets, 2))
 
-            child_node = Node(child_sources, child_targets, quadrant, self)
+            child_node = Node(
+                sources=child_sources,
+                targets=child_targets,
+                bounds=quadrant,
+                parent=self
+                )
 
             _children.append(child_node)
 
@@ -76,7 +81,7 @@ class Quadtree:
     """
     def __init__(self, sources, targets, max_levels, bounds=(0, 1, 0, 1)):
         self.sources = sources
-        self.targets = targets        
+        self.targets = targets
         self.max_levels = max_levels
 
         # Needed for efficient comparison
@@ -95,7 +100,6 @@ class Quadtree:
             parents = parent.children
 
     def __call__(self, level):
-
         if level == 0:
             return [self.parent]
 
