@@ -3,6 +3,7 @@ Quadtree datastructure, for 2D algorithms
 """
 import numpy as np
 
+
 class Node:
     """
     Defined over R^2, Consider only square domains for now.
@@ -133,12 +134,3 @@ def partition(bounds):
     south_east = (center[0], right, bottom, center[1])
 
     return [north_west, north_east, south_west, south_east]
-
-
-def find_vertices(partition):
-
-    left, right, bottom, top = partition
-    x_coords = [left, right]
-    y_coords = [bottom, top]
-
-    return np.array([(x, y) for x in x_coords for y in y_coords])
