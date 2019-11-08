@@ -6,8 +6,7 @@ import numpy as np
 
 class Node:
     """
-    Defined over R^2, Consider only square domains for now
-        [0, 1] x [0, 1] for simplicity
+    Defined over R^2, Consider only square domains for now.
     """
 
     def __init__(self, sources, targets, bounds, parent=None):
@@ -30,9 +29,11 @@ class Node:
 
     @property
     def children(self):
+        """
+        Find the child nodes.
+        """
         _children = []
         quadrants = partition(self.bounds)
-
 
         for quadrant in quadrants:
             left, right, bottom, top = quadrant
@@ -63,7 +64,9 @@ class Node:
 
 
 class Quadtree:
-
+    """
+    Generates a quadtree class in the formed of a singly linked list.
+    """
     def __init__(self, sources, targets, max_levels, bounds=(-0.1, 1.1, -0.1, 1.1)):
         self.sources = sources
         self.targets = targets
@@ -75,9 +78,23 @@ class Quadtree:
     def generate(self):
         parents = [self.parent]
         for level in range(self.max_levels):
+            children = []
             for parent in parents:
-                yield parent.children
+                children.extend(parent.children)
+            yield children
             parents = parent.children
+
+    def __call__(self, level):
+
+        if level == 0:
+            return [self.parent]
+
+        tree = self.generate()
+        curr = 0
+        for nodes in self.generate():
+            if curr == level-1:
+                return nodes
+            curr += 1
 
 
 def find_bounds(targets, sources):
@@ -116,16 +133,3 @@ def find_vertices(partition):
     y_coords = [bottom, top]
 
     return np.array([(x, y) for x in x_coords for y in y_coords])
-
-    
-if __name__ == "__main__":
-
-    a = np.array((1, 2)).reshape(1,2)
-
-    q = Quadtree(a, a, 2)
-
-    res = list(q.generate())
-
-    print(res[0][0])
-
-    print([c.parent for c in res[1]])
