@@ -91,9 +91,9 @@ class Quadtree:
 
         tree = self.generate()
         curr = 0
-        for nodes in self.generate():
+        for current_level in tree:
             if curr == level-1:
-                return nodes
+                return current_level
             curr += 1
 
 
