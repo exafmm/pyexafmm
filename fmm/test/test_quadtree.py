@@ -4,7 +4,7 @@ Tests for Quadtree
 import numpy as np
 import pytest
 
-from fmm.quadtree import Node, partition
+from fmm.quadtree import Node, partition, find_bounds
 
 
 @pytest.mark.parametrize(
@@ -56,3 +56,36 @@ def test_partition(sources, targets, expected):
     
     assert p == expected
     assert type(p) == list
+
+
+@pytest.mark.parametrize(
+    'sources, targets',
+    [
+        (
+            np.array((0,1)), np.array((0,1))
+        )
+    ]
+)
+def test_find_bounds(sources, targets):
+    sources = sources.reshape(1, 2)
+    targets = targets.reshape(1, 2)
+    print(find_bounds(sources, targets))
+    assert True
+
+
+@pytest.mark.parametrize(
+    'sources, targets',
+    [
+        (
+            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
+            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
+        )
+    ]
+)
+def test_children(sources, targets):
+    n = Node(sources, targets)
+    # [print(c.bounds) for c in n.children]
+    # [print(c.parent) for c in n.children]
+    [print(c.targets) for c in n.children]
+
+    assert False
