@@ -41,14 +41,20 @@ def test_bounds(sources, targets, max_depth):
 
 
 @pytest.mark.parametrize(
-    'sources, targets',
+    'sources, targets, expected',
     [
-        (np.random.rand(2, 2),np.random.rand(2, 2))
+        (
+            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
+            np.array(((0, 0), (0, 1), (1, 0), (1, 1))),
+            [(0, 0.5, 0.5, 1), (0.5, 1, 0.5, 1), (0, 0.5, 0, 0.5), (0.5, 1, 0, 0.5)]
+        )
     ]
 )
-def test_partition(sources, targets):
+def test_partition(sources, targets, expected):
     
     q = Quadtree(sources, targets, 1)
-    q.bounds
-
-    assert False
+    print(q.bounds)
+    partition = q.partition(q.bounds)
+    
+    assert partition == expected
+    assert type(partition) == list
