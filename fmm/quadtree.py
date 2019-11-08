@@ -10,7 +10,7 @@ class Node:
         [0, 1] x [0, 1] for simplicity
     """
 
-    def __init__(self, sources, targets, parent=None, bounds=(-0.1, 1.1, -0.1, 1.1)):
+    def __init__(self, sources, targets, bounds, parent=None):
         """
         Parameters
         ----------
@@ -18,10 +18,10 @@ class Node:
             Coordinates of source points
         targets : np.array(shape=(N, 2))
             Coordinates of target points
+        bounds: List()
+            Default domain
         parent: pointer/None
             Pointer to parent node, None it is the top of tree.
-        bounds: List()/ default [-0.1, 1.1, -0.1, 1.1]
-            Default domain
         """
         self.sources = sources
         self.targets = targets
@@ -55,7 +55,7 @@ class Node:
             child_sources = np.array(child_sources).reshape((n_sources, 2))
             child_targets = np.array(child_targets).reshape((n_targets, 2))
 
-            child_node = Node(child_sources, child_targets, self, quadrant)
+            child_node = Node(child_sources, child_targets, quadrant, self)
 
             _children.append(child_node)
 
@@ -64,11 +64,20 @@ class Node:
 
 class Quadtree:
 
-    def __init__(self, max_levels):
+    def __init__(self, sources, targets, max_levels, bounds=(-0.1, 1.1, -0.1, 1.1)):
+        self.sources = sources
+        self.targets = targets
+        self.bounds = bounds
         self.max_levels = max_levels
 
+        self.parent = Node(sources, targets, bounds=bounds)
+
     def generate(self):
-        pass
+        parents = [self.parent]
+        for level in range(self.max_levels):
+            for parent in parents:
+                yield parent.children
+            parents = parent.children
 
 
 def find_bounds(targets, sources):
@@ -109,3 +118,14 @@ def find_vertices(partition):
     return np.array([(x, y) for x in x_coords for y in y_coords])
 
     
+if __name__ == "__main__":
+
+    a = np.array((1, 2)).reshape(1,2)
+
+    q = Quadtree(a, a, 2)
+
+    res = list(q.generate())
+
+    print(res[0][0])
+
+    print([c.parent for c in res[1]])
