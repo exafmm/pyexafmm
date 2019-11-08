@@ -111,19 +111,6 @@ class Quadtree:
             curr += 1
 
 
-def find_bounds(targets, sources):
-    """
-    Calculate the box bounds of a domain containing sources/targets.
-    """
-
-    xvec = np.vstack((targets[:, 0:1], sources[:, 0:1]))
-    yvec = np.vstack((targets[:, 1:], sources[:, 1:]))
-
-    left, right, bottom, top = xvec.min(), xvec.max(), yvec.min(), yvec.max()
-
-    return left, right, bottom, top
-
-
 def partition(bounds):
     """
     Partition into four quadrants from bounds
