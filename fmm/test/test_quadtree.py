@@ -4,18 +4,18 @@ Tests for Quadtree
 import numpy as np
 import pytest
 
-from fmm.quadtree import Node, Quadtree, partition
+from fmm.quadtree import Node, partition
 
 SOURCES = np.array((0, 0)).reshape(1, 2)
 TARGETS = np.array((1, 1)).reshape(1, 2)
 NODE_BOUNDS = (-0.1, 1.1, -0.1, 1.1)
 SIMPLE_BOUNDS = (0, 1, 0, 1)
-SIMPLE_PARTITION = [
+SIMPLE_PARTITION = (
     (0, 0.5, 0.5, 1),
     (0.5, 1, 0.5, 1),
     (0, 0.5, 0, 0.5),
     (0.5, 1, 0, 0.5)
-]
+)
 
 @pytest.mark.parametrize(
     "sources, targets, bounds",
@@ -64,7 +64,7 @@ def test_node_children(sources, targets, bounds):
     ]
 )
 def test_partition(bounds, expected):
-
+    """Test partition function"""
     p = partition(bounds)
 
     assert p == expected

@@ -37,7 +37,7 @@ class Node:
     @property
     def children(self):
         """
-        Find the child nodes.
+        Find the child nodes of this node.
         """
         _children = []
         quadrants = partition(self.bounds)
@@ -113,7 +113,18 @@ class Quadtree:
 
 def partition(bounds):
     """
-    Partition into four quadrants from bounds
+    Partition into four quadrants from bounds.
+
+    Parameters
+    ----------
+    bounds: Tuple(Float, Float, Float, Float)
+        Bounds of a given box.
+    
+    Returns
+    -------
+    Tuple(Tuple(Float, Float, Float, Float))
+        Tuple of bounds corresponding to each partitioned quadrant.
+
     """
     left, right, bottom, top = bounds
     
@@ -124,4 +135,4 @@ def partition(bounds):
     south_west = (left, center[0], bottom, center[1])
     south_east = (center[0], right, bottom, center[1])
 
-    return [north_west, north_east, south_west, south_east]
+    return north_west, north_east, south_west, south_east
