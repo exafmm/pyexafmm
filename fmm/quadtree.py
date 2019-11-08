@@ -3,7 +3,6 @@ Quadtree datastructure, for 2D algorithms
 """
 import numpy as np
 
-
 class Node:
     """
     Defined over R^2, Consider only square domains for now.
@@ -22,6 +21,13 @@ class Node:
         parent: pointer/None
             Pointer to parent node, None it is the top of tree.
         """
+
+        if sources.shape != (len(sources), 2):
+            raise TypeError('Sources wrong dimension')
+        
+        if targets.shape != (len(targets), 2):
+            raise TypeError('Targets wrong dimension')
+
         self.sources = sources
         self.targets = targets
         self.parent = parent
@@ -67,12 +73,15 @@ class Quadtree:
     """
     Generates a quadtree class in the formed of a singly linked list.
     """
-    def __init__(self, sources, targets, max_levels, bounds=(-0.1, 1.1, -0.1, 1.1)):
+    def __init__(self, sources, targets, max_levels, bounds=(0, 1, 0, 1)):
         self.sources = sources
-        self.targets = targets
-        self.bounds = bounds
+        self.targets = targets        
         self.max_levels = max_levels
 
+        # Needed for efficient comparison
+        eps = 0.01
+        bounds = bounds[0]-eps, bounds[1]+eps, bounds[2]-eps, bounds[3]+eps
+        self.bounds = bounds
         self.parent = Node(sources, targets, bounds=bounds)
 
     def generate(self):
@@ -118,12 +127,12 @@ def partition(bounds):
     
     center = (left+right)/2, (top+bottom)/2
 
-    northWest = (left, center[0], center[1], top)
-    northEast = (center[0], right, center[1], top)
-    southWest = (left, center[0], bottom, center[1])
-    southEast = (center[0], right, bottom, center[1])
+    north_west = (left, center[0], center[1], top)
+    north_east = (center[0], right, center[1], top)
+    south_west = (left, center[0], bottom, center[1])
+    south_east = (center[0], right, bottom, center[1])
 
-    return [northWest, northEast, southWest, southEast]
+    return [north_west, north_east, south_west, south_east]
 
 
 def find_vertices(partition):
