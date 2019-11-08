@@ -26,15 +26,31 @@ class Quadtree:
 
     @property
     def bounds(self):
-        xs = self.targets[:, 0:1] + self.sources[:, 0:1]
-        ys = self.targets[:, 1:] + self.sources[:, 1:]
+        """
+        Calculate the box bounds of a domain containing sources/targets.
+        """
+        xvec = np.vstack((self.targets[:, 0:1], self.sources[:, 0:1]))
+        yvec = np.vstack((self.targets[:, 1:], self.sources[:, 1:]))
 
-        l, r, b, t = xs.min(), xs.max(), ys.min(), ys.max()
+        left, right, bottom, top = xvec.min(), xvec.max(), yvec.min(), yvec.max()
 
-        return l, r, b, t
+        return left, right, bottom, top
 
-    def partition(level):
-        pass
+    @staticmethod
+    def partition(bounds):
+        """
+        Partition into four quadrants from bounds
+        """
+        left, right, bottom, top = bounds
+        
+        center = (left+right)/2, (top+bottom)/2
 
-    def _generate_tree(self):
-        pass
+        northWest = (left, center[0], center[1], top)
+        northEast = (center[0], right, center[1], top)
+        southWest = (left, center[0], bottom, center[1])
+        southEast = (center[0], right, bottom, center[1])
+
+        return [northWest, northEast, southWest, southEast]
+
+
+
