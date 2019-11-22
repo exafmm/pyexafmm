@@ -1,138 +1,261 @@
 """
-Quadtree datastructure, for 2D algorithms
+Simple Quadtree structure based on discontinuous Hilbert-like Curve.
+
+References:
+-----------
+[1] J. Skilling (2004) 10.1063/1.1751381
 """
 import numpy as np
 
 
-class Node:
+def point_to_hilbert(y, x, p):
     """
-    Defined over R^2, Consider only square domains for now.
+    Transform 2D coordinates to distance along Hilbert-like curve.
+    This method works by examining the bits of y, x from the highest to lowest
+    order. Determining which quadrant (in the Quadtree upon which this curve is
+    being drawn) in which the point lands, and assigning this to a binary
+    Hilbert-like value.
+
+    Parameters:
+    -----------
+    y : float
+    x : float
+    p : int
+        Precision of data, here x,y \in [0, 2*p-1]. Quadtree has a maximum of
+        (2*p)**2 leaf nodes.
+
+    Returns:
+    --------
+    key : int
+        Distance along discontinuous Hilbert-like curve.
     """
+    max_value = 2*p-1
+    if (x < 0 or x > max_value) or (y < 0 or y > max_value):
+        raise ValueError('Must pick in valid range')
 
-    def __init__(self, sources, targets, bounds, parent=None):
-        """
-        Parameters
-        ----------
-        sources : np.array(shape=(N, 2))
-            Coordinates of source points
-        targets : np.array(shape=(N, 2))
-            Coordinates of target points
-        bounds: List()
-            Default domain
-        parent: pointer/None
-            Pointer to parent node, None it is the top of tree.
-        """
+    key = 0
+    for i in range(p-1, -1, -1):
+        mask = 2**i
+        # Start with highest order bits
+        quad_x = 1 if mask & x else 0
+        quad_y = 1 if mask & y else 0
 
-        if sources.shape != (len(sources), 2):
-            raise TypeError('Sources wrong dimension')
-        
-        if targets.shape != (len(targets), 2):
-            raise TypeError('Targets wrong dimension')
+        # Concatenate
+        key <<= 1
+        key |= quad_y
+        key <<= 1
+        key |= quad_x
 
-        self.sources = sources
-        self.targets = targets
-        self.parent = parent
-        self.bounds = bounds
+    return key
 
-    @property
-    def children(self):
-        """
-        Find the child nodes of this node.
-        """
-        _children = []
-        quadrants = partition(self.bounds)
 
-        for quadrant in quadrants:
-            left, right, bottom, top = quadrant
+def hilbert_to_point(key, p):
+    """
+    Transform distance along Hilbert-like curve back to 2D coordinates.
 
-            child_sources = []
-            child_targets = []
+    Parameters:
+    -----------
+    key : int
+        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        position.
+    p : int
+        Precision of data, here x,y \in [0, 2*p-1]. Quadtree has a maximum of
+        (2*p)**2 leaf nodes.
 
-            for source in self.sources:
+    Returns:
+    --------
+    (int, int)
+        2D spatial coordinates of Hilbert-like key.
+    """
+    max_value = (2*p)**2
 
-                if left <= source[0] < right and bottom <= source[1] < top:
-                    child_sources.append(source)
+    if key < 0 or key > max_value:
+        raise ValueError('Must pick in range')
 
-            for target in self.targets:
-                
-                if left <= target[0] < right and bottom <= target[1] < top:
-                    child_targets.append(target)
+    y, x = 0, 0
 
-            n_sources = len(child_sources)
-            n_targets = len(child_targets)
-            child_sources = np.array(child_sources).reshape((n_sources, 2))
-            child_targets = np.array(child_targets).reshape((n_targets, 2))
+    for i in range(p-1, -1, -1):
 
-            child_node = Node(
-                sources=child_sources,
-                targets=child_targets,
-                bounds=quadrant,
-                parent=self
-                )
+        y_mask = 1 << ((2*i) + 1)
+        x_mask = y_mask >> 1
 
-            _children.append(child_node)
+        xi = (x_mask & key) >> (2*i)
+        yi = (y_mask & key) >> ((2*i)+1)
 
-        return _children
+        y <<= 1
+        y |= yi
+        x <<= 1
+        x |= xi
+
+    return y, x
+
+
+def find_parent(key):
+    """
+    Find the parent quadrant of a Hilbert-like key.
+
+    Parameters:
+    -----------
+    key : int
+        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        position.
+
+    Returns:
+    --------
+    int
+        Parent quadrant Hilbert-like key.
+    """
+    return key >> 2
+
+
+def find_children(key):
+    """
+    Find the children of a given quadrant.
+
+    Parameters:
+    -----------
+    key : int
+        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        position.
+
+    Returns:
+    --------
+    [int]
+        Child keys of this node.
+    """
+    offset = (key << 2)
+
+    children = []
+    for i in range(4):
+        children.append(offset | i)
+
+    return children
 
 
 class Quadtree:
     """
-    Generates a quadtree class in the formed of a singly linked list.
+    Simple Quadtree class.
     """
-    def __init__(self, sources, targets, max_levels, bounds=(0, 1, 0, 1)):
+    def __init__(self, sources, targets, precision=None):
+        """
+        Parameters:
+        -----------
+        sources : Points
+            A Points class of sources.
+        targets : Points
+            A points class of targets.
+        precision : None/int.
+            Desired precision of quadtree, defaults to that defined by data if
+            not provided.
+        """
         self.sources = sources
         self.targets = targets
-        self.max_levels = max_levels
 
-        # Needed for efficient comparison
-        eps = 0.01
-        bounds = bounds[0]-eps, bounds[1]+eps, bounds[2]-eps, bounds[3]+eps
-        self.bounds = bounds
-        self.parent = Node(sources, targets, bounds=bounds)
+        # Estimate precision required of tree from data
+        if precision is None:
+            self.precision = (self.sources.int_max // 2) + 1
+        else:
+            self.precision = precision
 
-    def generate(self):
-        parents = [self.parent]
-        for level in range(self.max_levels):
-            children = []
-            for parent in parents:
-                children.extend(parent.children)
-            yield children
-            parents = parent.children
+        # Assign sources to leaf nodes
+        self._assign_points_to_leaf_nodes(self.sources)
 
-    def __call__(self, level):
-        if level == 0:
-            return [self.parent]
+    @property
+    def leaf_nodes(self):
+        """
+        Leaf nodes available for this precision.
+        """
+        return np.array(
+            [
+                hilbert_to_point(i, self.precision)
+                for i in range((2*self.precision)**2)
+            ]
+        )
 
-        tree = self.generate()
-        curr = 0
-        for current_level in tree:
-            if curr == level-1:
-                return current_level
-            curr += 1
+    @property
+    def leaf_node_keys(self):
+        """
+        Distances along Hilbert-like curve corresponding to each leaf-node.
+        """
+        return np.array(
+            [
+                point_to_hilbert(*node, self.precision)
+                for node in self.leaf_nodes
+            ]
+        )
+
+    def _assign_points_to_leaf_nodes(self, points):
+        """
+        Sift through all points and all possible leaf nodes, and figure out
+        the assignment of points to leaf nodes.
+
+        Parameters:
+        -----------
+        points : Points
+        """
+        # Width of leaf node
+        delta = 1
+
+        # For each point, check each leaf node to see where it goes
+        for idx, point in enumerate(points):
+            for jdx, node in enumerate(self.leaf_nodes):
+                ny, nx = node[0], node[1]
+                y, x = point[0], point[1]
+
+                # Assign leaf nodes to each source
+                if ny <= y < ny+delta and nx <= x < nx+delta:
+                    points[idx: idx+1, 2] = self.leaf_node_keys[jdx]
 
 
-def partition(bounds):
+class Points:
     """
-    Partition into four quadrants from bounds.
-
-    Parameters
-    ----------
-    bounds: Tuple(Float, Float, Float, Float)
-        Bounds of a given box.
-    
-    Returns
-    -------
-    Tuple(Tuple(Float, Float, Float, Float))
-        Tuple of bounds corresponding to each partitioned quadrant.
-
+    Helper class to enforce safety when dealing with numpy arrays containing
+    coordinate data.
     """
-    left, right, bottom, top = bounds
-    
-    center = (left+right)/2, (top+bottom)/2
+    def __init__(self, points):
+        """
+        Parameters:
+        -----------
+        points : np.ndarray(shape=(N, 3))
+            N is the number of points, the first two dimensions must correspond
+            to x and y coordinate resp, and the third dimension indicates the
+            leaf node this point has been assigned to.
+        """
+        if not isinstance(points, np.ndarray):
+            raise TypeError('`points` must be a numpy array')
 
-    north_west = (left, center[0], center[1], top)
-    north_east = (center[0], right, center[1], top)
-    south_west = (left, center[0], bottom, center[1])
-    south_east = (center[0], right, bottom, center[1])
+        if points.ndim != 2 or points.shape[1] != 3:
+            raise TypeError('`points` must by an (N,3) array')
 
-    return north_west, north_east, south_west, south_east
+        self.points = points
+        self.ys = self.points[:, 0]
+        self.xs = self.points[:, 1]
+
+    def __iter__(self):
+        return iter(self.points)
+
+    def __setitem__(self, k, v):
+        self.points[k] = v
+
+    def __getitem(self, k):
+        return self.points[k]
+
+    @property
+    def leaf_nodes(self):
+        """Leaf nodes as coordinates np.array(shape=(N, 2))"""
+        return self.points[:, 2]
+
+    @property
+    def x_max(self):
+        """Max x coordinate"""
+        return self.xs.max()
+
+    @property
+    def y_max(self):
+        """Max y coordinate"""
+        return self.ys.max()
+
+    @property
+    def int_max(self):
+        """Max coordinate along any axis as the closest integer"""
+        return int(max(self.y_max, self.x_max))
