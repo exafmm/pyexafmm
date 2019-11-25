@@ -247,7 +247,7 @@ class Points:
     def __setitem__(self, k, v):
         self.points[k] = v
 
-    def __getitem(self, k):
+    def __getitem__(self, k):
         return self.points[k]
 
     @property
