@@ -31,7 +31,9 @@ def point_to_hilbert(y, x, p):
     """
     max_value = 2*p-1
     if (x < 0 or x > max_value) or (y < 0 or y > max_value):
-        raise ValueError('Must pick in valid range')
+        raise ValueError(
+            f'Must pick in valid range {0} <= x, y <= {max_value}'
+        )
 
     key = 0
     for i in range(p-1, -1, -1):
@@ -45,6 +47,9 @@ def point_to_hilbert(y, x, p):
         key |= quad_y
         key <<= 1
         key |= quad_x
+
+    # Apply offset due to level
+    key += calculate_level_offset(p)
 
     return key
 
@@ -69,8 +74,13 @@ def hilbert_to_point(key, p):
     """
     max_value = (2*p)**2
 
+    # Remove offset due to level
+    key -= calculate_level_offset(p)
+
     if key < 0 or key > max_value:
-        raise ValueError('Must pick in range')
+        raise ValueError(
+            f'Must pick in range {0} < value < {max_value}'
+        )
 
     y, x = 0, 0
 
@@ -88,6 +98,23 @@ def hilbert_to_point(key, p):
         x |= xi
 
     return y, x
+
+
+def calculate_level_offset(level):
+    """
+    Calculate the offset to a Hilbert-like key due to a node being on a given
+    level.
+
+    Paremeters:
+    -----------
+    level : int
+        The level of the key.
+
+    Returns:
+    int
+        The offset to apply to the key given its level.
+    """
+    return (1 << level)
 
 
 def find_parent(key):
@@ -157,18 +184,23 @@ class Quadtree:
         else:
             self.precision = precision
 
-        # Assign sources to leaf nodes
-        self._assign_points_to_leaf_nodes(self.sources)
+    @property
+    def n_nodes(self):
+        """
+        Number of nodes in the tree in total.
+        """
+        return sum([4**level for level in range(self.precision+1)])
 
     @property
     def leaf_nodes(self):
         """
         Leaf nodes available for this precision.
         """
+        offset = calculate_level_offset(self.precision)
         return np.array(
             [
                 hilbert_to_point(i, self.precision)
-                for i in range((2*self.precision)**2)
+                for i in range(offset, offset+((2*self.precision)**2))
             ]
         )
 
@@ -183,28 +215,6 @@ class Quadtree:
                 for node in self.leaf_nodes
             ]
         )
-
-    def _assign_points_to_leaf_nodes(self, points):
-        """
-        Sift through all points and all possible leaf nodes, and figure out
-        the assignment of points to leaf nodes.
-
-        Parameters:
-        -----------
-        points : Points
-        """
-        # Width of leaf node
-        delta = 1
-
-        # For each point, check each leaf node to see where it goes
-        for idx, point in enumerate(points):
-            for jdx, node in enumerate(self.leaf_nodes):
-                ny, nx = node[0], node[1]
-                y, x = point[0], point[1]
-
-                # Assign leaf nodes to each source
-                if ny <= y < ny+delta and nx <= x < nx+delta:
-                    points[idx: idx+1, 2] = self.leaf_node_keys[jdx]
 
 
 class Points:
