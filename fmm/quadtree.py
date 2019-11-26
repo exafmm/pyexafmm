@@ -245,6 +245,9 @@ class Points:
     def __iter__(self):
         return iter(self.points)
 
+    def __repr__(self):
+        return str(self.points)
+
     def __setitem__(self, k, v):
         self.points[k] = v
 
