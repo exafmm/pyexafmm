@@ -166,11 +166,15 @@ class Quadtree:
         self._assign_points_to_leaf_nodes(self.targets)
 
     @property
+    def n_levels(self):
+        return int(np.log(2*self.precision)/np.log(2))
+
+    @property
     def n_nodes(self):
         """
         Number of nodes in the tree in total.
         """
-        return sum([4**level for level in range(self.precision+1)])
+        return sum([4**level for level in range(self.n_levels+1)])
 
     @property
     def leaf_nodes(self):
