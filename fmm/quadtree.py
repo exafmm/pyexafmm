@@ -32,7 +32,7 @@ def point_to_hilbert(y, x, p):
     max_value = 2*p-1
     if (x < 0 or x > max_value) or (y < 0 or y > max_value):
         raise ValueError(
-            f'Must pick in valid range {0} <= x, y <= {max_value}'
+            f'Must pick in valid range {0} <= x, y <= {max_value}: {x, y}'
         )
 
     key = 0
@@ -47,9 +47,6 @@ def point_to_hilbert(y, x, p):
         key |= quad_y
         key <<= 1
         key |= quad_x
-
-    # Apply offset due to level
-    key += calculate_level_offset(p)
 
     return key
 
@@ -74,9 +71,6 @@ def hilbert_to_point(key, p):
     """
     max_value = (2*p)**2
 
-    # Remove offset due to level
-    key -= calculate_level_offset(p)
-
     if key < 0 or key > max_value:
         raise ValueError(
             f'Must pick in range {0} < value < {max_value}'
@@ -98,23 +92,6 @@ def hilbert_to_point(key, p):
         x |= xi
 
     return y, x
-
-
-def calculate_level_offset(level):
-    """
-    Calculate the offset to a Hilbert-like key due to a node being on a given
-    level.
-
-    Paremeters:
-    -----------
-    level : int
-        The level of the key.
-
-    Returns:
-    int
-        The offset to apply to the key given its level.
-    """
-    return (1 << level)
 
 
 def find_parent(key):
@@ -196,11 +173,10 @@ class Quadtree:
         """
         Leaf nodes available for this precision.
         """
-        offset = calculate_level_offset(self.precision)
         return np.array(
             [
                 hilbert_to_point(i, self.precision)
-                for i in range(offset, offset+((2*self.precision)**2))
+                for i in range((2*self.precision)**2)
             ]
         )
 
