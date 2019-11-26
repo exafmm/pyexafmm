@@ -161,6 +161,10 @@ class Quadtree:
         else:
             self.precision = precision
 
+        # Assign sources/targets to leaf nodes
+        self._assign_points_to_leaf_nodes(self.sources)
+        self._assign_points_to_leaf_nodes(self.targets)
+
     @property
     def n_nodes(self):
         """
@@ -191,6 +195,27 @@ class Quadtree:
                 for node in self.leaf_nodes
             ]
         )
+
+    def _assign_points_to_leaf_nodes(self, points):
+        """
+        Sift through all points and all possible leaf nodes, and figure out
+        the assignment of points to leaf nodes.
+        Parameters:
+        -----------
+        points : Points
+        """
+        # Width of leaf node
+        delta = 1
+
+        # For each point, check each leaf node to see where it goes
+        for idx, point in enumerate(points):
+            for jdx, node in enumerate(self.leaf_nodes):
+                ny, nx = node[0], node[1]
+                y, x = point[0], point[1]
+
+                # Assign leaf nodes to each source
+                if ny <= y < ny+delta and nx <= x < nx+delta:
+                    points[idx: idx+1, 2] = self.leaf_node_keys[jdx]
 
 
 class Points:
