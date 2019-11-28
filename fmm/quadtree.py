@@ -1,18 +1,14 @@
 """
 Simple Quadtree structure based on Z-order curve.
-
-References:
------------
-[1] J. Skilling (2004) 10.1063/1.1751381
 """
 import numpy as np
 
 
 def point_to_curve(y, x, p):
     """
-    Transform 2D coordinates to distance along Z-order curve. This method works 
-    by examining the bits of y, x from the highest to lowest order. Determining 
-    which quadrant (in the Quadtree upon which this curve is being drawn) in 
+    Transform 2D coordinates to distance along Z-order curve. This method works
+    by examining the bits of y, x from the highest to lowest order. Determining
+    which quadrant (in the Quadtree upon which this curve is being drawn) in
     which the point lands, and assigning this to a binary Z-order value.
 
     Parameters:
