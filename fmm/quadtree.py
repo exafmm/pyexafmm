@@ -1,5 +1,5 @@
 """
-Simple Quadtree structure based on discontinuous Hilbert-like Curve.
+Simple Quadtree structure based on Z-order curve.
 
 References:
 -----------
@@ -8,13 +8,12 @@ References:
 import numpy as np
 
 
-def point_to_hilbert(y, x, p):
+def point_to_curve(y, x, p):
     """
-    Transform 2D coordinates to distance along Hilbert-like curve.
-    This method works by examining the bits of y, x from the highest to lowest
-    order. Determining which quadrant (in the Quadtree upon which this curve is
-    being drawn) in which the point lands, and assigning this to a binary
-    Hilbert-like value.
+    Transform 2D coordinates to distance along Z-order curve. This method works 
+    by examining the bits of y, x from the highest to lowest order. Determining 
+    which quadrant (in the Quadtree upon which this curve is being drawn) in 
+    which the point lands, and assigning this to a binary Z-order value.
 
     Parameters:
     -----------
@@ -27,7 +26,7 @@ def point_to_hilbert(y, x, p):
     Returns:
     --------
     key : int
-        Distance along discontinuous Hilbert-like curve.
+        Distance along discontinuous Z-order curve.
     """
     max_value = 2*p-1
     if (x < 0 or x > max_value) or (y < 0 or y > max_value):
@@ -51,14 +50,14 @@ def point_to_hilbert(y, x, p):
     return key
 
 
-def hilbert_to_point(key, p):
+def curve_to_point(key, p):
     """
-    Transform distance along Hilbert-like curve back to 2D coordinates.
+    Transform distance along Z-order curve back to 2D coordinates.
 
     Parameters:
     -----------
     key : int
-        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        Distance along discontinuous Z-order curve, indicates a nodal
         position.
     p : int
         Precision of data, here x,y \in [0, 2*p-1]. Quadtree has a maximum of
@@ -67,7 +66,7 @@ def hilbert_to_point(key, p):
     Returns:
     --------
     (int, int)
-        2D spatial coordinates of Hilbert-like key.
+        2D spatial coordinates of Z-order key.
     """
     max_value = (2*p)**2
 
@@ -96,18 +95,18 @@ def hilbert_to_point(key, p):
 
 def find_parent(key):
     """
-    Find the parent quadrant of a Hilbert-like key.
+    Find the parent quadrant of a Z-order key.
 
     Parameters:
     -----------
     key : int
-        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        Distance along discontinuous Z-order curve, indicates a nodal
         position.
 
     Returns:
     --------
     int
-        Parent quadrant Hilbert-like key.
+        Parent quadrant Z-order key.
     """
     return key >> 2
 
@@ -119,7 +118,7 @@ def find_children(key):
     Parameters:
     -----------
     key : int
-        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        Distance along discontinuous Z-order curve, indicates a nodal
         position.
 
     Returns:
@@ -183,7 +182,7 @@ class Quadtree:
         """
         return np.array(
             [
-                hilbert_to_point(i, self.precision)
+                curve_to_point(i, self.precision)
                 for i in range((2*self.precision)**2)
             ]
         )
@@ -191,11 +190,11 @@ class Quadtree:
     @property
     def leaf_node_keys(self):
         """
-        Distances along Hilbert-like curve corresponding to each leaf-node.
+        Distances along Z-order curve corresponding to each leaf-node.
         """
         return np.array(
             [
-                point_to_hilbert(*node, self.precision)
+                point_to_curve(*node, self.precision)
                 for node in self.leaf_nodes
             ]
         )
