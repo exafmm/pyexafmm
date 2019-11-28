@@ -1,20 +1,15 @@
 """
-Simple Quadtree structure based on discontinuous Hilbert-like Curve.
-
-References:
------------
-[1] J. Skilling (2004) 10.1063/1.1751381
+Simple Quadtree structure based on Z-order curve.
 """
 import numpy as np
 
 
-def point_to_hilbert(y, x, p):
+def point_to_curve(y, x, p):
     """
-    Transform 2D coordinates to distance along Hilbert-like curve.
-    This method works by examining the bits of y, x from the highest to lowest
-    order. Determining which quadrant (in the Quadtree upon which this curve is
-    being drawn) in which the point lands, and assigning this to a binary
-    Hilbert-like value.
+    Transform 2D coordinates to distance along Z-order curve. This method works
+    by examining the bits of y, x from the highest to lowest order. Determining
+    which quadrant (in the Quadtree upon which this curve is being drawn) in
+    which the point lands, and assigning this to a binary Z-order value.
 
     Parameters:
     -----------
@@ -27,12 +22,12 @@ def point_to_hilbert(y, x, p):
     Returns:
     --------
     key : int
-        Distance along discontinuous Hilbert-like curve.
+        Distance along discontinuous Z-order curve.
     """
     max_value = 2*p-1
     if (x < 0 or x > max_value) or (y < 0 or y > max_value):
         raise ValueError(
-            f'Must pick in valid range {0} <= x, y <= {max_value}'
+            f'Must pick in valid range {0} <= x, y <= {max_value}: {x, y}'
         )
 
     key = 0
@@ -48,20 +43,17 @@ def point_to_hilbert(y, x, p):
         key <<= 1
         key |= quad_x
 
-    # Apply offset due to level
-    key += calculate_level_offset(p)
-
     return key
 
 
-def hilbert_to_point(key, p):
+def curve_to_point(key, p):
     """
-    Transform distance along Hilbert-like curve back to 2D coordinates.
+    Transform distance along Z-order curve back to 2D coordinates.
 
     Parameters:
     -----------
     key : int
-        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        Distance along discontinuous Z-order curve, indicates a nodal
         position.
     p : int
         Precision of data, here x,y \in [0, 2*p-1]. Quadtree has a maximum of
@@ -70,12 +62,9 @@ def hilbert_to_point(key, p):
     Returns:
     --------
     (int, int)
-        2D spatial coordinates of Hilbert-like key.
+        2D spatial coordinates of Z-order key.
     """
     max_value = (2*p)**2
-
-    # Remove offset due to level
-    key -= calculate_level_offset(p)
 
     if key < 0 or key > max_value:
         raise ValueError(
@@ -100,37 +89,20 @@ def hilbert_to_point(key, p):
     return y, x
 
 
-def calculate_level_offset(level):
-    """
-    Calculate the offset to a Hilbert-like key due to a node being on a given
-    level.
-
-    Paremeters:
-    -----------
-    level : int
-        The level of the key.
-
-    Returns:
-    int
-        The offset to apply to the key given its level.
-    """
-    return (1 << level)
-
-
 def find_parent(key):
     """
-    Find the parent quadrant of a Hilbert-like key.
+    Find the parent quadrant of a Z-order key.
 
     Parameters:
     -----------
     key : int
-        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        Distance along discontinuous Z-order curve, indicates a nodal
         position.
 
     Returns:
     --------
     int
-        Parent quadrant Hilbert-like key.
+        Parent quadrant Z-order key.
     """
     return key >> 2
 
@@ -142,7 +114,7 @@ def find_children(key):
     Parameters:
     -----------
     key : int
-        Distance along discontinuous Hilbert-like curve, indicates a nodal
+        Distance along discontinuous Z-order curve, indicates a nodal
         position.
 
     Returns:
@@ -184,37 +156,65 @@ class Quadtree:
         else:
             self.precision = precision
 
+        # Assign sources/targets to leaf nodes
+        self._assign_points_to_leaf_nodes(self.sources)
+        self._assign_points_to_leaf_nodes(self.targets)
+
+    @property
+    def n_levels(self):
+        return int(np.log(2*self.precision)/np.log(2))
+
     @property
     def n_nodes(self):
         """
         Number of nodes in the tree in total.
         """
-        return sum([4**level for level in range(self.precision+1)])
+        return sum([4**level for level in range(self.n_levels+1)])
 
     @property
     def leaf_nodes(self):
         """
         Leaf nodes available for this precision.
         """
-        offset = calculate_level_offset(self.precision)
         return np.array(
             [
-                hilbert_to_point(i, self.precision)
-                for i in range(offset, offset+((2*self.precision)**2))
+                curve_to_point(i, self.precision)
+                for i in range((2*self.precision)**2)
             ]
         )
 
     @property
     def leaf_node_keys(self):
         """
-        Distances along Hilbert-like curve corresponding to each leaf-node.
+        Distances along Z-order curve corresponding to each leaf-node.
         """
         return np.array(
             [
-                point_to_hilbert(*node, self.precision)
+                point_to_curve(*node, self.precision)
                 for node in self.leaf_nodes
             ]
         )
+
+    def _assign_points_to_leaf_nodes(self, points):
+        """
+        Sift through all points and all possible leaf nodes, and figure out
+        the assignment of points to leaf nodes.
+        Parameters:
+        -----------
+        points : Points
+        """
+        # Width of leaf node
+        delta = 1
+
+        # For each point, check each leaf node to see where it goes
+        for idx, point in enumerate(points):
+            for jdx, node in enumerate(self.leaf_nodes):
+                ny, nx = node[0], node[1]
+                y, x = point[0], point[1]
+
+                # Assign leaf nodes to each source
+                if ny <= y < ny+delta and nx <= x < nx+delta:
+                    points[idx: idx+1, 2] = self.leaf_node_keys[jdx]
 
 
 class Points:
@@ -243,6 +243,9 @@ class Points:
 
     def __iter__(self):
         return iter(self.points)
+
+    def __repr__(self):
+        return str(self.points)
 
     def __setitem__(self, k, v):
         self.points[k] = v
