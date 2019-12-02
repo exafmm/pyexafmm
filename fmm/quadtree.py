@@ -61,7 +61,7 @@ def curve_to_point(key, p):
 
     Returns:
     --------
-    (int, int)
+    coordinate : (int, int)
         2D spatial coordinates of Z-order key.
     """
     max_value = (2*p)**2
@@ -101,7 +101,7 @@ def find_parent(key):
 
     Returns:
     --------
-    int
+    key : int
         Parent quadrant Z-order key.
     """
     return key >> 2
@@ -119,7 +119,7 @@ def find_children(key):
 
     Returns:
     --------
-    [int]
+    keys : [int]
         Child keys of this node.
     """
     offset = (key << 2)
@@ -162,20 +162,17 @@ class Quadtree:
 
     @property
     def n_levels(self):
+        """Maximum number of tree levels."""
         return int(np.log(2*self.precision)/np.log(2))
 
     @property
     def n_nodes(self):
-        """
-        Number of nodes in the tree in total.
-        """
+        """Number of nodes in the tree in total."""
         return sum([4**level for level in range(self.n_levels+1)])
 
     @property
     def leaf_nodes(self):
-        """
-        Leaf nodes available for this precision.
-        """
+        """Leaf nodes."""
         return np.array(
             [
                 curve_to_point(i, self.precision)
@@ -185,9 +182,7 @@ class Quadtree:
 
     @property
     def leaf_node_keys(self):
-        """
-        Distances along Z-order curve corresponding to each leaf-node.
-        """
+        """Distances along Z-order curve corresponding to each leaf-node."""
         return np.array(
             [
                 point_to_curve(*node, self.precision)
@@ -197,24 +192,22 @@ class Quadtree:
 
     def _assign_points_to_leaf_nodes(self, points):
         """
-        Sift through all points and all possible leaf nodes, and figure out
-        the assignment of points to leaf nodes.
+        Sift through all points and calculate which leaf node they lie in,
+        assign to points in place.
+
         Parameters:
         -----------
         points : Points
+
+        Returns:
+        --------
+        None
         """
-        # Width of leaf node
-        delta = 1
-
-        # For each point, check each leaf node to see where it goes
         for idx, point in enumerate(points):
-            for jdx, node in enumerate(self.leaf_nodes):
-                ny, nx = node[0], node[1]
-                y, x = point[0], point[1]
-
-                # Assign leaf nodes to each source
-                if ny <= y < ny+delta and nx <= x < nx+delta:
-                    points[idx: idx+1, 2] = self.leaf_node_keys[jdx]
+            y, x = point[0], point[1]
+            trunc_y, trunc_x = int(np.floor(y)), int(np.floor(x))
+            key = point_to_curve(trunc_y, trunc_x, self.precision)
+            points[idx: idx+1, 2] = key
 
 
 class Points:
