@@ -171,6 +171,11 @@ class Quadtree:
         return sum([4**level for level in range(self.n_levels+1)])
 
     @property
+    def n_leaves(self):
+        """Number of leaves"""
+        return int((2*self.precision)**2)
+
+    @property
     def leaf_nodes(self):
         """Leaf nodes."""
         return np.array(
@@ -189,6 +194,17 @@ class Quadtree:
                 for node in self.leaf_nodes
             ]
         )
+
+    @property
+    def leaf_node_potentials(self):
+        """
+        Result of application of P2M operator on sources
+        """
+
+        # Dummy for now, just setting all equal to 1
+        return np.array([
+            1 for i in range(self.n_leaves)
+        ])
 
     def _assign_points_to_leaf_nodes(self, points):
         """
@@ -265,3 +281,7 @@ class Points:
     def int_max(self):
         """Max coordinate along any axis as the closest integer"""
         return int(max(self.y_max, self.x_max))
+
+    @property
+    def shape(self):
+        return self.points.shape

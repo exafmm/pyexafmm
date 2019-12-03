@@ -18,6 +18,44 @@ def m2m(key, parent, sources):
     key : int
     parent : int
     sources : [int]
+
+    Returns:
+    --------
+    int
+    """
+    return 1
+
+
+def m2l(source, target, m2m_result):
+    """
+    Dummy M2M operator.
+
+    Parameters:
+    -----------
+    source : int
+    target : int
+    m2m_result : int/Delayed
+
+    Returns:
+    --------
+    int
+    """
+    dummy = [0.5, 0.5]
+    return delayed(sum)(dummy)
+
+
+def direct_summation(source, target):
+    """
+    Dummy direct summation at leaf level
+    
+    Parameters:
+    -----------
+    source : int
+    target : int
+
+    Returns: 
+    --------
+    int
     """
     return 1
 
@@ -31,7 +69,6 @@ def upward_pass(tree):
     tree : Quadtree
         Quadtree containing sources/targets.
 
-
     Returns:
     --------
     {int:{int:Delayed}}
@@ -41,15 +78,23 @@ def upward_pass(tree):
         Delayed values are the evaluated value of the M2M operator run at the
         leaf level.
     """
-    leaves = tree.leaf_node_keys
+    leaves = tree.leaf_node_potentials
     sources = tree.sources
 
     current_level = tree.n_levels
     results = {i:dict() for i in range(1, current_level+1)}
 
+    # Add leaf values to results for help with downward pass
+    results[current_level+1] = {
+        idx: val for idx, val in enumerate(tree.leaf_node_potentials)
+        }
+
     while len(leaves) > 1:
 
+        print(f'current level: {current_level}')
+
         parent_leaves = []
+
         for i in range(0, len(leaves), 4):
 
             parent = find_parent(i)
@@ -66,7 +111,62 @@ def upward_pass(tree):
         current_level -= 1
         leaves = parent_leaves
 
+
     return results
+
+
+def downward_pass(tree, m2m_results):
+    """
+    Calculate downward pass of FMM algorithm.
+
+    Parameters:
+    -----------
+    tree : Quadtree
+        Quadtree containing sources/targets.
+
+    m2m_results : {int: {int: Delayed}}
+        Dask task graph where the keys in the outer dictionary correspond to the
+        level of the Quadtree, and the keys in the inner dictionary correspond
+        to the Z-order keys of the parent-box for each box at this level. The
+        Delayed values are the evaluated value of the M2M operator run at the
+        leaf level.
+
+    Returns:
+    --------
+    m2l_results : {int: {int: Delayed}}
+        Dictionary where the outer keys correspond to the level of the Quadtree,
+        and the inner keys the Z-order keys of the nodes at this level. The
+        Delayed values are the evalued M2L operator run at this level.
+    """
+
+    leaf_level = tree.n_levels
+    root_level = 1
+
+    m2l_results = {i: dict() for i in range(2, leaf_level+1)}
+
+    for level in range(1, leaf_level):
+
+        precision = 2**(level-1)
+
+        if root_level < level < leaf_level+1:
+            print(f'level {level}')
+
+            sources = m2m_results[level+1].keys()
+
+            for source in sources:
+
+                interaction_list = calculate_interaction_list(source, precision)
+
+                for target in interaction_list:
+                    m2m_result = m2m_results[level+1][source]
+                    m2l_result = m2l(source, target, m2m_result)
+
+                    m2l_results[level][target] = m2l_result
+
+    # At leaf level just do direct summation, dummy for now
+    m2l_results[leaf_level] = {i: 1 for i in range(tree.n_leaves)}
+
+    return m2l_results
 
 
 def find_neighbours(key, precision):
