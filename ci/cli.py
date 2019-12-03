@@ -2,6 +2,7 @@ import subprocess
 
 import click
 
+
 HELP_TEXT = """
     Command Line Interface for PyExaFMM
 """
@@ -16,7 +17,7 @@ def cli():
 )
 def build():
     click.echo('Building and installing')
-    subprocess.run(['pip', 'install', '-e.[dev]'])
+    subprocess.run(['conda', 'develop', '.'])
 
 
 @click.command(
@@ -31,7 +32,7 @@ def test():
 )
 def lint():
     click.echo('Running linter')
-    subprocess.run(['tox'])
+    subprocess.run(['pylint', '--rcfile=tox.ini', 'fmm'])
 
 cli.add_command(build)
 cli.add_command(test)

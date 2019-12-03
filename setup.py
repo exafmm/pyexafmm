@@ -17,22 +17,6 @@ setup(
     packages=find_packages(
         exclude=['*.test']
     ),
-    install_requires=[
-        'numba==0.46.0',
-        'numpy==1.17.3'
-
-    ],
-    extras_require={
-        'dev': [
-            'pytest==3.6.4',
-            'pylint==2.4.3',
-            'tox==3.14.0',
-            'click==7.0',
-        ]
-    },
-    setup_requires=[
-        'pytest-runner'
-    ],
     entry_points='''
         [console_scripts]
         ci=ci.cli:cli

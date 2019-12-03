@@ -16,12 +16,23 @@ It is envisioned that the library mainly uses Numpy, Numba, Numexpr, and Multipr
 
 ## Install
 
+We use Anaconda for environment management
+
+1) Create an environment:
+
 ```bash
-# For using package
+
+# Create exafmm environement
+conda env create -f environment.yml
+
+# Activate environment
+conda activate exafmm
+
+# Install PyExaFMM module
 python setup.py install
 
-# For developing on package
-pip install -e .[dev]
+# (Optional) For installation of CI module for developers
+conda develop .
 ```
 
 ## CLI
