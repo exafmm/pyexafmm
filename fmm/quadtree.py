@@ -156,9 +156,13 @@ class Quadtree:
         else:
             self.precision = precision
 
+        # Index corresponds to leaf node key, right now just counting number of
+        # Points in each leaf node
+        self.leaf_node_potentials = np.array([0 for i in range(self.n_leaves)])
+
         # Assign sources/targets to leaf nodes
-        self._assign_points_to_leaf_nodes(self.sources)
-        self._assign_points_to_leaf_nodes(self.targets)
+        self._assign_points_to_leaf_nodes(self.sources, 'sources')
+        self._assign_points_to_leaf_nodes(self.targets, 'targets')
 
     @property
     def n_levels(self):
@@ -195,18 +199,7 @@ class Quadtree:
             ]
         )
 
-    @property
-    def leaf_node_potentials(self):
-        """
-        Result of application of P2M operator on sources
-        """
-
-        # Dummy for now, just setting all equal to 1
-        return np.array([
-            1 for i in range(self.n_leaves)
-        ])
-
-    def _assign_points_to_leaf_nodes(self, points):
+    def _assign_points_to_leaf_nodes(self, points, klass):
         """
         Sift through all points and calculate which leaf node they lie in,
         assign to points in place.
@@ -214,6 +207,8 @@ class Quadtree:
         Parameters:
         -----------
         points : Points
+        klass : str
+            Either 'targets' or 'sources'
 
         Returns:
         --------
@@ -224,6 +219,9 @@ class Quadtree:
             trunc_y, trunc_x = int(np.floor(y)), int(np.floor(x))
             key = point_to_curve(trunc_y, trunc_x, self.precision)
             points[idx: idx+1, 2] = key
+
+            if klass == 'targets':
+                self.leaf_node_potentials[key] += 1
 
 
 class Points:
