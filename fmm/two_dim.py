@@ -9,21 +9,22 @@ from fmm.quadtree import (
 )
 
 
-def m2m(key, parent, sources):
+def m2m(child_potentials):
     """
-    Dummy M2M operator.
+    M2M operator. Sums together potentials from child nodes and returns a Dask
+    Delayed object or a float corresponding to the parent potential.
 
     Parameters:
     -----------
-    key : int
-    parent : int
-    sources : [int]
+    child_potentials : list[float/Delayed]
+        Potentials of child nodes.
 
     Returns:
     --------
-    int
+    float/Delayed
+        Parent potential.
     """
-    return 1
+    return sum(child_potentials)
 
 
 def m2l(source, target, m2m_result):
@@ -79,7 +80,6 @@ def upward_pass(tree):
         leaf level.
     """
     leaves = tree.leaf_node_potentials
-    sources = tree.sources
 
     current_level = tree.n_levels
     results = {i:dict() for i in range(1, current_level+1)}
@@ -91,26 +91,23 @@ def upward_pass(tree):
 
     while len(leaves) > 1:
 
-        print(f'current level: {current_level}')
-
         parent_leaves = []
 
         for i in range(0, len(leaves), 4):
 
             parent = find_parent(i)
 
-            res = []
-            for leaf in leaves[i:i+4]:
-                res.append(delayed(m2m)(leaf, parent, sources))
+            f_b = []
+            for f_bi in leaves[i:i+4]:
+                f_b.append(f_bi)
 
-            m2m_result = delayed(sum)(res)
+            m2m_result = delayed(m2m)(f_b)
 
             results[current_level][parent] = m2m_result
             parent_leaves.append(m2m_result)
 
         current_level -= 1
         leaves = parent_leaves
-
 
     return results
 
@@ -149,7 +146,6 @@ def downward_pass(tree, m2m_results):
         precision = 2**(level-1)
 
         if root_level < level < leaf_level+1:
-            print(f'level {level}')
 
             sources = m2m_results[level+1].keys()
 
