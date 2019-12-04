@@ -282,4 +282,5 @@ class Points:
 
     @property
     def shape(self):
+        """Shape of points"""
         return self.points.shape

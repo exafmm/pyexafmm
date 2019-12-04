@@ -9,7 +9,7 @@ from fmm.quadtree import (
 )
 
 
-ARRAY = np.ones(shape=(1000,3))
+ARRAY = np.ones(shape=(1000, 3))
 TARGETS = SOURCES = Points(points=ARRAY)
 
 
@@ -46,7 +46,7 @@ def test_curve_to_point(key, precision, expected):
     ]
 )
 def test_find_parent(key, expected):
-
+    """Test finding parent from child"""
     result = find_parent(key)
 
     assert result == expected
@@ -59,7 +59,7 @@ def test_find_parent(key, expected):
     ]
 )
 def test_find_children(key, expected):
-
+    """Test finding children from parent"""
     result = find_children(key)
 
     assert result == expected
@@ -79,6 +79,7 @@ def test_find_children(key, expected):
     ]
 )
 def test_quadtree(sources, targets, precision, expected):
+    """Test initialisation of Quadtree"""
     tree = Quadtree(sources, targets, precision,)
 
     assert tree.n_levels == expected['n_levels']
@@ -98,6 +99,6 @@ def test_quadtree(sources, targets, precision, expected):
     ]
 )
 def test_points(points, expected):
-
+    """Test initialisation of Points"""
     p = Points(points)
     assert p.shape == expected['shape']

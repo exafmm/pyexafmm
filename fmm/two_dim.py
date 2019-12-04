@@ -3,6 +3,7 @@ Code for simulating FMM in 2D.
 """
 
 from dask.delayed import delayed
+import numpy as np
 
 from fmm.quadtree import (
     find_parent, find_children, curve_to_point, point_to_curve
@@ -11,8 +12,7 @@ from fmm.quadtree import (
 
 def m2m(child_potentials):
     """
-    M2M operator. Sums together potentials from child nodes and returns a Dask
-    Delayed object or a float corresponding to the parent potential.
+    M2M operator. Sums together potentials from child sources.
 
     Parameters:
     -----------
@@ -27,7 +27,15 @@ def m2m(child_potentials):
     return sum(child_potentials)
 
 
-def m2l(source, target, m2m_result):
+def l2l(parent_potential):
+    """
+    L2L operator. Distributes potential of parent target across children.
+    """
+
+    return np.divide(parent_potential, 4)
+
+
+def m2l(source_potential, target_potential):
     """
     Dummy M2M operator.
 
@@ -41,20 +49,20 @@ def m2l(source, target, m2m_result):
     --------
     int
     """
-    dummy = [0.5, 0.5]
-    return delayed(sum)(dummy)
+
+    return sum([source_potential, target_potential])
 
 
-def direct_summation(source, target):
+def direct_summation(tree, level, key):
     """
     Dummy direct summation at leaf level
-    
+
     Parameters:
     -----------
     source : int
     target : int
 
-    Returns: 
+    Returns:
     --------
     int
     """
@@ -139,30 +147,49 @@ def downward_pass(tree, m2m_results):
     leaf_level = tree.n_levels
     root_level = 1
 
-    m2l_results = {i: dict() for i in range(2, leaf_level+1)}
+    results = {
+        level: {key: 0 for key in range(4**level)}
+        for level in range(1, leaf_level+1)
+    }
 
     for level in range(1, leaf_level):
 
         precision = 2**(level-1)
-
         if root_level < level < leaf_level+1:
 
             sources = m2m_results[level+1].keys()
-
             for source in sources:
 
                 interaction_list = calculate_interaction_list(source, precision)
-
+                source_potential = m2m_results[level+1][source]
                 for target in interaction_list:
-                    m2m_result = m2m_results[level+1][source]
-                    m2l_result = m2l(source, target, m2m_result)
 
-                    m2l_results[level][target] = m2l_result
+                    target_potential = results[level][target]
 
-    # At leaf level just do direct summation, dummy for now
-    m2l_results[leaf_level] = {i: 1 for i in range(tree.n_leaves)}
+                    # M2L operation
+                    m2l_result = delayed(m2l)(
+                        source_potential, target_potential
+                    )
 
-    return m2l_results
+                    # L2L operation
+                    parent = find_parent(target)
+                    l2l_result = delayed(l2l)(results[level-1][parent])
+                    results[level][target] = delayed(sum)(
+                        [m2l_result, l2l_result]
+                    )
+
+    # At leaf level just do direct summation, as well as L2L
+    for leaf_key in range(tree.n_leaves):
+        # L2L operation
+        parent = find_parent(leaf_key)
+        l2l_result = delayed(l2l)(results[leaf_level-1][parent])
+
+        # Direct sum operation
+        direct_sum_result = delayed(direct_summation)(tree, level, leaf_key)
+
+        results[leaf_level][leaf_key] = l2l_result + direct_sum_result
+
+    return results
 
 
 def find_neighbours(key, precision):
