@@ -163,7 +163,7 @@ def downward_pass(tree, m2m_results):
                 interaction_list = calculate_interaction_list(source, precision)
                 source_potential = m2m_results[level+1][source]
                 for target in interaction_list:
-                    
+
                     target_potential = results[level][target]
 
                     # M2L operation
