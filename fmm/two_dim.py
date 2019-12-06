@@ -69,35 +69,39 @@ def direct_summation(tree, level, key):
     return 1
 
 
-def upward_pass(tree):
+def upward_pass(tree, level, key):
     """
-    Calculate task graph from upward pass over quadtree.
+    The upward pass operation terminating on 'level' evaluated at 'key', This
+    is equivalent to the M2M operator evaluated up until this tree node.
 
     Parameters:
     -----------
     tree : Quadtree
-        Quadtree containing sources/targets.
+        Quadtree containing the sources/targets.
+    level : int
+        The level of this node.
+    key : int
+        The key of this node.
 
     Returns:
     --------
-    {int:{int:Delayed}}
-        Dask task graph where the keys in the outer dictionary correspond to the
-        level of the Quadtree, and the keys in the inner dictionary correspond
-        to the Z-order keys of the parent-box for each box at this level. The
-        Delayed values are the evaluated value of the M2M operator run at the
-        leaf level.
+    Delayed
+        The M2M operation evaluated at this node.
     """
+
     leaves = tree.leaf_node_potentials
 
     current_level = tree.n_levels
-    results = {i:dict() for i in range(1, current_level+1)}
+    results = {i:dict() for i in range(0, current_level+1)}
 
     # Add leaf values to results for help with downward pass
-    results[current_level+1] = {
+    results[current_level] = {
         idx: val for idx, val in enumerate(tree.leaf_node_potentials)
         }
 
-    while len(leaves) > 1:
+    stopping_condition = (4**level)
+
+    while len(leaves) > stopping_condition:
 
         parent_leaves = []
 
@@ -111,16 +115,16 @@ def upward_pass(tree):
 
             m2m_result = delayed(m2m)(f_b)
 
-            results[current_level][parent] = m2m_result
+            results[current_level-1][parent] = m2m_result
             parent_leaves.append(m2m_result)
 
         current_level -= 1
         leaves = parent_leaves
 
-    return results
+    return results[level][key]
 
 
-def downward_pass(tree, m2m_results):
+def downward_pass(tree):
     """
     Calculate downward pass of FMM algorithm.
 
@@ -128,13 +132,6 @@ def downward_pass(tree, m2m_results):
     -----------
     tree : Quadtree
         Quadtree containing sources/targets.
-
-    m2m_results : {int: {int: Delayed}}
-        Dask task graph where the keys in the outer dictionary correspond to the
-        level of the Quadtree, and the keys in the inner dictionary correspond
-        to the Z-order keys of the parent-box for each box at this level. The
-        Delayed values are the evaluated value of the M2M operator run at the
-        leaf level.
 
     Returns:
     --------
@@ -157,11 +154,15 @@ def downward_pass(tree, m2m_results):
         precision = 2**(level-1)
         if root_level < level < leaf_level+1:
 
-            sources = m2m_results[level+1].keys()
+            sources = range(0, int((4**level)))
+
             for source in sources:
 
                 interaction_list = calculate_interaction_list(source, precision)
-                source_potential = m2m_results[level+1][source]
+
+                # M2M operation
+                source_potential = upward_pass(tree, level, source)
+
                 for target in interaction_list:
 
                     target_potential = results[level][target]
