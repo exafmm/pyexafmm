@@ -70,19 +70,37 @@ def direct_summation(tree, level, key):
 
 
 def upward_pass(tree, level, key):
+    """
+    The upward pass operation terminating on 'level' evaluated at 'key', This
+    is equivalent to the M2M operator evaluated up until this tree node.
+
+    Parameters:
+    -----------
+    tree : Quadtree
+        Quadtree containing the sources/targets.
+    level : int
+        The level of this node.
+    key : int
+        The key of this node.
+
+    Returns:
+    --------
+    Delayed
+        The M2M operation evaluated at this node.
+    """
 
     leaves = tree.leaf_node_potentials
 
     current_level = tree.n_levels
     results = {i:dict() for i in range(0, current_level+1)}
-    
+
     # Add leaf values to results for help with downward pass
     results[current_level] = {
         idx: val for idx, val in enumerate(tree.leaf_node_potentials)
         }
-    
+
     stopping_condition = (4**level)
-    
+
     while len(leaves) > stopping_condition:
 
         parent_leaves = []
@@ -136,7 +154,7 @@ def downward_pass(tree):
         precision = 2**(level-1)
         if root_level < level < leaf_level+1:
 
-            sources = range(0, (4**level)+1)
+            sources = range(0, int((4**level)))
 
             for source in sources:
 
