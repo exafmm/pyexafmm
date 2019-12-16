@@ -20,27 +20,53 @@ class Octree:
             An (N, 3) float64 array of N vertices
         """
 
+        # Maximum  level
         self._maximum_level = maximum_level
+
+        # The actual sources
         self._sources = sources
+
+        # The actual targets
         self._targets = targets
 
+        # Center of the box and radius of the box
         self._center, self._radius = compute_bounds(sources, targets)
 
+         
+        # Maps source node to index
         self._source_node_to_index = None
+
+        # Maps target node to index
         self._target_node_to_index = None
 
+        # Non empty source nodes
         self._non_empty_source_nodes = None
+
+        # Non empty target nodes
         self._non_empty_target_nodes = None
 
+        # Indices of source leaf nodes
         self._source_leaf_nodes = None
+
+        # Associated sources
         self._sources_by_leafs = None
+
+        # Index ptr
         self._source_index_ptr = None
 
+        # Indices of target leaf nodes
         self._target_leaf_nodes = None
+
+        # Targets by leafs
         self._targets_by_leafs = None
+
+        # Targets index pointer
         self._target_index_ptr = None
 
+        # Target neighbors
         self._target_neighbors = None
+
+        # Interaction list
         self._interaction_list = None
 
         (
@@ -228,16 +254,16 @@ class Octree:
         return list_of_nodes[indices], node_map
 
 
-def _numba_assign_points_to_nodes(points, level, x0, r0):
-    """Assign points to leaf nodes."""
+# def _numba_assign_points_to_nodes(points, level, x0, r0):
+    # """Assign points to leaf nodes."""
 
-    npoints = len(points)
-    assigned_nodes = np.empty(npoints, dtype=np.int64)
-    for index in range(npoints):
-        assigned_nodes[index] = hilbert.get_key_from_point(
-            points[index], level, x0, r0
-        )
-    return assigned_nodes
+    # npoints = len(points)
+    # assigned_nodes = np.empty(npoints, dtype=np.int64)
+    # for index in range(npoints):
+        # assigned_nodes[index] = hilbert.get_key_from_point(
+            # points[index], level, x0, r0
+        # )
+    # return assigned_nodes
 
 
 @numba.njit(cache=True)
