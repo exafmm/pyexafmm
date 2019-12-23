@@ -75,11 +75,15 @@ class Octree:
             self._source_index_ptr,
         ) = self._assign_points_to_leaf_nodes(sources)
 
+        self._source_leaf_key_to_index = {key: index for index, key in enumerate(self._source_leaf_nodes)}
+
         (
             self._target_leaf_nodes,
             self._targets_by_leafs,
             self._target_index_ptr,
         ) = self._assign_points_to_leaf_nodes(targets)
+
+        self._target_leaf_key_to_index = {key: index for index, key in enumerate(self._target_leaf_nodes)}
 
         (
             self._non_empty_source_nodes,
@@ -90,6 +94,9 @@ class Octree:
             self._non_empty_target_nodes,
             self._target_node_to_index
         ) = self._enumerate_non_empty_nodes(self._target_leaf_nodes)
+
+        self._source_nodes_by_level = _sort_nodes_by_level(self._non_empty_source_nodes)
+        self._target_nodes_by_level = _sort_nodes_by_level(self._non_empty_target_nodes)
 
         self._target_neighbors = _numba_compute_neighbors(
             self._non_empty_target_nodes, self._source_node_to_index
@@ -143,6 +150,16 @@ class Octree:
         return self._target_leaf_nodes
 
     @property
+    def source_leaf_key_to_index(self):
+        """Return leaf index from key."""
+        return self._source_leaf_key_to_index
+
+    @property
+    def target_leaf_key_to_index(self):
+        """Return target index from key."""
+        return self._target_leaf_key_to_index
+
+    @property
     def sources_by_leafs(self):
         """Return sources by leafs."""
         return self._sources_by_leafs
@@ -171,6 +188,16 @@ class Octree:
     def non_empty_target_nodes(self):
         """Return non-empty target nodes."""
         return self._non_empty_target_nodes
+
+    @property
+    def non_empty_source_nodes_by_level(self):
+        """Non-empty source nodes by level."""
+        return self._source_nodes_by_level
+
+    @property
+    def non_empty_target_nodes_by_level(self):
+        """Non-empty target nodes by level."""
+        return self._target_nodes_by_level
 
     @property
     def interaction_list(self):
@@ -348,6 +375,35 @@ def _numba_compute_interaction_list(
                 ):
                     interaction_list[node_index, neighbor_index, child_index] = neighbor_child
     return interaction_list
+
+def _sort_nodes_by_level(keys):
+    """Return dict with nodes sorted by level."""
+    sorted_keys, indexptr = _numba_sort_nodes_by_level(keys)
+
+    levels_dict = {}
+    number_of_levels = len(indexptr) - 1
+    for level in range(number_of_levels):
+        levels_dict[level] = sorted_keys[indexptr[level] : indexptr[1 + level]]
+
+    return levels_dict
+
+
+@numba.njit(cache=True)
+def _numba_sort_nodes_by_level(keys):
+    """Sort nodes by level implementation."""
+
+    sorted_keys = np.sort(keys)
+
+    next_level = 1 
+    next_offset = hilbert.level_offset(next_level)
+    indexptr = [0]
+    for index, key in enumerate(sorted_keys):
+        if key >= next_offset:
+            indexptr.append(index)
+            next_level += 1
+            next_offset = hilbert.level_offset(next_level)
+    indexptr.append(len(keys))
+    return sorted_keys, indexptr
 
 
 def compute_bounds(sources, targets):

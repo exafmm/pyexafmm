@@ -13,6 +13,14 @@ def get_level(index):
         offset += 1 << 3 * level
     return level
 
+@_numba.njit(cache=True)
+def get_levels_for_array(indices):
+    """Get levels for array of indices ."""
+    result = _np.empty(len(indices), dtype=_np.uint32)
+
+    for index, key in enumerate(indices):
+        result[index] = get_level(key)
+
 
 @_numba.njit(cache=True)
 def level_offset(level):
