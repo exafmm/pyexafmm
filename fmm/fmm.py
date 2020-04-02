@@ -16,7 +16,7 @@ class Fmm(object):
 
         self._source_data = {}
         self._target_data = {}
-        self._result_data = [[] for _ in range(octree.targets.shape[0])]
+        self._result_data = [set() for _ in range(octree.targets.shape[0])]
 
         for key in self.octree.non_empty_source_nodes:
             self._source_data[key] = NodeData(
@@ -105,7 +105,7 @@ class Fmm(object):
                 ]
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
         for target_index in target_indices:
-            self._result_data[target_index].append(
+            self._result_data[target_index].update(
                     self._target_data[leaf_node_key].indices
                     )
 
@@ -116,14 +116,14 @@ class Fmm(object):
                 ]
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
         for neighbor in self.octree.target_neighbors[
-                self.octree.target_key_to_index[leaf_node_key]
+                self.octree.target_node_to_index[leaf_node_key]
                 ]:
             if neighbor != -1:
                 for target_index in target_indices:
                     self._result_data[target_index].update(
                             self._source_data[neighbor].indices
                             )
-        if self.source_key_to_index[leaf_node_key] != -1:
+        if self.octree.source_node_to_index[leaf_node_key] != -1:
             for target_index in target_indices:
-                self._result_data[target_index].update(self._source_data[leaf_node_key])
+                self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 

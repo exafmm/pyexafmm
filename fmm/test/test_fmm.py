@@ -24,10 +24,12 @@ def octree():
 
     return Octree(sources, targets, MAXIMUM_LEVEL)
 
-def test_upward_pass(octree):
+def test_upward_and_donward_pass(octree):
     """Test the upward pass."""
 
     fmm = Fmm(octree, ORDER)
     fmm.upward_pass()
     fmm.downward_pass()
-    breakpoint()
+
+    for index in range(NPOINTS):
+        assert len(fmm._result_data[index]) == NPOINTS
