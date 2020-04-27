@@ -128,17 +128,64 @@ class Fmm(object):
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 
 
-def spherical_harmonics(n, m, theta, phi):
-    """
-    Compute spherical harmonic function from parameters.
-    """
-    pass
+import scipy.special as sp
+import numpy as np
 
-def multipole_expansion(sources, targets, degree):
+def cartesian_to_spherical(x, y, z):
     """
-    Compute multipole expansion of sources at targets to specified degree
+    (Non-Optimised) Conversion from 3D Cartesian to spherical polar coordinates.
     """
-    pass
+    r = np.sqrt(x**2+y**2+z**2)
+    theta = np.arctan2(z, np.sqrt(x**2+y**2)) # polar angle
+    phi = np.arctan2(y, x) # azimuthal angle
+
+    return r, theta, phi
+
+def unnormalised_spherical_harmonics(m, n, theta, phi):
+    """
+    Un-normalise the spherical harmonic, to correpond to common formulation in
+        the literature.
+    """
+    return np.sqrt(4*np.pi/(2*n+1))*sp.sph_harm(m, n, theta, phi)
+
+def multipole_coefficient(m, n, sources):
+    """
+    Calculate the coefficient of the multipole expansion.
+    """
+    res = 0
+
+    # Number of sources
+    k = len(sources)
+
+    for i in range(k):
+        qi = 1 # ith charge
+        rhoi = 1 # ith source radial coord
+        alphai = 1 # ith azimuthal angle
+        betai = 1 # ith polar angle
+        sph_harm = unnormalised_spherical_harmonics(-m, n, alphai, betai)
+        res += qi*(rhoi**n)*sph_harm
+
+    return res
+
+def multipole_expansion(sources, target, degree):
+    """
+    Compute multipole expansion of sources at target to specified degree
+    """
+    
+    res = 0
+
+    r = 1 # target radial coord
+    theta = 1 # target polar coord
+    phi = 1 # target azimuthal coord
+
+    for n in range(degree):
+        for m in range(-n, n+1):
+            res += (multipole_coefficient(m, n, sources)/(r**n+1)) * unnormalised_spherical_harmonics(m, n, theta, phi)
+
+    return res
 
 def m2m(sources, target_initial, target_shifted, degree):
+    """
+    Compute translation of multipole expansion, to new expansion centre
+    """
     pass
