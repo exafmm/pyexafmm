@@ -141,7 +141,7 @@ def cartesian_to_spherical(x, y, z):
 
     return r, theta, phi
 
-def unnormalised_spherical_harmonics(m, n, theta, phi):
+def sph_harm(m, n, theta, phi):
     """
     Un-normalise the spherical harmonic, to correpond to common formulation in
         the literature.
@@ -162,9 +162,31 @@ def multipole_coefficient(m, n, sources):
         rhoi = 1 # ith source radial coord
         alphai = 1 # ith azimuthal angle
         betai = 1 # ith polar angle
-        sph_harm = unnormalised_spherical_harmonics(-m, n, alphai, betai)
-        res += qi*(rhoi**n)*sph_harm
+        res += qi*(rhoi**n)*sph_harm(-m, n, alphai, betai)
 
+    return res
+
+def J(m, n):
+    if m*n < 0:
+        return (-1)**min(m, n)
+    return 1
+
+def A(m, n):
+    return (-1)**n/np.sqrt(sp.factorial(n-m) * sp.factorial(n+m))
+
+def shifted_multipole_coefficient(k, j, sources):
+
+    res = 0
+    rho = 1
+    alpha = 1
+    beta = 1
+
+    for n in range(j):
+        for m in range(-k, k+1):
+            res += multipole_coefficient(k-m, j-n, sources)\
+                *J(k-m, m)*A(m, n)*A(k-m, j-n)\
+                *(rho**n)*sph_harm(-m, n, alpha, beta)
+    
     return res
 
 def multipole_expansion(sources, target, degree):
@@ -180,7 +202,8 @@ def multipole_expansion(sources, target, degree):
 
     for n in range(degree):
         for m in range(-n, n+1):
-            res += (multipole_coefficient(m, n, sources)/(r**n+1)) * unnormalised_spherical_harmonics(m, n, theta, phi)
+            res += (multipole_coefficient(m, n, sources)/(r**n+1))\
+                *sph_harm(m, n, theta, phi)
 
     return res
 
@@ -188,4 +211,15 @@ def m2m(sources, target_initial, target_shifted, degree):
     """
     Compute translation of multipole expansion, to new expansion centre
     """
-    pass
+
+    res = 0
+    r = 1
+    theta = 1
+    phi = 1
+
+    for j in range(degree):
+        for k in range(-j, j+1):
+            res += shifted_multipole_coefficient(k, j, sources)/r**(j+1)\
+                *sph_harm(k, j, theta, phi)
+
+    return res
