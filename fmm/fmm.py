@@ -127,3 +127,18 @@ class Fmm(object):
             for target_index in target_indices:
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 
+
+def spherical_harmonics(n, m, theta, phi):
+    """
+    Compute spherical harmonic function from parameters.
+    """
+    pass
+
+def multipole_expansion(sources, targets, degree):
+    """
+    Compute multipole expansion of sources at targets to specified degree
+    """
+    pass
+
+def m2m(sources, target_initial, target_shifted, degree):
+    pass
