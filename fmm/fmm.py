@@ -141,7 +141,20 @@ def cartesian_to_spherical(cart):
         sph[i][2] = np.arccos(cart[i][2]/sph[i][0]) # zenith angle
     return sph
 
-def spherical_harmonic(m, n, theta, phi):
+def spherical_to_cartesian(sph):
+    """
+    Conversion from 3D Spherical Polars to Cartesian
+    """
+    cart = np.zeros_like(sph)
+    for i in range(len(cart)):
+        r = sph[i][0]; theta = sph[i][1]; phi = sph[i][2]
+        cart[i][0] = r*np.sin(theta)*np.cos(phi)
+        cart[i][1] = r*np.sin(theta)*np.sin(phi)
+        cart[i][2] = r*np.cos(theta)
+
+    return cart
+
+def Y(m, n, theta, phi):
     """
     Un-normalise the spherical harmonic, to correpond to common formulation in
         the literature.
@@ -156,8 +169,8 @@ def M(m, n, sources):
     for i in range(k):
         source = sources[i]
         q = 1 # unit charge for now
-        rho = source[0]; theta = source[1]; phi = source[2]
-        res += q*(rho**n)*spherical_harmonic(-m, n, theta, phi)
+        rho = source[0]; alpha = source[1]; beta = source[2]
+        res += q*(rho**n)*Y(-m, n, alpha, beta)
 
     return res
 
@@ -169,7 +182,7 @@ def J(m, n):
 def A(m, n):
     return (-1)**n/np.sqrt(sp.factorial(n-m) * sp.factorial(n+m))
 
-def particle_to_multipole(sources, target, degree):
+def p2m(sources, target, degree):
     """
     Compute potential at target, from sources, using multipole expansion.
     """
@@ -182,41 +195,43 @@ def particle_to_multipole(sources, target, degree):
 
     for n in range(degree):
         for m in range(-n, n+1):
-            coeff = M(m, n, sources)/(r**n+1) 
-            res += (M(m, n, sources)/(r**n+1))\
-                *spherical_harmonic(m, n, theta, phi)
+            res += (M(m, n, sources)/(r**(n+1)))\
+                *Y(m, n, theta, phi)
 
     return res
 
-def shifted_multipole_coefficient(k, j, sources):
+def shift_M(k, j, sources):
 
     res = 0
-    rho = 1
-    alpha = 1
-    beta = 1
+
+    # Find centre of expansion, convert to carteisan and back
+    converted = spherical_to_cartesian(sources)
+    centre_cart = np.mean(converted, axis=0)
+    centre_sph = cartesian_to_spherical(centre_cart)
+
+    rho = centre_sph[0]; alpha = centre_sph[1]; beta = centre_sph[2]
 
     for n in range(j):
         for m in range(-k, k+1):
             res += M(k-m, j-n, sources)\
                 *J(k-m, m)*A(m, n)*A(k-m, j-n)\
-                *(rho**n)*spherical_harmonic(-m, n, alpha, beta)
+                *(rho**n)*Y(-m, n, alpha, beta)
 
     return res
 
-def multipole_to_multipole(sources, target, degree):
+def m2m(sources, target, degree):
     """
     Compute translation of multipole expansion, to new expansion centre
     """
 
     res = 0
-    r = 1
-    theta = 1
-    phi = 1
+
+    r = target[0]; theta = target[1]; phi = target[2]
 
     for j in range(degree):
         for k in range(-j, j+1):
-            res += shifted_multipole_coefficient(k, j, sources)/r**(j+1)\
-                *spherical_harmonic(k, j, theta, phi)
+            res += (shift_M(k, j, sources)/(r**(j+1)))\
+                *Y(k, j, theta, phi)
 
     return res
 
