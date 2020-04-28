@@ -161,8 +161,8 @@ def Y(m, n, theta, phi):
     """
     return np.sqrt(4*np.pi/(2*n+1))*sp.sph_harm(m, n, theta, phi)
 
-def M(m, n, sources):
-    """Calculate the multipole coefficient"""
+def O(m, n, sources):
+    """Multipole coefficient"""
     res = 0
     
     k = len(sources)
@@ -186,7 +186,7 @@ def p2m(sources, target, degree):
     """
     Compute potential at target, from sources, using multipole expansion.
     """
-    
+
     res = 0
 
     r = target[0] # target radial coord
@@ -195,13 +195,13 @@ def p2m(sources, target, degree):
 
     for n in range(degree):
         for m in range(-n, n+1):
-            res += (M(m, n, sources)/(r**(n+1)))\
+            res += (O(m, n, sources)/(r**(n+1)))\
                 *Y(m, n, theta, phi)
 
     return res
 
-def shift_M(k, j, sources):
-
+def M(k, j, sources):
+    """Coefficients of shifted Multipole expansion"""
     res = 0
 
     # Find centre of expansion, convert to carteisan and back
@@ -212,8 +212,8 @@ def shift_M(k, j, sources):
     rho = centre_sph[0]; alpha = centre_sph[1]; beta = centre_sph[2]
 
     for n in range(j):
-        for m in range(-k, k+1):
-            res += M(k-m, j-n, sources)\
+        for m in range(-n, n+1):
+            res += O(k-m, j-n, sources)\
                 *J(k-m, m)*A(m, n)*A(k-m, j-n)\
                 *(rho**n)*Y(-m, n, alpha, beta)
 
@@ -230,15 +230,45 @@ def m2m(sources, target, degree):
 
     for j in range(degree):
         for k in range(-j, j+1):
-            res += (shift_M(k, j, sources)/(r**(j+1)))\
+            res += (M(k, j, sources)/(r**(j+1)))\
                 *Y(k, j, theta, phi)
 
     return res
 
-def multipole_to_local():
-    pass
+def L(k, j, sources, order):
+    """Coefficients of Local expansion"""
 
-def local_to_local():
+    res = 0
+    
+    # Find centre of expansion, convert to carteisan and back
+    converted = spherical_to_cartesian(sources)
+    centre_cart = np.mean(converted, axis=0)
+    centre_sph = cartesian_to_spherical(centre_cart)
+
+    rho = centre_sph[0]; alpha = centre_sph[1]; beta = centre_sph[2]
+
+    for n in range(order+1):
+        for m in range(-n, n+1):
+            res += O(m, n, sources)*J(m, k)*A(m, n)*A(k, j)*Y(m-k, j+n, alpha, beta)\
+                /(A(m-k, j+n)*rho**(j+n+1))
+
+    return res
+
+def m2l(target, sources, order):
+    """convert a multipole to a local expansion"""
+
+    res = 0
+
+    r = target[0]; theta = target[1]; phi = target[2]
+
+    for j in range(order+1):
+        for k in range(-j, j+1):
+            res += L(k, j, sources, order)*Y(k, j, theta, phi)*(r**j)
+
+    return res
+
+def l2l():
+    """Translate a local expansion"""
     pass
 
 def direct_calculation(sources, target):
