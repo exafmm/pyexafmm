@@ -58,7 +58,6 @@ class Fmm(object):
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
 
-
     def set_source_values(self, values):
         """Set source values."""
         pass
@@ -131,15 +130,16 @@ class Fmm(object):
 import scipy.special as sp
 import numpy as np
 
-def cartesian_to_spherical(x, y, z):
+def cartesian_to_spherical(cart):
     """
     (Non-Optimised) Conversion from 3D Cartesian to spherical polar coordinates.
     """
-    r = np.sqrt(x**2+y**2+z**2)
-    theta = np.arctan2(z, np.sqrt(x**2+y**2)) # polar angle
-    phi = np.arctan2(y, x) # azimuthal angle
-
-    return r, theta, phi
+    sph = np.zeros_like(cart)
+    for i in range(len(cart)):
+        sph[i][0] = np.sqrt(cart[i][0]**2+cart[i][1]**2+cart[i][2]**2) # Radial coordinate
+        sph[i][1] = np.arctan2(cart[i][1], cart[i][0]) # azimuthal angle
+        sph[i][2] = np.arccos(cart[i][2]/sph[i][0]) # zenith angle
+    return sph
 
 def sph_harm(m, n, theta, phi):
     """
@@ -158,10 +158,10 @@ def multipole_coefficient(m, n, sources):
     k = len(sources)
 
     for i in range(k):
-        qi = 1 # ith charge
-        rhoi = 1 # ith source radial coord
-        alphai = 1 # ith azimuthal angle
-        betai = 1 # ith polar angle
+        qi = 1 # ith charge (setting as unit charge for now)
+        rhoi = sources[i][0] # ith source radial coord
+        alphai = sources[i][1] # ith azimuthal angle
+        betai = sources[i][2] # ith zenith angle
         res += qi*(rhoi**n)*sph_harm(-m, n, alphai, betai)
 
     return res
@@ -186,7 +186,7 @@ def shifted_multipole_coefficient(k, j, sources):
             res += multipole_coefficient(k-m, j-n, sources)\
                 *J(k-m, m)*A(m, n)*A(k-m, j-n)\
                 *(rho**n)*sph_harm(-m, n, alpha, beta)
-    
+
     return res
 
 def multipole_expansion(sources, target, degree):
@@ -196,18 +196,22 @@ def multipole_expansion(sources, target, degree):
     
     res = 0
 
-    r = 1 # target radial coord
-    theta = 1 # target polar coord
-    phi = 1 # target azimuthal coord
+    r = target[0] # target radial coord
+    theta = target[1] # target azimuth coord
+    phi = target[2] # target zenith coord
 
     for n in range(degree):
         for m in range(-n, n+1):
+            coeff = multipole_coefficient(m, n, sources)/(r**n+1) 
             res += (multipole_coefficient(m, n, sources)/(r**n+1))\
                 *sph_harm(m, n, theta, phi)
 
     return res
 
-def m2m(sources, target_initial, target_shifted, degree):
+def particle_to_multipole():
+    pass
+
+def multipole_to_multipole(sources, target, degree):
     """
     Compute translation of multipole expansion, to new expansion centre
     """
@@ -223,3 +227,9 @@ def m2m(sources, target_initial, target_shifted, degree):
                 *sph_harm(k, j, theta, phi)
 
     return res
+
+def multipole_to_local():
+    pass
+
+def local_to_local():
+    pass
