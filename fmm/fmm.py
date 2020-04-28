@@ -141,7 +141,7 @@ def cartesian_to_spherical(cart):
         sph[i][2] = np.arccos(cart[i][2]/sph[i][0]) # zenith angle
     return sph
 
-def sph_harm(m, n, theta, phi):
+def spherical_harmonic(m, n, theta, phi):
     """
     Un-normalise the spherical harmonic, to correpond to common formulation in
         the literature.
@@ -157,7 +157,7 @@ def M(m, n, sources):
         source = sources[i]
         q = 1 # unit charge for now
         rho = source[0]; theta = source[1]; phi = source[2]
-        res += q*(rho**n)*sph_harm(-m, n, theta, phi)
+        res += q*(rho**n)*spherical_harmonic(-m, n, theta, phi)
 
     return res
 
@@ -169,22 +169,7 @@ def J(m, n):
 def A(m, n):
     return (-1)**n/np.sqrt(sp.factorial(n-m) * sp.factorial(n+m))
 
-def shifted_multipole_coefficient(k, j, sources):
-
-    res = 0
-    rho = 1
-    alpha = 1
-    beta = 1
-
-    for n in range(j):
-        for m in range(-k, k+1):
-            res += M(k-m, j-n, sources)\
-                *J(k-m, m)*A(m, n)*A(k-m, j-n)\
-                *(rho**n)*sph_harm(-m, n, alpha, beta)
-
-    return res
-
-def compute_potential(sources, target, degree):
+def particle_to_multipole(sources, target, degree):
     """
     Compute potential at target, from sources, using multipole expansion.
     """
@@ -199,12 +184,24 @@ def compute_potential(sources, target, degree):
         for m in range(-n, n+1):
             coeff = M(m, n, sources)/(r**n+1) 
             res += (M(m, n, sources)/(r**n+1))\
-                *sph_harm(m, n, theta, phi)
+                *spherical_harmonic(m, n, theta, phi)
 
     return res
 
-def particle_to_multipole():
-    pass
+def shifted_multipole_coefficient(k, j, sources):
+
+    res = 0
+    rho = 1
+    alpha = 1
+    beta = 1
+
+    for n in range(j):
+        for m in range(-k, k+1):
+            res += M(k-m, j-n, sources)\
+                *J(k-m, m)*A(m, n)*A(k-m, j-n)\
+                *(rho**n)*spherical_harmonic(-m, n, alpha, beta)
+
+    return res
 
 def multipole_to_multipole(sources, target, degree):
     """
@@ -219,7 +216,7 @@ def multipole_to_multipole(sources, target, degree):
     for j in range(degree):
         for k in range(-j, j+1):
             res += shifted_multipole_coefficient(k, j, sources)/r**(j+1)\
-                *sph_harm(k, j, theta, phi)
+                *spherical_harmonic(k, j, theta, phi)
 
     return res
 
