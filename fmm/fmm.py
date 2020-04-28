@@ -148,21 +148,16 @@ def sph_harm(m, n, theta, phi):
     """
     return np.sqrt(4*np.pi/(2*n+1))*sp.sph_harm(m, n, theta, phi)
 
-def multipole_coefficient(m, n, sources):
-    """
-    Calculate the coefficient of the multipole expansion.
-    """
+def M(m, n, sources):
+    """Calculate the multipole coefficient"""
     res = 0
-
-    # Number of sources
+    
     k = len(sources)
-
     for i in range(k):
-        qi = 1 # ith charge (setting as unit charge for now)
-        rhoi = sources[i][0] # ith source radial coord
-        alphai = sources[i][1] # ith azimuthal angle
-        betai = sources[i][2] # ith zenith angle
-        res += qi*(rhoi**n)*sph_harm(-m, n, alphai, betai)
+        source = sources[i]
+        q = 1 # unit charge for now
+        rho = source[0]; theta = source[1]; phi = source[2]
+        res += q*(rho**n)*sph_harm(-m, n, theta, phi)
 
     return res
 
@@ -183,15 +178,15 @@ def shifted_multipole_coefficient(k, j, sources):
 
     for n in range(j):
         for m in range(-k, k+1):
-            res += multipole_coefficient(k-m, j-n, sources)\
+            res += M(k-m, j-n, sources)\
                 *J(k-m, m)*A(m, n)*A(k-m, j-n)\
                 *(rho**n)*sph_harm(-m, n, alpha, beta)
 
     return res
 
-def multipole_expansion(sources, target, degree):
+def compute_potential(sources, target, degree):
     """
-    Compute multipole expansion of sources at target to specified degree
+    Compute potential at target, from sources, using multipole expansion.
     """
     
     res = 0
@@ -202,8 +197,8 @@ def multipole_expansion(sources, target, degree):
 
     for n in range(degree):
         for m in range(-n, n+1):
-            coeff = multipole_coefficient(m, n, sources)/(r**n+1) 
-            res += (multipole_coefficient(m, n, sources)/(r**n+1))\
+            coeff = M(m, n, sources)/(r**n+1) 
+            res += (M(m, n, sources)/(r**n+1))\
                 *sph_harm(m, n, theta, phi)
 
     return res
@@ -233,3 +228,15 @@ def multipole_to_local():
 
 def local_to_local():
     pass
+
+def direct_calculation(sources, target):
+    """For checking"""
+    res = 0
+
+    for i in range(len(sources)):
+        source = sources[i]
+        dist = source - target # cartesian
+        potential = 1/np.linalg.norm(dist)
+        res += potential
+
+    return res
