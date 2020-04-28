@@ -180,7 +180,7 @@ def J(m, n):
     return 1
 
 def A(m, n):
-    return (-1)**n/np.sqrt(sp.factorial(n-m) * sp.factorial(n+m))
+    return ((-1)**n)/np.sqrt(sp.factorial(n-m) * sp.factorial(n+m))
 
 def p2m(sources, target, degree):
     """
