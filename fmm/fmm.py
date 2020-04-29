@@ -135,10 +135,9 @@ def cartesian_to_spherical(cart):
     (Non-Optimised) Conversion from 3D Cartesian to spherical polar coordinates.
     """
     sph = np.zeros_like(cart)
-    for i in range(len(cart)):
-        sph[i][0] = np.sqrt(cart[i][0]**2+cart[i][1]**2+cart[i][2]**2) # Radial coordinate
-        sph[i][1] = np.arctan2(cart[i][1], cart[i][0]) # azimuthal angle
-        sph[i][2] = np.arccos(cart[i][2]/sph[i][0]) # zenith angle
+    sph[0] = np.linalg.norm(cart) # Radial coordinate
+    sph[1] = np.arctan2(cart[1], cart[0]) # azimuthal angle
+    sph[2] = np.arccos(cart[2]/sph[0]) # zenith angle
     return sph
 
 def spherical_to_cartesian(sph):
@@ -146,11 +145,11 @@ def spherical_to_cartesian(sph):
     Conversion from 3D Spherical Polars to Cartesian
     """
     cart = np.zeros_like(sph)
-    for i in range(len(cart)):
-        r = sph[i][0]; theta = sph[i][1]; phi = sph[i][2]
-        cart[i][0] = r*np.sin(theta)*np.cos(phi)
-        cart[i][1] = r*np.sin(theta)*np.sin(phi)
-        cart[i][2] = r*np.cos(theta)
+
+    r = sph[0]; theta = sph[1]; phi = sph[2]
+    cart[0] = r*np.sin(theta)*np.cos(phi)
+    cart[1] = r*np.sin(theta)*np.sin(phi)
+    cart[2] = r*np.cos(theta)
 
     return cart
 
@@ -162,7 +161,7 @@ def Y(m, n, theta, phi):
     return np.sqrt(4*np.pi/(2*n+1))*sp.sph_harm(m, n, theta, phi)
 
 def O(m, n, sources):
-    """Multipole coefficient"""
+    """Multipole coefficient, O_n^m"""
     res = 0
     
     k = len(sources)
@@ -175,8 +174,8 @@ def O(m, n, sources):
     return res
 
 def J(m, n):
-    if m*n < 0:
-        return (-1)**min(m, n)
+    if n > 0:
+        return (-1)**min(abs(m), abs(n))
     return 1
 
 def A(m, n):
@@ -193,10 +192,9 @@ def p2m(sources, target, degree):
     theta = target[1] # target azimuth coord
     phi = target[2] # target zenith coord
 
-    for n in range(degree):
+    for n in range(degree+1):
         for m in range(-n, n+1):
-            res += (O(m, n, sources)/(r**(n+1)))\
-                *Y(m, n, theta, phi)
+            res += (O(m, n, sources)/(r**(n+1)))*Y(m, n, theta, phi)
 
     return res
 
@@ -205,7 +203,9 @@ def M(k, j, sources):
     res = 0
 
     # Find centre of expansion, convert to carteisan and back
-    converted = spherical_to_cartesian(sources)
+    converted = np.apply_along_axis(
+        spherical_to_cartesian,
+        axis=1, arr=sources)
     centre_cart = np.mean(converted, axis=0)
     centre_sph = cartesian_to_spherical(centre_cart)
 
