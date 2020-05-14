@@ -127,3 +127,76 @@ class Fmm(object):
             for target_index in target_indices:
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 
+# Functions to try out, before integrating with class
+
+import numpy as np
+from fmm.octree import Octree
+
+
+def surface(p, c, alpha):
+    """
+    Compute vectors to correspond to a surface of a box.
+
+    Parameters:
+    -----------
+    p : int
+        Order of the expansion.
+    c : coordinate 
+        Coordinates of the centre of a box.
+    alpha : float
+        Ratio between side length of surface box and original box.
+
+    Returns:
+    --------
+    vector
+        Vector of coordinates of surface points.
+    """
+    pass
+
+
+def laplace(x, y):
+    """
+    3D single-layer Laplace kernel between two points. Alternatively called
+        particle to particle (P2P) operator.
+    """
+    r = np.linalg.norm(x-y)
+
+    return 1/(4*np.pi*r)
+
+
+def gram_matrix(kernel, sources, targets):
+    """
+    Compute Gram matrix of given kernel function. Elements are the pairwise
+        interactions of sources/targets under the action of the kernel function.
+
+    Parameters:
+    -----------
+    kernel : kernelf
+        Kernel function
+    sources : vector
+        The source locations on a surface.
+    targets : vector
+        The target locations on a surface.
+
+    Returns:
+    --------
+    matrix
+        The Gram matrix.
+    """
+    pass
+
+
+def check_to_equivalent(gram_matrix):
+    """ Compute the operator between the check and the equivalent surface.
+    """
+    
+    # Based on Tingyu's knowledge from literature, equivalent to least squares
+    # formulation, remember to get a reference
+
+    return np.linalg.pinv(gram_matrix)
+
+def m2m():
+    """ Compute multipole to multipole (M2M) operator
+    """
+    pass
+
