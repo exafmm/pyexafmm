@@ -133,7 +133,7 @@ import numpy as np
 from fmm.octree import Octree
 
 
-def surface(p, c=None, alpha=None):
+def surface(p, r, level, c, alpha):
     """
     Compute vectors to correspond to a surface of a box.
 
@@ -141,6 +141,10 @@ def surface(p, c=None, alpha=None):
     -----------
     p : int
         Order of the expansion.
+    r : float
+        Half side length of the bounding box
+    level : int
+        Level of box
     c : coordinate
         Coordinates of the centre of a box.
     alpha : float
@@ -164,7 +168,7 @@ def surface(p, c=None, alpha=None):
             res[count][1] = (2*(i+1)-(p-1))/(p-1)
             res[count][2] = (2*j-(p-1))/(p-1)
             count += 1
-    
+
     # Hold y fixed
     for i in range(p-1):
         for j in range(p-1):
@@ -172,7 +176,7 @@ def surface(p, c=None, alpha=None):
             res[count][1] = -1
             res[count][2] = (2*(i+1)-(p-1))/(p-1)
             count += 1
-    
+
     # Hold z fixed
     for i in range(p-1):
         for j in range(p-1):
@@ -180,10 +184,17 @@ def surface(p, c=None, alpha=None):
             res[count][1] = (2*j-(p-1))/(p-1)
             res[count][2] = -1
             count += 1
-    
+
     # Reflect about origin, for remaining faces
     for i in range(n//2):
         res[count+i] = -res[i]
+
+    # Translate box to specified centre, and scale
+    r *= (0.5)**level
+    b = alpha*r
+
+    for i in range(n):
+        res[i] = res[i]*b + c
 
     return res
 
@@ -217,20 +228,64 @@ def gram_matrix(kernel, sources, targets):
     matrix
         The Gram matrix.
     """
-    pass
+
+    matrix = np.zeros(shape=(len(sources), len(targets)))
+
+    for i, source in enumerate(sources):
+        for j, target in enumerate(targets):
+            matrix[i][j] = kernel(source, target)
+
+    return matrix
 
 
 def check_to_equivalent(gram_matrix):
     """ Compute the operator between the check and the equivalent surface.
     """
-    
+
     # Based on Tingyu's knowledge from literature, equivalent to least squares
     # formulation, remember to get a reference
 
     return np.linalg.pinv(gram_matrix)
+
+
+def potential_p2p(kernel, targets, sources):
+    """Directly calculate potential at targets from sources
+    """
+    
+    # Potential at target locations
+    target_densities = np.zeros(shape=(len(targets), 1))
+
+    for i, target in enumerate(targets):
+        potential = 0
+        for source in sources:
+            # for now assume source densities are all 1
+            source_density = 1
+            potential += kernel(target, source)*source_density
+        target_densities[i] = potential
+
+    return target_densities
+
 
 def m2m():
     """ Compute multipole to multipole (M2M) operator
     """
     pass
 
+
+def test():
+    p = 2
+    r = 2
+    c = np.array([0, 0, 0])
+    level = 1
+    
+    upward_equivalent_surface = surface(p, r, level, c, 1.95)
+    
+    # Some sources placed inside a leaf node for testing.
+    leaf_sources = np.array([
+        [0,0,0],
+        [1,0,0],
+        [0,0,1]
+    ])
+    check_potential = potential_p2p(laplace, upward_equivalent_surface, leaf_sources)
+
+    return check_potential
