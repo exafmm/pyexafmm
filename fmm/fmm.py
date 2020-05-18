@@ -216,7 +216,7 @@ def gram_matrix(kernel, sources, targets):
 
     Parameters:
     -----------
-    kernel : kernelf
+    kernel : function
         Kernel function
     sources : vector
         The source locations on a surface.
@@ -238,7 +238,7 @@ def gram_matrix(kernel, sources, targets):
     return matrix
 
 
-def check_to_equivalent(gram_matrix):
+def pseudo_inverse(gram_matrix):
     """ Compute the operator between the check and the equivalent surface.
     """
 
@@ -251,7 +251,7 @@ def check_to_equivalent(gram_matrix):
 def potential_p2p(kernel, targets, sources):
     """Directly calculate potential at targets from sources
     """
-    
+
     # Potential at target locations
     target_densities = np.zeros(shape=(len(targets), 1))
 
@@ -266,26 +266,91 @@ def potential_p2p(kernel, targets, sources):
     return target_densities
 
 
-def m2m():
-    """ Compute multipole to multipole (M2M) operator
+def s2m(kernel,
+        leaf_sources,
+        upward_check_surface,
+        upward_equivalent_surface):
     """
+    Compute multipole expansion from sources at the leaf level supported at
+        discrete points on the upward equivalent surface.
+    """
+    check_potential = potential_p2p(kernel, upward_check_surface, leaf_sources)
+
+    kernel_matrix = gram_matrix(kernel, upward_equivalent_surface, upward_check_surface)
+
+    upward_equivalent_density = np.matmul(pseudo_inverse(kernel_matrix), check_potential)
+
+    return upward_equivalent_density
+
+
+def m2m(kernel,
+        child_equivalent_surface,
+        child_equivalent_density,
+        parent_equivalent_surface,
+        parent_check_surface,
+        ):
+    """ Compute multipole expansion at parent level, from child level.
+    """
+    # 1. Calculate check potential from child equivelent density
+
+    check_potential = np.zeros(shape=(len(parent_check_surface), 1))
+
+    for i, target in enumerate(parent_check_surface): 
+        potential = 0
+        for j, source in enumerate(child_equivalent_surface):
+            source_density = child_equivalent_density[j]
+            potential += kernel(target, source)*source_density
+        check_potential[i] = potential
+
+    # 2. Calculate equivalent density on parent equivalent surface
+
+    # 2.1 Form gram matrix between parent check surface and equivalent surface
+    kernel_matrix = gram_matrix(kernel, parent_equivalent_surface, parent_check_surface)
+
+    # 2.2 Invert gram matrix, and find equivalent density
+    parent_equivalent_density = np.matmul(pseudo_inverse(kernel_matrix), check_potential)
+
+    return parent_equivalent_density
+
+def m2l():
     pass
 
+def l2l():
+    pass
 
-def test():
+def test_c2e():
     p = 2
-    r = 2
+    r = 1
     c = np.array([0, 0, 0])
+    t = np.array([1,1,0])
     level = 1
-    
+
+    upward_check_surface = surface(p, r, level, c, 2.95)
     upward_equivalent_surface = surface(p, r, level, c, 1.95)
-    
+
     # Some sources placed inside a leaf node for testing.
     leaf_sources = np.array([
-        [0,0,0],
-        [1,0,0],
-        [0,0,1]
+        [0, 0, 0],
     ])
-    check_potential = potential_p2p(laplace, upward_equivalent_surface, leaf_sources)
 
-    return check_potential
+    check_potential = potential_p2p(laplace, upward_check_surface, leaf_sources)
+
+    c2e_operator = pseudo_inverse(gram_matrix(laplace, upward_equivalent_surface, upward_check_surface))
+
+    upward_equivalent_density = np.matmul(c2e_operator, check_potential)
+
+    return check_potential, upward_equivalent_density
+
+
+def test_m2m():
+    p = 2
+    r = 1
+    c = np.array([0, 0, 0])
+    t = np.array([1,1,0])
+    level = 1
+
+    parent_check_surface = surface(p, r, level, c, 2.95)
+    parent_equivalent_surface = surface(p, r, level, c, 1.95)
+    child_equivalent_surface = surface(p, r, level, c, 1.05)
+
+    pass
