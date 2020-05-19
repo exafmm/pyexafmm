@@ -108,6 +108,12 @@ def get_center_from_4d_index(vec, x0, r0):
     return (vec[:3] + .5) * dx + xmin
 
 @_numba.njit(cache=True)
+def get_center_from_key(key, x0, r0):
+    """Get center of box from a key"""
+    vec = get_4d_index_from_key(key)
+    return get_center_from_4d_index(vec, x0, r0)
+
+@_numba.njit(cache=True)
 def get_parent(key):
     """Return the parent key."""
     level = get_level(key)
