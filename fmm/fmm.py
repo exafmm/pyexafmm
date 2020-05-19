@@ -9,8 +9,11 @@ NodeData = collections.namedtuple("NodeData", "key expansion indices")
 class Fmm(object):
     """Main Fmm class."""
 
-    def __init__(self, octree, order):
+    def __init__(self, octree, order, kernel):
         """Initialize the Fmm."""
+
+        self.kernel = kernel
+        self.order = order
 
         self._octree = octree
 
@@ -73,8 +76,41 @@ class Fmm(object):
         source_indices = self.octree.sources_by_leafs[
                 self.octree.source_index_ptr[leaf_node_index] : self.octree.source_index_ptr[leaf_node_index + 1]
                 ]
+
+        # Just adding index from argsort (sources by leafs)
         self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].indices.update(source_indices)
 
+        # 0. Compute center and radius of leaf box in cartesian coordinates
+        key = self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].key
+        center = hilbert.get_center_from_key(key, self.octree.center, self.octree.radius)
+        radius = self.octree.radius * (1/8)**self.octree.maximum_level
+        
+        ## Find leaf sources
+        ## This list conversion is inefficient to extract the index
+        leaf_sources_idxs = list(self._source_data[key].indices)
+        leaf_sources = self.octree._sources[leaf_sources_idxs]
+
+        # 1. Compute surfaces
+        upward_check_surface = surface(
+            self.order,
+            radius,
+            self.octree.maximum_level,
+            center,
+            2.95
+            )
+
+        upward_equivalent_surface = surface(
+            self.order,
+            radius,
+            self.octree.maximum_level,
+            center,
+            1.95
+        )
+
+        # 2. Compute expansion
+        self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].expansion =\
+             p2m(self.kernel, leaf_sources, upward_check_surface, upward_equivalent_surface)
+ 
                 
     def multipole_to_multipole(self, node):
         """Combine children expansions of node into node expansion."""
@@ -96,7 +132,6 @@ class Fmm(object):
                 self._target_data[child].indices.update(
                         self._target_data[node].indices
                         )
-        
 
     def local_to_particle(self, leaf_node_index):
         """Compute local to particle."""
@@ -266,7 +301,7 @@ def potential_p2p(kernel, targets, sources):
     return target_densities
 
 
-def s2m(kernel,
+def p2m(kernel,
         leaf_sources,
         upward_check_surface,
         upward_equivalent_surface):
