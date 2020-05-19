@@ -125,7 +125,7 @@ def get_children(key):
     level = get_level(key)
     return (remove_offset(key) << 3) + level_offset(level + 1) + _np.arange(8)
 
-_numba.njit(cache=True)
+@_numba.njit(cache=True)
 def get_number_of_all_nodes(level):
     """Return number of all nodes up to a given level."""
     return level_offset(level + 1)
