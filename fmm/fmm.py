@@ -4,14 +4,25 @@ import numpy as np
 import fmm.hilbert as hilbert
 
 
-class NodeData:
-    """Holds expansion and source indices for each tree node"""
+class Node:
+    """Holds expansion and source/target indices for each tree node"""
     def __init__(self, key, expansion, indices):
+        """
+        Parameters:
+        ----------
+        key : int
+            Hilbert key for a node.
+        expansion : np.array(shape=(ncoefficients))
+            The expansion coefficients for this node's equivalent density.
+        indices : set
+            Set of indices.
+        """
         self.key = key
         self.expansion = expansion
         self.indices = indices
 
     def __repr__(self):
+        """Stringified repr of a node"""
         return str((self.key, self.expansion, self.indices))
 
 
@@ -23,11 +34,10 @@ class Fmm:
 
         self.kernel = kernel
         self.order = order
-
-        # For each point on surface of box discretisation
-        self.ncoeffiecients = 6*(order-1)**2 + 2
-
         self._octree = octree
+
+        # One for each point on surface of a cube based discretisation
+        self.ncoeffiecients = 6*(order-1)**2 + 2
 
         # Source and Target data indexed by Hilbert key
         self._source_data = {}
@@ -36,11 +46,11 @@ class Fmm:
         self._result_data = [set() for _ in range(octree.targets.shape[0])]
 
         for key in self.octree.non_empty_source_nodes:
-            self._source_data[key] = NodeData(
+            self._source_data[key] = Node(
                     key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
                     )
         for key in self.octree.non_empty_target_nodes:
-            self._target_data[key] = NodeData(
+            self._target_data[key] = Node(
                     key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
                     )
 
@@ -75,7 +85,6 @@ class Fmm:
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
 
-
     def set_source_values(self, values):
         """Set source values."""
         pass
@@ -87,7 +96,7 @@ class Fmm:
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
 
-        # Source indices in a given
+        # Source indices in a given leaf
         source_indices = self.octree.sources_by_leafs[
                 self.octree.source_index_ptr[leaf_node_index]
                 :self.octree.source_index_ptr[leaf_node_index + 1]
