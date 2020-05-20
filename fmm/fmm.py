@@ -4,7 +4,6 @@ import collections as collections
 import numpy as np
 
 import fmm.hilbert as hilbert
-from fmm.octree import Octree
 
 
 class NodeData:
