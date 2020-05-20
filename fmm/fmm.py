@@ -98,8 +98,6 @@ class Fmm(object):
         center = hilbert.get_center_from_key(key, self.octree.center, self.octree.radius)
         radius = self.octree.radius * (1/8)**self.octree.maximum_level
 
-
-
         # 1. Compute surfaces
         upward_check_surface = surface(
             self.order,
