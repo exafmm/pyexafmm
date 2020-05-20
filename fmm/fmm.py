@@ -1,8 +1,11 @@
 """Implementation of the main FMM loop."""
+import collections as collections
 
 import numpy as np
+
 import fmm.hilbert as hilbert
-import collections as collections
+from fmm.octree import Octree
+
 
 class NodeData:
     def __init__(self, key, expansion, indices):
@@ -169,10 +172,6 @@ class Fmm(object):
             for target_index in target_indices:
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 
-# Functions to try out, before integrating with class
-
-import numpy as np
-from fmm.octree import Octree
 
 
 def surface(p, r, level, c, alpha):
@@ -358,41 +357,4 @@ def m2l():
     pass
 
 def l2l():
-    pass
-
-def test_c2e():
-    p = 2
-    r = 1
-    c = np.array([0, 0, 0])
-    t = np.array([1,1,0])
-    level = 1
-
-    upward_check_surface = surface(p, r, level, c, 2.95)
-    upward_equivalent_surface = surface(p, r, level, c, 1.95)
-
-    # Some sources placed inside a leaf node for testing.
-    leaf_sources = np.array([
-        [0, 0, 0],
-    ])
-
-    check_potential = potential_p2p(laplace, upward_check_surface, leaf_sources)
-
-    c2e_operator = pseudo_inverse(gram_matrix(laplace, upward_equivalent_surface, upward_check_surface))
-
-    upward_equivalent_density = np.matmul(c2e_operator, check_potential)
-
-    return check_potential, upward_equivalent_density
-
-
-def test_m2m():
-    p = 2
-    r = 1
-    c = np.array([0, 0, 0])
-    t = np.array([1,1,0])
-    level = 1
-
-    parent_check_surface = surface(p, r, level, c, 2.95)
-    parent_equivalent_surface = surface(p, r, level, c, 1.95)
-    child_equivalent_surface = surface(p, r, level, c, 1.05)
-
     pass
