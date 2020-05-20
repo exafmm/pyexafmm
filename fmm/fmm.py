@@ -1,12 +1,11 @@
 """Implementation of the main FMM loop."""
-import collections 
-
 import numpy as np
 
 import fmm.hilbert as hilbert
 
 
 class NodeData:
+    """Holds expansion and source indices for each tree node"""
     def __init__(self, key, expansion, indices):
         self.key = key
         self.expansion = expansion
@@ -14,6 +13,7 @@ class NodeData:
 
     def __repr__(self):
         return str((self.key, self.expansion, self.indices))
+
 
 class Fmm:
     """Main Fmm class."""
