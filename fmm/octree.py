@@ -231,12 +231,33 @@ class Octree:
         return 1 << 3 * level
 
     def _assign_points_to_leaf_nodes(self, points):
-        """Assign points to leaf nodes."""
+        """
+        Assign points to leaf nodes.
+        
+        Parameters:
+        -----------
+        points : np.array(shape=(npoints, 3))
+            Points in 3D Cartesian coordinates.
+        
+        Returns:
+        --------
+        nodes : list
+            Non-empty leaf nodes, sorted by numeric value.
+        point_indices_by_node : list
+            Indices that link (unsorted) array of points to (sorted) list of
+            nodes returned by this method.
+        index_ptr : list
+            Pointers (indices) that link the (sorted) array of points to each
+            (unique) non-empty node returned by `nodes`.
+        """
 
+        # Find Hilbert keys for each point
         assigned_nodes = hilbert.get_keys_from_points_array(
             points, self.maximum_level, self.center, self.radius
         )
 
+        # Need to sort point indices as we use a sorted list of nodes to check
+        # whether points belong to same node.
         point_indices_by_node = np.argsort(assigned_nodes)
 
         index_ptr = []
