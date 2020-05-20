@@ -1,5 +1,5 @@
 """Implementation of the main FMM loop."""
-import collections as collections
+import collections 
 
 import numpy as np
 
