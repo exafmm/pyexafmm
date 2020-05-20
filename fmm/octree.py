@@ -233,12 +233,12 @@ class Octree:
     def _assign_points_to_leaf_nodes(self, points):
         """
         Assign points to leaf nodes.
-        
+
         Parameters:
         -----------
         points : np.array(shape=(npoints, 3))
             Points in 3D Cartesian coordinates.
-        
+
         Returns:
         --------
         nodes : list
