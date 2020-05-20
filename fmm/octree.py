@@ -31,7 +31,7 @@ class Octree:
 
         # Center of the box and radius of the box
         self._center, self._radius = compute_bounds(sources, targets)
-         
+
         # Maps source node to index
         self._source_node_to_index = None
 

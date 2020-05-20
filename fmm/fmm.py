@@ -29,8 +29,10 @@ class Fmm:
 
         self._octree = octree
 
+        # Source and Target data indexed by Hilbert key
         self._source_data = {}
         self._target_data = {}
+
         self._result_data = [set() for _ in range(octree.targets.shape[0])]
 
         for key in self.octree.non_empty_source_nodes:
@@ -84,6 +86,8 @@ class Fmm:
 
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
+
+        # Source indices in a given
         source_indices = self.octree.sources_by_leafs[
                 self.octree.source_index_ptr[leaf_node_index]
                 :self.octree.source_index_ptr[leaf_node_index + 1]
@@ -91,22 +95,24 @@ class Fmm:
 
         # 0.1 Find leaf sources
         leaf_sources = self.octree.sources[source_indices]
-    
+
         # Just adding index from argsort (sources by leafs)
         self._source_data[
             self.octree.source_leaf_nodes[leaf_node_index]
             ].indices.update(source_indices)
-    
-        # 0.2 Compute center and radius of leaf box in cartesian coordinates
-        key = self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].key
-        center = hilbert.get_center_from_key(key, self.octree.center, self.octree.radius)
+
+        # 0.2 Compute key corresponding to this leaf index
+        key = self.octree.source_leaf_nodes[leaf_node_index]
+
+        # 0.3 Compute center and radius of leaf box in cartesian coordinates
         radius = self.octree.radius * (1/8)**self.octree.maximum_level
+        center = hilbert.get_center_from_key(
+            key, self.octree.center, self.octree.radius)
 
         # 1. Compute expansion, and add to source data
-        self._source_data[key].expansion = \
-            p2m(self.kernel, leaf_sources,
-                self.order, center, radius,
-                self.octree.maximum_level)
+        self._source_data[key].expansion = p2m(self.kernel, leaf_sources,
+                                               self.order, center, radius,
+                                               self.octree.maximum_level)
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
@@ -127,7 +133,6 @@ class Fmm:
                 child_equivalent_density = self._source_data[child].expansion
 
                 # Compute expansion, and store
-
                 self._source_data[key].expansion += m2m(self.kernel, center, radius, self.order, level, child_equivalent_density)
 
     def multipole_to_local(self, source_node, target_node):
@@ -172,7 +177,6 @@ class Fmm:
         if self.octree.source_node_to_index[leaf_node_key] != -1:
             for target_index in target_indices:
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
-
 
 
 def surface(p, r, level, c, alpha):
