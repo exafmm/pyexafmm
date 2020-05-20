@@ -4,7 +4,14 @@ import numpy as np
 import fmm.hilbert as hilbert
 import collections as collections
 
-NodeData = collections.namedtuple("NodeData", "key expansion indices")
+class NodeData:
+    def __init__(self, key, expansion, indices):
+        self.key = key
+        self.expansion = expansion
+        self.indices = indices
+
+    def __repr__(self):
+        return str((self.key, self.expansion, self.indices))
 
 class Fmm(object):
     """Main Fmm class."""
@@ -15,6 +22,9 @@ class Fmm(object):
         self.kernel = kernel
         self.order = order
 
+        # For each point on surface of box discretisation
+        self.ncoeffiecients = 6*(order-1)**2 + 2
+
         self._octree = octree
 
         self._source_data = {}
@@ -23,11 +33,11 @@ class Fmm(object):
 
         for key in self.octree.non_empty_source_nodes:
             self._source_data[key] = NodeData(
-                    key, np.zeros(order, dtype='float64'), set()
+                    key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
                     )
         for key in self.octree.non_empty_target_nodes:
             self._target_data[key] = NodeData(
-                    key, np.zeros(order, dtype='float64'), set()
+                    key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
                     )
 
     @property
@@ -41,9 +51,9 @@ class Fmm(object):
         for index in range(number_of_leafs):
             self.particle_to_multipole(index)
 
-        for level in range(self.octree.maximum_level - 1, -1, -1):
-            for key in self.octree.non_empty_source_nodes_by_level[level]:
-                self.multipole_to_multipole(key)
+        # for level in range(self.octree.maximum_level - 1, -1, -1):
+        #     for key in self.octree.non_empty_source_nodes_by_level[level]:
+        #         self.multipole_to_multipole(key)
 
     def downward_pass(self):
         """Downward pass."""
@@ -76,19 +86,18 @@ class Fmm(object):
         source_indices = self.octree.sources_by_leafs[
                 self.octree.source_index_ptr[leaf_node_index] : self.octree.source_index_ptr[leaf_node_index + 1]
                 ]
-
+    
         # Just adding index from argsort (sources by leafs)
         self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].indices.update(source_indices)
-
+    
         # 0. Compute center and radius of leaf box in cartesian coordinates
         key = self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].key
         center = hilbert.get_center_from_key(key, self.octree.center, self.octree.radius)
         radius = self.octree.radius * (1/8)**self.octree.maximum_level
-        
+
         ## Find leaf sources
         ## This list conversion is inefficient to extract the index
-        leaf_sources_idxs = list(self._source_data[key].indices)
-        leaf_sources = self.octree._sources[leaf_sources_idxs]
+        leaf_sources = self.octree._sources[source_indices]
 
         # 1. Compute surfaces
         upward_check_surface = surface(
@@ -107,11 +116,10 @@ class Fmm(object):
             1.95
         )
 
-        # 2. Compute expansion
-        self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].expansion =\
+        # 2. Compute expansion, and add to source data
+        self._source_data[key].expansion =\
              p2m(self.kernel, leaf_sources, upward_check_surface, upward_equivalent_surface)
- 
-                
+
     def multipole_to_multipole(self, node):
         """Combine children expansions of node into node expansion."""
         for child in hilbert.get_children(node):
