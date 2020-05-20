@@ -16,7 +16,7 @@ class NodeData:
     def __repr__(self):
         return str((self.key, self.expansion, self.indices))
 
-class Fmm(object):
+class Fmm:
     """Main Fmm class."""
 
     def __init__(self, octree, order, kernel):
