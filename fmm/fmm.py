@@ -110,9 +110,14 @@ class Fmm:
             key, self.octree.center, self.octree.radius)
 
         # 1. Compute expansion, and add to source data
-        self._source_data[key].expansion = p2m(self.kernel, leaf_sources,
-                                               self.order, center, radius,
-                                               self.octree.maximum_level)
+        self._source_data[key].expansion = p2m(
+            kernel=self.kernel,
+            leaf_sources=leaf_sources,
+            order=self.order,
+            center=center,
+            radius=radius,
+            maximum_level=self.octree.maximum_level
+            )
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
