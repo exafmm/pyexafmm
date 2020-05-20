@@ -86,6 +86,9 @@ class Fmm(object):
         source_indices = self.octree.sources_by_leafs[
                 self.octree.source_index_ptr[leaf_node_index] : self.octree.source_index_ptr[leaf_node_index + 1]
                 ]
+
+        # 0. Find leaf sources
+        leaf_sources = self.octree._sources[source_indices]
     
         # Just adding index from argsort (sources by leafs)
         self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].indices.update(source_indices)
@@ -95,9 +98,7 @@ class Fmm(object):
         center = hilbert.get_center_from_key(key, self.octree.center, self.octree.radius)
         radius = self.octree.radius * (1/8)**self.octree.maximum_level
 
-        ## Find leaf sources
-        ## This list conversion is inefficient to extract the index
-        leaf_sources = self.octree._sources[source_indices]
+
 
         # 1. Compute surfaces
         upward_check_surface = surface(
