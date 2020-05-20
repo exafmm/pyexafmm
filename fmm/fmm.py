@@ -53,9 +53,9 @@ class Fmm:
         for index in range(number_of_leafs):
             self.particle_to_multipole(index)
 
-        # for level in range(self.octree.maximum_level - 1, -1, -1):
-        #     for key in self.octree.non_empty_source_nodes_by_level[level]:
-        #         self.multipole_to_multipole(key)
+        for level in range(self.octree.maximum_level - 1, -1, -1):
+            for key in self.octree.non_empty_source_nodes_by_level[level]:
+                self.multipole_to_multipole(key)
 
     def downward_pass(self):
         """Downward pass."""
@@ -82,51 +82,53 @@ class Fmm:
         """Get target values."""
         pass
 
-
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
         source_indices = self.octree.sources_by_leafs[
-                self.octree.source_index_ptr[leaf_node_index] : self.octree.source_index_ptr[leaf_node_index + 1]
+                self.octree.source_index_ptr[leaf_node_index]
+                :self.octree.source_index_ptr[leaf_node_index + 1]
                 ]
 
-        # 0. Find leaf sources
-        leaf_sources = self.octree._sources[source_indices]
+        # 0.1 Find leaf sources
+        leaf_sources = self.octree.sources[source_indices]
     
         # Just adding index from argsort (sources by leafs)
-        self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].indices.update(source_indices)
+        self._source_data[
+            self.octree.source_leaf_nodes[leaf_node_index]
+            ].indices.update(source_indices)
     
-        # 0. Compute center and radius of leaf box in cartesian coordinates
+        # 0.2 Compute center and radius of leaf box in cartesian coordinates
         key = self._source_data[self.octree.source_leaf_nodes[leaf_node_index]].key
         center = hilbert.get_center_from_key(key, self.octree.center, self.octree.radius)
         radius = self.octree.radius * (1/8)**self.octree.maximum_level
 
-        # 1. Compute surfaces
-        upward_check_surface = surface(
-            self.order,
-            radius,
-            self.octree.maximum_level,
-            center,
-            2.95
-            )
+        # 1. Compute expansion, and add to source data
+        self._source_data[key].expansion = \
+            p2m(self.kernel, leaf_sources,
+                self.order, center, radius,
+                self.octree.maximum_level)
 
-        upward_equivalent_surface = surface(
-            self.order,
-            radius,
-            self.octree.maximum_level,
-            center,
-            1.95
-        )
-
-        # 2. Compute expansion, and add to source data
-        self._source_data[key].expansion =\
-             p2m(self.kernel, leaf_sources, upward_check_surface, upward_equivalent_surface)
-
-    def multipole_to_multipole(self, node):
+    def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
-        for child in hilbert.get_children(node):
-            if self.octree.source_node_to_index[child] != -1:
-                self._source_data[node].indices.update(self._source_data[child].indices)
 
+        for child in hilbert.get_children(key):
+            if self.octree.source_node_to_index[child] != -1:
+
+                level = hilbert.get_level(child)
+
+                # Compute center and radius of child box in cartesian coordinates
+                center = hilbert.get_center_from_key(child, self.octree.center, self.octree.radius)
+                radius = self.octree.radius * (1/8)**level
+
+                # Updating indices
+                self._source_data[key].indices.update(self._source_data[child].indices)
+
+                # Compute child equivalent density
+                child_equivalent_density = self._source_data[child].expansion
+
+                # Compute expansion, and store
+
+                self._source_data[key].expansion += m2m(self.kernel, center, radius, self.order, level, child_equivalent_density)
 
     def multipole_to_local(self, source_node, target_node):
         """Compute multipole to local."""
@@ -308,12 +310,30 @@ def potential_p2p(kernel, targets, sources):
 
 def p2m(kernel,
         leaf_sources,
-        upward_check_surface,
-        upward_equivalent_surface):
+        order,
+        center,
+        radius,
+        maximum_level):
     """
     Compute multipole expansion from sources at the leaf level supported at
         discrete points on the upward equivalent surface.
     """
+    upward_check_surface = surface(
+        order,
+        radius,
+        maximum_level,
+        center,
+        2.95
+        )
+
+    upward_equivalent_surface = surface(
+        order,
+        radius,
+        maximum_level,
+        center,
+        1.95
+    )
+
     check_potential = potential_p2p(kernel, upward_check_surface, leaf_sources)
 
     kernel_matrix = gram_matrix(kernel, upward_equivalent_surface, upward_check_surface)
@@ -323,17 +343,38 @@ def p2m(kernel,
     return upward_equivalent_density
 
 
-def m2m(kernel,
-        child_equivalent_surface,
-        child_equivalent_density,
-        parent_equivalent_surface,
-        parent_check_surface,
-        ):
+def m2m(kernel, center, radius, order, level, child_equivalent_density):
     """ Compute multipole expansion at parent level, from child level.
     """
+
+    # 0. Calculate surfaces
+    child_equivalent_surface = surface(
+        order,
+        radius,
+        level,
+        center,
+        1.05
+    )
+
+    parent_equivalent_surface = surface(
+        order,
+        radius,
+        level,
+        center,
+        1.95
+    )
+
+    parent_check_surface = surface(
+        order,
+        radius,
+        level,
+        center,
+        2.95
+    )
+
     # 1. Calculate check potential from child equivelent density
 
-    check_potential = np.zeros(shape=(len(parent_check_surface), 1))
+    check_potential = np.zeros(shape=(len(parent_check_surface)))
 
     for i, target in enumerate(parent_check_surface): 
         potential = 0
