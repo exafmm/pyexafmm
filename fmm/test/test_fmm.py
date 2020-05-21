@@ -31,6 +31,21 @@ def octree(n_points, max_level):
 
     return Octree(sources, targets, max_level)
 
+def test_gram_matrix():
+    assert True
+
+def test_surface():
+    assert True
+
+def test_potential_p2p():
+    assert True
+
+def test_p2m():
+    assert True
+
+def test_m2m():
+    assert True
+
 def test_upward_and_downward_pass(order, n_points, octree):
     """Test the upward pass."""
 
