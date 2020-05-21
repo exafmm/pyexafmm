@@ -113,8 +113,7 @@ class Fmm:
         # 0.2 Compute key corresponding to this leaf index
         key = self.octree.source_leaf_nodes[leaf_node_index]
 
-        # 0.3 Compute center and radius of leaf box in cartesian coordinates
-        radius = self.octree.radius * (1/8)**self.octree.maximum_level
+        # 0.3 Compute center of leaf box in cartesian coordinates
         center = hilbert.get_center_from_key(
             key, self.octree.center, self.octree.radius)
 
@@ -124,39 +123,44 @@ class Fmm:
             leaf_sources=leaf_sources,
             order=self.order,
             center=center,
-            radius=radius,
+            radius=self.octree.radius,
             maximum_level=self.octree.maximum_level
             )
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
 
+        # Compute center of parent boxes
+        parent_center = hilbert.get_center_from_key(
+            key, self.octree.center, self.octree.radius)
+        parent_level = hilbert.get_level(key)
+
         for child in hilbert.get_children(key):
             if self.octree.source_node_to_index[child] != -1:
 
-                level = hilbert.get_level(child)
-
-                # Compute center and radius of child box in cartesian coordinates
-                center = hilbert.get_center_from_key(
+                # Compute center of child box in cartesian coordinates
+                child_center = hilbert.get_center_from_key(
                     child, self.octree.center, self.octree.radius
                     )
-                radius = self.octree.radius * (1/8)**level
+                child_level = hilbert.get_level(child)
 
                 # Updating indices
                 self._source_data[key].indices.update(
                     self._source_data[child].indices
                     )
 
-                # Compute child equivalent density
+                # Get child equivalent density
                 child_equivalent_density = self._source_data[child].expansion
 
                 # Compute expansion, and store
                 self._source_data[key].expansion += m2m(
                     kernel=self.kernel,
-                    center=center, 
-                    radius=radius, 
+                    parent_center=parent_center,
+                    child_center=child_center, 
+                    child_level=child_level, 
+                    parent_level=parent_level,
+                    radius=self.octree.radius, 
                     order=self.order, 
-                    level=level, 
                     child_equivalent_density=child_equivalent_density
                     )
 
@@ -204,7 +208,7 @@ class Fmm:
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 
 
-def surface(p, r, level, c, alpha):
+def surface(p, r0, level, c, alpha):
     """
     Compute vectors to correspond to a surface of a box.
 
@@ -212,8 +216,8 @@ def surface(p, r, level, c, alpha):
     -----------
     p : int
         Order of the expansion.
-    r : float
-        Half side length of the bounding box
+    r0 : float
+        Half side length of the bounding box root node
     level : int
         Level of box
     c : coordinate
@@ -261,7 +265,7 @@ def surface(p, r, level, c, alpha):
         surf[count+i] = -surf[i]
 
     # Translate box to specified centre, and scale
-    r *= (0.5)**level
+    r = (0.5)**level * r0
     b = alpha*r
 
     for i in range(n):
@@ -274,6 +278,19 @@ def laplace(x, y):
     """
     3D single-layer Laplace kernel between two points. Alternatively called
         particle to particle (P2P) operator.
+
+    Parameters:
+    -----------
+    x : np.array(shape=(n))
+        An n-dimensional vector corresponding to a point in n-dimensional space.
+    y : np.array(shape=(n))
+        Different n-dimensional vector corresponding to a point in n-dimensional
+        space.
+
+    Returns:
+    --------
+    float
+        Operator value (scaled by 4pi) between points x and y.
     """
     r = np.linalg.norm(x-y)
 
@@ -289,14 +306,14 @@ def gram_matrix(kernel, sources, targets):
     -----------
     kernel : function
         Kernel function
-    sources : vector
-        The source locations on a surface.
-    targets : vector
-        The target locations on a surface.
+    sources : np.array(shape=(n))
+        The n source locations on a surface.
+    targets : np.array(shape=(m))
+        The m target locations on a surface.
 
     Returns:
     --------
-    matrix
+    np.array(shape=(n, m))
         The Gram matrix.
     """
 
@@ -310,7 +327,8 @@ def gram_matrix(kernel, sources, targets):
 
 
 def pseudo_inverse(gram_matrix):
-    """ Compute the operator between the check and the equivalent surface.
+    """
+    Compute the operator between the check and the equivalent surface.
     """
 
     # Based on Tingyu's knowledge from literature, equivalent to least squares
@@ -320,7 +338,8 @@ def pseudo_inverse(gram_matrix):
 
 
 def potential_p2p(kernel, targets, sources):
-    """Directly calculate potential at targets from sources
+    """
+    Directly calculate potential at targets from sources
     """
 
     # Potential at target locations
@@ -348,19 +367,19 @@ def p2m(kernel,
         discrete points on the upward equivalent surface.
     """
     upward_check_surface = surface(
-        order,
-        radius,
-        maximum_level,
-        center,
-        2.95
+        p=order,
+        r0=radius,
+        level=maximum_level,
+        c=center,
+        alpha=2.95
         )
 
     upward_equivalent_surface = surface(
-        order,
-        radius,
-        maximum_level,
-        center,
-        1.95
+        p=order,
+        r0=radius,
+        level=maximum_level,
+        c=center,
+        alpha=1.95
     )
 
     check_potential = potential_p2p(kernel, upward_check_surface, leaf_sources)
@@ -371,38 +390,50 @@ def p2m(kernel,
 
     return upward_equivalent_density
 
-
-def m2m(kernel, center, radius, order, level, child_equivalent_density):
-    """ Compute multipole expansion at parent level, from child level.
+def m2m(kernel,
+        parent_center,
+        child_center,
+        child_level,
+        parent_level,
+        radius,
+        order,
+        child_equivalent_density):
     """
+    Compute multipole expansion at parent level, from child level.
 
+    Parameters:
+    -----------
+
+    Returns:
+    --------
+
+    """
     # 0. Calculate surfaces
     child_equivalent_surface = surface(
-        order,
-        radius,
-        level,
-        center,
-        1.05
+        p=order,
+        r0=radius,
+        level=child_level,
+        c=child_center,
+        alpha=1.05
     )
 
     parent_equivalent_surface = surface(
-        order,
-        radius,
-        level,
-        center,
-        1.95
+        p=order,
+        r0=radius,
+        level=parent_level,
+        c=parent_center,
+        alpha=1.95
     )
 
     parent_check_surface = surface(
-        order,
-        radius,
-        level,
-        center,
-        2.95
+        p=order,
+        r0=radius,
+        level=parent_level,
+        c=parent_center,
+        alpha=2.95
     )
 
     # 1. Calculate check potential from child equivelent density
-
     check_potential = np.zeros(shape=(len(parent_check_surface)))
 
     for i, target in enumerate(parent_check_surface): 
@@ -413,7 +444,6 @@ def m2m(kernel, center, radius, order, level, child_equivalent_density):
         check_potential[i] = potential
 
     # 2. Calculate equivalent density on parent equivalent surface
-
     # 2.1 Form gram matrix between parent check surface and equivalent surface
     kernel_matrix = gram_matrix(kernel, parent_equivalent_surface, parent_check_surface)
 
