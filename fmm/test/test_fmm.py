@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from fmm.octree import Octree
-from fmm.fmm import Fmm, laplace
+from fmm.fmm import Fmm, laplace, surface
 
 
 @pytest.fixture
@@ -31,10 +31,29 @@ def octree(n_points, max_level):
 
     return Octree(sources, targets, max_level)
 
-def test_gram_matrix():
-    assert True
+@pytest.mark.parametrize(
+    "order, radius, level, center, alpha, ncoeffs",
+    [
+        (2, 1, 0, np.array([0, 0, 0]), 1, 8)
+    ]
+)
+def test_surface(order, radius, level, center, alpha, ncoeffs):
+    ndim = 3
+    surf = surface(order, radius, level, center, alpha)
 
-def test_surface():
+    # Test correct number of quadrature points
+    assert surf.shape == (ncoeffs, ndim)
+
+    # Test radius
+    for i in range(ndim):
+        assert max(surf[:, i]) - min(surf[:, i]) == 2
+    
+    # Test center
+    for i in range(ndim):
+        assert np.mean(surf[:, i]) == center[i]
+
+
+def test_gram_matrix():
     assert True
 
 def test_potential_p2p():
