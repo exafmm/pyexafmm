@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from fmm.octree import Octree
-from fmm.fmm import Fmm, laplace, surface
+from fmm.fmm import Fmm, laplace, surface, potential_p2p
 
 
 @pytest.fixture
@@ -47,17 +47,16 @@ def test_surface(order, radius, level, center, alpha, ncoeffs):
     # Test radius
     for i in range(ndim):
         assert max(surf[:, i]) - min(surf[:, i]) == 2
-    
+
     # Test center
     for i in range(ndim):
         assert np.mean(surf[:, i]) == center[i]
 
 
-def test_gram_matrix():
-    assert True
+def test_potential_p2p(octree):
+    potential = potential_p2p(laplace, octree.targets, octree.sources)
 
-def test_potential_p2p():
-    assert True
+    assert potential.shape == (len(octree.targets), 1)
 
 def test_p2m():
     assert True

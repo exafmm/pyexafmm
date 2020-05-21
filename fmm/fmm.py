@@ -208,68 +208,69 @@ class Fmm:
                 self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
 
 
-def surface(p, r0, level, c, alpha):
+def surface(order, radius, level, center, alpha):
     """
-    Compute vectors to correspond to a surface of a box.
+    Compute vectors to correspond to quadrature points on surface of a specified
+        cube.
 
     Parameters:
     -----------
-    p : int
+    order : int
         Order of the expansion.
-    r0 : float
-        Half side length of the bounding box root node
+    radius : float
+        Half side length of the octree's root node.
     level : int
-        Level of box
-    c : coordinate
-        Coordinates of the centre of a box.
+        (Octree) level of cube.
+    center : coordinate
+        Coordinates of the centre of the cube.
     alpha : float
-        Ratio between side length of surface box and original box.
+        Ratio between side length of surface cube and original cube.
 
     Returns:
     --------
     vector
         Vector of coordinates of surface points.
     """
-    n = 6*(p-1)**2 + 2
-    surf = np.zeros(shape=(n, 3))
+    n_coeffs = 6*(order-1)**2 + 2
+    surf = np.zeros(shape=(n_coeffs, 3))
 
     surf[0] = np.array([-1, -1, -1])
     count = 1
 
     # Hold x fixed
-    for i in range(p-1):
-        for j in range(p-1):
+    for i in range(order-1):
+        for j in range(order-1):
             surf[count][0] = -1
-            surf[count][1] = (2*(i+1)-(p-1))/(p-1)
-            surf[count][2] = (2*j-(p-1))/(p-1)
+            surf[count][1] = (2*(i+1)-(order-1))/(order-1)
+            surf[count][2] = (2*j-(order-1))/(order-1)
             count += 1
 
     # Hold y fixed
-    for i in range(p-1):
-        for j in range(p-1):
-            surf[count][0] = (2*j-(p-1))/(p-1)
+    for i in range(order-1):
+        for j in range(order-1):
+            surf[count][0] = (2*j-(order-1))/(order-1)
             surf[count][1] = -1
-            surf[count][2] = (2*(i+1)-(p-1))/(p-1)
+            surf[count][2] = (2*(i+1)-(order-1))/(order-1)
             count += 1
 
     # Hold z fixed
-    for i in range(p-1):
-        for j in range(p-1):
-            surf[count][0] = (2*(i+1)-(p-1))/(p-1)
-            surf[count][1] = (2*j-(p-1))/(p-1)
+    for i in range(order-1):
+        for j in range(order-1):
+            surf[count][0] = (2*(i+1)-(order-1))/(order-1)
+            surf[count][1] = (2*j-(order-1))/(order-1)
             surf[count][2] = -1
             count += 1
 
     # Reflect about origin, for remaining faces
-    for i in range(n//2):
+    for i in range(n_coeffs//2):
         surf[count+i] = -surf[i]
 
     # Translate box to specified centre, and scale
-    r = (0.5)**level * r0
+    r = (0.5)**level * radius
     b = alpha*r
 
-    for i in range(n):
-        surf[i] = surf[i]*b + c
+    for i in range(n_coeffs):
+        surf[i] = surf[i]*b + center
 
     return surf
 
@@ -331,15 +332,23 @@ def pseudo_inverse(gram_matrix):
     Compute the operator between the check and the equivalent surface.
     """
 
-    # Based on Tingyu's knowledge from literature, equivalent to least squares
-    # formulation, remember to get a reference
-
     return np.linalg.pinv(gram_matrix)
 
 
 def potential_p2p(kernel, targets, sources):
     """
-    Directly calculate potential at targets from sources
+    Directly calculate potential at m targets from n sources.
+
+    Parameters:
+    -----------
+    kernel : function
+    targets : np.array(shape=(m, 3))
+    sources : np.array(shape=(n, 3))
+
+    Returns:
+    --------
+    np.array(shape=(m, 1))
+        Potential from all sources at each target point.
     """
 
     # Potential at target locations
@@ -357,28 +366,48 @@ def potential_p2p(kernel, targets, sources):
 
 
 def p2m(kernel,
-        leaf_sources,
         order,
         center,
         radius,
-        maximum_level):
+        maximum_level,
+        leaf_sources):
     """
     Compute multipole expansion from sources at the leaf level supported at
         discrete points on the upward equivalent surface.
+
+    Parameters:
+    -----------
+    kernel : function
+    order : int
+    center : np.array(shape=(3))
+        The center of expansion.
+    radius : float
+        Half-side length of root node.
+    maximum_level : int
+        The maximium level of the octree.
+    leaf_sources : np.array(shape=(n, 3))
+        Sources in a given leaf node, at which multipole expansion is being
+        computed.
+    
+    Returns:
+    --------
+    np.array(shape=(n. 3))
+        The equivalent density on the upward equivalent surface at `n`
+        qaudrature points.
     """
     upward_check_surface = surface(
-        p=order,
-        r0=radius,
+        order=order,
+        radius=radius,
         level=maximum_level,
-        c=center,
+        center=center,
         alpha=2.95
         )
 
     upward_equivalent_surface = surface(
-        p=order,
-        r0=radius,
+        order=order,
+        radius=radius,
         level=maximum_level,
-        c=center,
+        center=center,
         alpha=1.95
     )
 
@@ -390,46 +419,60 @@ def p2m(kernel,
 
     return upward_equivalent_density
 
+
 def m2m(kernel,
+        order,
         parent_center,
         child_center,
+        radius,
         child_level,
         parent_level,
-        radius,
-        order,
         child_equivalent_density):
     """
     Compute multipole expansion at parent level, from child level.
 
     Parameters:
     -----------
+    kernel : function
+    order : int
+    parent_center : np.array(shape=(3))
+    child_center : np.array(shape=(3))
+    radius : float
+        Half-side length of root node.
+    child_level : int
+    parent_level : int
+    child_equivalent_density : np.array(shape=(n))
+        The equivalent densities calculated in the previous step at the
+        `n` quadrature points at the child level.
 
     Returns:
     --------
-
+    np.array(shape=(m))
+        The equivalent densities calculated at the `m` quadrature points of the
+        parent level.
     """
     # 0. Calculate surfaces
     child_equivalent_surface = surface(
-        p=order,
-        r0=radius,
+        order=order,
+        radius=radius,
         level=child_level,
-        c=child_center,
+        center=child_center,
         alpha=1.05
     )
 
     parent_equivalent_surface = surface(
-        p=order,
-        r0=radius,
+        order=order,
+        radius=radius,
         level=parent_level,
-        c=parent_center,
+        center=parent_center,
         alpha=1.95
     )
 
     parent_check_surface = surface(
-        p=order,
-        r0=radius,
+        order=order,
+        radius=radius,
         level=parent_level,
-        c=parent_center,
+        center=parent_center,
         alpha=2.95
     )
 
@@ -452,8 +495,10 @@ def m2m(kernel,
 
     return parent_equivalent_density
 
+
 def m2l():
     pass
+
 
 def l2l():
     pass
