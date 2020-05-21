@@ -227,47 +227,47 @@ def surface(p, r, level, c, alpha):
         Vector of coordinates of surface points.
     """
     n = 6*(p-1)**2 + 2
-    res = np.zeros(shape=(n, 3))
+    surf = np.zeros(shape=(n, 3))
 
-    res[0] = np.array([-1, -1, -1])
+    surf[0] = np.array([-1, -1, -1])
     count = 1
 
     # Hold x fixed
     for i in range(p-1):
         for j in range(p-1):
-            res[count][0] = -1
-            res[count][1] = (2*(i+1)-(p-1))/(p-1)
-            res[count][2] = (2*j-(p-1))/(p-1)
+            surf[count][0] = -1
+            surf[count][1] = (2*(i+1)-(p-1))/(p-1)
+            surf[count][2] = (2*j-(p-1))/(p-1)
             count += 1
 
     # Hold y fixed
     for i in range(p-1):
         for j in range(p-1):
-            res[count][0] = (2*j-(p-1))/(p-1)
-            res[count][1] = -1
-            res[count][2] = (2*(i+1)-(p-1))/(p-1)
+            surf[count][0] = (2*j-(p-1))/(p-1)
+            surf[count][1] = -1
+            surf[count][2] = (2*(i+1)-(p-1))/(p-1)
             count += 1
 
     # Hold z fixed
     for i in range(p-1):
         for j in range(p-1):
-            res[count][0] = (2*(i+1)-(p-1))/(p-1)
-            res[count][1] = (2*j-(p-1))/(p-1)
-            res[count][2] = -1
+            surf[count][0] = (2*(i+1)-(p-1))/(p-1)
+            surf[count][1] = (2*j-(p-1))/(p-1)
+            surf[count][2] = -1
             count += 1
 
     # Reflect about origin, for remaining faces
     for i in range(n//2):
-        res[count+i] = -res[i]
+        surf[count+i] = -surf[i]
 
     # Translate box to specified centre, and scale
     r *= (0.5)**level
     b = alpha*r
 
     for i in range(n):
-        res[i] = res[i]*b + c
+        surf[i] = surf[i]*b + c
 
-    return res
+    return surf
 
 
 def laplace(x, y):
