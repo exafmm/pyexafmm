@@ -4,32 +4,39 @@ Test the FMM
 import numpy as np
 import pytest
 
-import fmm.hilbert as hilbert
 from fmm.octree import Octree
-from fmm.fmm import Fmm
-
-NPOINTS = 1000
-MAXIMUM_LEVEL = 3
-ORDER = 5
+from fmm.fmm import Fmm, laplace
 
 
 @pytest.fixture
-def octree():
+def n_points():
+    return 10
+
+@pytest.fixture
+def max_level():
+    return 1
+
+@pytest.fixture
+def order():
+    return 2
+
+@pytest.fixture
+def octree(n_points, max_level):
     """Fill up an octree."""
 
     rand = np.random.RandomState(0)
 
-    sources = rand.rand(NPOINTS, 3)
-    targets = rand.rand(NPOINTS, 3)
+    sources = rand.rand(n_points, 3)
+    targets = rand.rand(n_points, 3)
 
-    return Octree(sources, targets, MAXIMUM_LEVEL)
+    return Octree(sources, targets, max_level)
 
-def test_upward_and_donward_pass(octree):
+def test_upward_and_downward_pass(order, n_points, octree):
     """Test the upward pass."""
 
-    fmm = Fmm(octree, ORDER)
+    fmm = Fmm(octree, order, laplace)
     fmm.upward_pass()
     fmm.downward_pass()
 
-    for index in range(NPOINTS):
-        assert len(fmm._result_data[index]) == NPOINTS
+    for index in range(n_points):
+        assert len(fmm._result_data[index]) == n_points
