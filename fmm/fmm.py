@@ -137,17 +137,28 @@ class Fmm:
                 level = hilbert.get_level(child)
 
                 # Compute center and radius of child box in cartesian coordinates
-                center = hilbert.get_center_from_key(child, self.octree.center, self.octree.radius)
+                center = hilbert.get_center_from_key(
+                    child, self.octree.center, self.octree.radius
+                    )
                 radius = self.octree.radius * (1/8)**level
 
                 # Updating indices
-                self._source_data[key].indices.update(self._source_data[child].indices)
+                self._source_data[key].indices.update(
+                    self._source_data[child].indices
+                    )
 
                 # Compute child equivalent density
                 child_equivalent_density = self._source_data[child].expansion
 
                 # Compute expansion, and store
-                self._source_data[key].expansion += m2m(self.kernel, center, radius, self.order, level, child_equivalent_density)
+                self._source_data[key].expansion += m2m(
+                    kernel=self.kernel,
+                    center=center, 
+                    radius=radius, 
+                    order=self.order, 
+                    level=level, 
+                    child_equivalent_density=child_equivalent_density
+                    )
 
     def multipole_to_local(self, source_node, target_node):
         """Compute multipole to local."""
