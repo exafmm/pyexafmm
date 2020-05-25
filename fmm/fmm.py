@@ -4,6 +4,11 @@ import scipy.sparse.linalg
 
 import fmm.hilbert as hilbert
 
+class Potential:
+    """Return object for computed potential"""
+    def __init__(self, equivalent_surface, equivalent_density):
+        self.equivalent_surface = equivalent_surface
+        self.equivalent_density = equivalent_density
 
 class Node:
     """Holds expansion and source/target indices for each tree node"""
@@ -115,21 +120,21 @@ class Fmm:
         child_key = self.octree.source_leaf_nodes[leaf_node_index]
         parent_key = hilbert.get_parent(child_key)
 
-        # 0.3 Compute center of leaf box in cartesian coordinates
-        child_center = hilbert.get_center_from_key(
-            child_key, self.octree.center, self.octree.radius)
+        # 0.3 Compute center of parent box in cartesian coordinates
         parent_center = hilbert.get_center_from_key(
             parent_key, self.octree.center, self.octree.radius)
 
         # 1. Compute expansion, and add to source data
-        self._source_data[child_key].expansion = p2m(
-            kernel=self.kernel,
+        result = p2m(
+            kernel_function=self.kernel,
             leaf_sources=leaf_sources,
             order=self.order,
             center=parent_center,
             radius=self.octree.radius,
-            maximum_level=self.octree.maximum_level
-            )
+            maximum_level=self.octree.maximum_lev
+        )
+
+        self._source_data[child_key].expansion = result.equivalent_density
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
@@ -370,7 +375,7 @@ def potential_p2p(kernel, targets, sources, source_densities):
     return target_densities
 
 
-def p2m(kernel,
+def p2m(kernel_function,
         order,
         center,
         radius,
@@ -382,7 +387,7 @@ def p2m(kernel,
 
     Parameters:
     -----------
-    kernel : function
+    kernel_function : function
     order : int
     center : np.array(shape=(3))
         The center of expansion.
@@ -396,11 +401,11 @@ def p2m(kernel,
 
     Returns:
     --------
-    np.array(shape=(n. 3))
-        The equivalent density on the upward equivalent surface at `n`
-        qaudrature points.
+    Potential
+        Potential object, containing equivalent surface and equivalent density.
     """
 
+    # 0.1 Compute relevant surfaces
     upward_check_surface = surface(
         order=order,
         radius=radius,
@@ -417,23 +422,27 @@ def p2m(kernel,
         alpha=1.05
     )
 
+    # 0.2 Compute Gram Matrix
+    kernel_matrix = gram_matrix(
+        kernel_function, upward_equivalent_surface, upward_check_surface)
+
+    # 0.3 Set unit densities at leaves for now
     leaf_source_densities = np.ones(shape=(len(leaf_sources)))
 
+    # 1.0 Compute check potential directly using leaves
     check_potential = potential_p2p(
-            kernel=kernel, 
+            kernel=kernel_function, 
             targets=upward_check_surface, 
             sources=leaf_sources,
             source_densities=leaf_source_densities
             )
 
-    K = gram_matrix(kernel, upward_equivalent_surface, upward_check_surface)
-    alpha = 10
+    # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
 
-    u, s, vh = np.linalg.svd(K)
+    # 2.1 SVD decomposition of kernel matrix
+    u, s, vh = np.linalg.svd(kernel_matrix)
 
-    eps = np.finfo(float).eps
-
-    # Invert S
+    # 2.2 Invert S
     tol = 1e-1
     for i, val in enumerate(s):
         if  abs(val) < tol:
@@ -441,12 +450,13 @@ def p2m(kernel,
         else:
             s[i] = 1/val
 
-    left = np.matmul(vh.T, np.diag(s))
-    Kinv = np.matmul(left, u.T)
+    tmp = np.matmul(vh.T, np.diag(s))
+    kernel_matrix_inv = np.matmul(tmp, u.T)
 
-    upward_equivalent_density = np.matmul(Kinv, check_potential)
+    # 3.0 Compute upward equivalent density
+    upward_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
-    return K, upward_equivalent_surface, upward_equivalent_density
+    return Potential(upward_equivalent_surface, upward_equivalent_density)
 
 
 def m2m(kernel,
