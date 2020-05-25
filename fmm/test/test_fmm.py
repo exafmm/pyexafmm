@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 
 from fmm.octree import Octree
-from fmm.fmm import Fmm, laplace, surface, potential_p2p
+from fmm.fmm import Fmm, laplace, surface, potential_p2p, p2m
 
 
 @pytest.fixture
 def n_points():
-    return 10
+    return 500
 
 @pytest.fixture
 def max_level():
@@ -18,7 +18,7 @@ def max_level():
 
 @pytest.fixture
 def order():
-    return 2
+    return 5
 
 @pytest.fixture
 def octree(n_points, max_level):
@@ -30,6 +30,17 @@ def octree(n_points, max_level):
     targets = rand.rand(n_points, 3)
 
     return Octree(sources, targets, max_level)
+
+@pytest.fixture
+def dummy_surface(order, max_level, octree):
+
+    return surface(
+        order=order,
+        radius=octree.radius,
+        level=max_level,
+        center=octree.center,
+        alpha=2.95
+    )
 
 @pytest.mark.parametrize(
     "order, radius, level, center, alpha, ncoeffs",
@@ -53,23 +64,80 @@ def test_surface(order, radius, level, center, alpha, ncoeffs):
         assert np.mean(surf[:, i]) == center[i]
 
 
-def test_potential_p2p(octree):
-    potential = potential_p2p(laplace, octree.targets, octree.sources)
+def test_potential_p2p(octree, order, max_level): 
+    """Test with single-layer Laplace kernel"""
 
-    assert potential.shape == (len(octree.targets), 1)
+    sources = octree.sources
+    targets = octree.targets
 
-def test_p2m():
-    assert True
+    source_densities = np.ones(shape=(len(sources)))
+
+    k, surf, densities = p2m(
+        laplace,
+        order,
+        octree.center,
+        octree.radius,
+        1,
+        octree.sources
+    )
+
+    print('condition number', np.linalg.cond(k))
+
+    # assert np.array_equal(result, expected)
+    distant_point = np.array([[2009, 0, 0], [0, 2500, 0]])
+
+    direct = potential_p2p(laplace, distant_point, sources, source_densities)
+    print(f'direct {direct}')
+
+    surface = potential_p2p(laplace, distant_point, surf, densities)
+
+    print(f'surface {surface}')
+
+    print(surf.shape)
+
+    # Potential p2p needs to be passed the source densities to work
+    # properly for the comparison in the far field
+
+    assert False
+
+# def test_p2m(octree, order, max_level):
+#     """
+#     Compare far-field approximation at a 'distant point'
+#     """
+
+#     p2m_density = p2m(
+#         kernel=laplace,
+#         order=order,
+#         center=octree.center,
+#         radius=octree.radius,
+#         maximum_level=1,
+#         leaf_sources=octree.sources,
+#     )
+
+#     distant_point = np.array([[1000, 0, 0]])
+
+#     # Calculate effect at distant point
+#     direct_result = potential_p2p(laplace, distant_point, octree.sources)
+#     p2m_result = potential_p2p(laplace, distant_point, p2m_density)
+
+#     print(f'direct result {direct_result}')
+#     print(f'p2m result {p2m_result}')
+
+#     # print(p2m_density)
+
+#     print(p2m_density[0])
+
+#     assert True
 
 def test_m2m():
     assert True
 
-def test_upward_and_downward_pass(order, n_points, octree):
-    """Test the upward pass."""
+# def test_upward_and_downward_pass(order, n_points, octree):
+#     """Test the upward pass."""
 
-    fmm = Fmm(octree, order, laplace)
-    fmm.upward_pass()
-    fmm.downward_pass()
+#     fmm = Fmm(octree, order, laplace)
+#     fmm.upward_pass()
+#     fmm.downward_pass()
 
-    for index in range(n_points):
-        assert len(fmm._result_data[index]) == n_points
+#     for index in range(n_points):
+#         assert len(fmm._result_data[index]) == n_points

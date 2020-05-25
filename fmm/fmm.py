@@ -1,5 +1,6 @@
 """Implementation of the main FMM loop."""
 import numpy as np
+import scipy.sparse.linalg
 
 import fmm.hilbert as hilbert
 
@@ -110,19 +111,22 @@ class Fmm:
             self.octree.source_leaf_nodes[leaf_node_index]
             ].indices.update(source_indices)
 
-        # 0.2 Compute key corresponding to this leaf index
-        key = self.octree.source_leaf_nodes[leaf_node_index]
+        # 0.2 Compute key corresponding to this leaf index, and its parent
+        child_key = self.octree.source_leaf_nodes[leaf_node_index]
+        parent_key = hilbert.get_parent(child_key)
 
         # 0.3 Compute center of leaf box in cartesian coordinates
-        center = hilbert.get_center_from_key(
-            key, self.octree.center, self.octree.radius)
+        child_center = hilbert.get_center_from_key(
+            child_key, self.octree.center, self.octree.radius)
+        parent_center = hilbert.get_center_from_key(
+            parent_key, self.octree.center, self.octree.radius)
 
         # 1. Compute expansion, and add to source data
-        self._source_data[key].expansion = p2m(
+        self._source_data[child_key].expansion = p2m(
             kernel=self.kernel,
             leaf_sources=leaf_sources,
             order=self.order,
-            center=center,
+            center=parent_center,
             radius=self.octree.radius,
             maximum_level=self.octree.maximum_level
             )
@@ -335,7 +339,7 @@ def pseudo_inverse(gram_matrix):
     return np.linalg.pinv(gram_matrix)
 
 
-def potential_p2p(kernel, targets, sources):
+def potential_p2p(kernel, targets, sources, source_densities):
     """
     Directly calculate potential at m targets from n sources.
 
@@ -344,6 +348,7 @@ def potential_p2p(kernel, targets, sources):
     kernel : function
     targets : np.array(shape=(m, 3))
     sources : np.array(shape=(n, 3))
+    source_densities : np.array(shape=(n))
 
     Returns:
     --------
@@ -356,9 +361,9 @@ def potential_p2p(kernel, targets, sources):
 
     for i, target in enumerate(targets):
         potential = 0
-        for source in sources:
+        for j, source in enumerate(sources):
             # for now assume source densities are all 1
-            source_density = 1
+            source_density = source_densities[j]
             potential += kernel(target, source)*source_density
         target_densities[i] = potential
 
@@ -388,13 +393,14 @@ def p2m(kernel,
     leaf_sources : np.array(shape=(n, 3))
         Sources in a given leaf node, at which multipole expansion is being
         computed.
-    
+
     Returns:
     --------
     np.array(shape=(n. 3))
         The equivalent density on the upward equivalent surface at `n`
         qaudrature points.
     """
+
     upward_check_surface = surface(
         order=order,
         radius=radius,
@@ -408,16 +414,39 @@ def p2m(kernel,
         radius=radius,
         level=maximum_level,
         center=center,
-        alpha=1.95
+        alpha=1.05
     )
 
-    check_potential = potential_p2p(kernel, upward_check_surface, leaf_sources)
+    leaf_source_densities = np.ones(shape=(len(leaf_sources)))
 
-    kernel_matrix = gram_matrix(kernel, upward_equivalent_surface, upward_check_surface)
+    check_potential = potential_p2p(
+            kernel=kernel, 
+            targets=upward_check_surface, 
+            sources=leaf_sources,
+            source_densities=leaf_source_densities
+            )
 
-    upward_equivalent_density = np.matmul(pseudo_inverse(kernel_matrix), check_potential)
+    K = gram_matrix(kernel, upward_equivalent_surface, upward_check_surface)
+    alpha = 10
 
-    return upward_equivalent_density
+    u, s, vh = np.linalg.svd(K)
+
+    eps = np.finfo(float).eps
+
+    # Invert S
+    tol = 1e-1
+    for i, val in enumerate(s):
+        if  abs(val) < tol:
+            s[i] = 0
+        else:
+            s[i] = 1/val
+
+    left = np.matmul(vh.T, np.diag(s))
+    Kinv = np.matmul(left, u.T)
+
+    upward_equivalent_density = np.matmul(Kinv, check_potential)
+
+    return K, upward_equivalent_surface, upward_equivalent_density
 
 
 def m2m(kernel,
