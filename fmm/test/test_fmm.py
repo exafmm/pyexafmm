@@ -4,8 +4,9 @@ Test the FMM
 import numpy as np
 import pytest
 
+from fmm.fmm import Fmm, laplace, surface, p2p, p2m, m2m
 from fmm.octree import Octree
-from fmm.fmm import Fmm, laplace, surface, p2p, p2m
+import fmm.hilbert as hilbert
 
 
 @pytest.fixture
@@ -66,7 +67,11 @@ def test_surface(order, radius, level, center, alpha, ncoeffs):
     ]
 )
 def test_p2p(targets, sources, source_densities, expected):
-    """Test with single-layer Laplace kernel"""
+    """
+    Test with single-layer Laplace kernel.
+    Strategy: test whether equivalent density and direct evaluation are
+    approximately equivalent in the far field.
+    """
 
     result = p2p(laplace, targets, sources, source_densities).density
 
@@ -76,11 +81,9 @@ def test_p2p(targets, sources, source_densities, expected):
 def test_p2m(octree, order, max_level):
     """Test with single-layer Laplace kernel"""
 
-    # Attach unit densities to each source in Octree
     sources = octree.sources
     source_densities = np.ones(shape=(len(sources)))
 
-    # Evaluate p2m with a single-level Octree
     result = p2m(
         kernel_function=laplace,
         order=order,
@@ -90,15 +93,11 @@ def test_p2m(octree, order, max_level):
         leaf_sources=octree.sources
         )
 
-    # Evaluate directly using the leaf sources, and compare to evaluating
-    # directly using the equivalent surface at a distant point in the far field.
-
     distant_point = np.array([[100, 0, 0], [0, 111, 0]])
 
     direct = p2p(laplace, distant_point, sources, source_densities)
     equivalent = p2p(laplace, distant_point, result.surface, result.density)
 
-    # Test that potentials are evaluated to approximately the same value.
     for i in range(len(equivalent.density)):
         a = equivalent.density[i][0]; b = direct.density[i][0]
         assert np.isclose(a, b, rtol=1e-1)
@@ -107,15 +106,56 @@ def test_p2m(octree, order, max_level):
     assert ~np.array_equal(equivalent.surface, direct.surface)
 
 
-def test_m2m():
-    assert True
+def test_m2m(octree, order, n_points):
+    """
+    Test with single-layer Laplace kernel.
+    Strategy: Test whether child equivalent density and parent equivalent
+    density are approximately equivalent to each other in the far field.
+    """
 
-# def test_upward_and_downward_pass(order, n_points, octree):
-#     """Test the upward pass."""
+    parent_key = 0
+    child_key = 1
 
-#     fmm = Fmm(octree, order, laplace)
-#     fmm.upward_pass()
-#     fmm.downward_pass()
+    x0 = octree.center; r0 = octree.radius
+    parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
+    child_center = hilbert.get_center_from_key(child_key, x0, r0)
 
-#     for index in range(n_points):
-#         assert len(fmm._result_data[index]) == n_points
+    parent_level = hilbert.get_level(parent_key)
+    child_level = hilbert.get_level(child_key)
+
+    child_equivalent_density = np.ones(shape=(n_points))
+    child_equivalent_surface = surface(
+        order=order,
+        radius=r0,
+        level=child_level,
+        center=child_center,
+        alpha=1.05
+    )
+
+    result = m2m(
+        kernel_function=laplace,
+        order=order,
+        parent_center=parent_center,
+        child_center=child_center,
+        radius=octree.radius,
+        child_level=child_level,
+        parent_level=parent_level,
+        child_equivalent_density=child_equivalent_density
+    )
+
+    parent_equivalent_surface, parent_equivalent_density = result.surface, result.density
+
+    distant_point = np.array([[10, 0, 0]])
+
+    child_result = p2p(
+        laplace, distant_point, child_equivalent_surface, child_equivalent_density
+    )
+
+    parent_result = p2p(
+        laplace, distant_point, parent_equivalent_surface, parent_equivalent_density
+    )
+
+    assert np.isclose(child_result.density[0], parent_result.density[0], rtol=1e-1)
+
+    # Test that the surfaces are not equal, as expected
+    assert ~np.array_equal(parent_result.surface, child_result.surface)

@@ -16,6 +16,7 @@ class Potential:
     def __repr__(self):
         return str((self.surface, self.density))
 
+
 class Node:
     """Holds expansion and source/target indices for each tree node"""
     def __init__(self, key, expansion, indices):
@@ -168,9 +169,8 @@ class Fmm:
                 child_equivalent_density = self._source_data[child].expansion
 
                 # Compute expansion, and store
-
                 result = m2m(
-                    kernel=self.kernel,
+                    kernel_function=self.kernel,
                     parent_center=parent_center,
                     child_center=child_center,
                     child_level=child_level,
@@ -460,7 +460,7 @@ def p2m(kernel_function,
     return Potential(upward_equivalent_surface, upward_equivalent_density)
 
 
-def m2m(kernel,
+def m2m(kernel_function,
         order,
         parent_center,
         child_center,
@@ -473,7 +473,7 @@ def m2m(kernel,
 
     Parameters:
     -----------
-    kernel : function
+    kernel_function : function
     order : int
     parent_center : np.array(shape=(3))
     child_center : np.array(shape=(3))
@@ -513,7 +513,7 @@ def m2m(kernel,
         radius=radius,
         level=parent_level,
         center=parent_center,
-        alpha=2.95
+        alpha=4.95
     )
 
     # 1. Calculate check potential from child equivelent density
@@ -523,13 +523,13 @@ def m2m(kernel,
         potential = 0
         for j, source in enumerate(child_equivalent_surface):
             source_density = child_equivalent_density[j]
-            potential += kernel(target, source)*source_density
+            potential += kernel_function(target, source)*source_density
         check_potential[i] = potential
 
     # 2. Calculate equivalent density on parent equivalent surface
     # 2.1 Form gram matrix between parent check surface and equivalent surface
     kernel_matrix = gram_matrix(
-        kernel, parent_equivalent_surface, parent_check_surface)
+        kernel_function, parent_equivalent_surface, parent_check_surface)
 
     # 2.2 Invert gram matrix, and find equivalent density
     u, s, v_transpose = np.linalg.svd(kernel_matrix)
