@@ -4,11 +4,21 @@ import numba as _numba
 
 
 @_numba.njit(cache=True)
-def get_level(index):
-    """Get level from index."""
+def get_level(key):
+    """
+    Get level from Hilbert key.
+
+    Parameters:
+    -----------
+    key : int
+
+    Returns:
+    --------
+    int
+    """
     level = -1
     offset = 0
-    while index >= offset:
+    while key >= offset:
         level += 1
         offset += 1 << 3 * level
     return level
@@ -24,7 +34,19 @@ def get_levels_for_array(indices):
 
 @_numba.njit(cache=True)
 def level_offset(level):
-    """Return the offset of a level."""
+    """
+    The `offset` of a level is determined as the starting starting point of the
+    Hilbert keys for a given level, so that they don't collide with keys from
+    previous levels.
+
+    Parameters:
+    -----------
+    level : int
+
+    Returns:
+    --------
+    int
+    """
     return ((1 << 3 * level) - 1) // 7
 
 
@@ -58,7 +80,19 @@ def get_key(vec):
 
 @_numba.njit(cache=True)
 def get_4d_index_from_key(key):
-    """Get 4d index from key."""
+    """
+    The 4D index is composed as [xidx, yidx, zidx, level], corresponding to
+        physical index of node in partitioned box.
+
+    Parameters:
+    -----------
+    key : int
+        Hilbert key
+
+    Returns:
+    --------
+    vec : np.array(shape=(4), type=np.int64)
+    """
     level = get_level(key)
     key = key - level_offset(level)
     vec = _np.zeros(4, _np.int64)
@@ -108,6 +142,12 @@ def get_center_from_4d_index(vec, x0, r0):
     return (vec[:3] + .5) * dx + xmin
 
 @_numba.njit(cache=True)
+def get_center_from_key(key, x0, r0):
+    """Get center of box from a key"""
+    vec = get_4d_index_from_key(key)
+    return get_center_from_4d_index(vec, x0, r0)
+
+@_numba.njit(cache=True)
 def get_parent(key):
     """Return the parent key."""
     level = get_level(key)
@@ -119,7 +159,7 @@ def get_children(key):
     level = get_level(key)
     return (remove_offset(key) << 3) + level_offset(level + 1) + _np.arange(8)
 
-_numba.njit(cache=True)
+@_numba.njit(cache=True)
 def get_number_of_all_nodes(level):
     """Return number of all nodes up to a given level."""
     return level_offset(level + 1)
