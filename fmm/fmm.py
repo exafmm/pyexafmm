@@ -5,7 +5,10 @@ import scipy.sparse.linalg
 import fmm.hilbert as hilbert
 
 class Potential:
-    """Return object for computed potential"""
+    """
+    Return object for computed potential, bundle equivalent density and its
+        corresponding equivalent surface.
+    """
     def __init__(self, equivalent_surface, equivalent_density):
         self.equivalent_surface = equivalent_surface
         self.equivalent_density = equivalent_density
@@ -165,11 +168,11 @@ class Fmm:
                 self._source_data[key].expansion += m2m(
                     kernel=self.kernel,
                     parent_center=parent_center,
-                    child_center=child_center, 
-                    child_level=child_level, 
+                    child_center=child_center,
+                    child_level=child_level,
                     parent_level=parent_level,
-                    radius=self.octree.radius, 
-                    order=self.order, 
+                    radius=self.octree.radius,
+                    order=self.order,
                     child_equivalent_density=child_equivalent_density
                     )
 
@@ -344,13 +347,13 @@ def pseudo_inverse(gram_matrix):
     return np.linalg.pinv(gram_matrix)
 
 
-def potential_p2p(kernel, targets, sources, source_densities):
+def potential_p2p(kernel_function, targets, sources, source_densities):
     """
     Directly calculate potential at m targets from n sources.
 
     Parameters:
     -----------
-    kernel : function
+    kernel_function : function
     targets : np.array(shape=(m, 3))
     sources : np.array(shape=(n, 3))
     source_densities : np.array(shape=(n))
@@ -367,9 +370,8 @@ def potential_p2p(kernel, targets, sources, source_densities):
     for i, target in enumerate(targets):
         potential = 0
         for j, source in enumerate(sources):
-            # for now assume source densities are all 1
             source_density = source_densities[j]
-            potential += kernel(target, source)*source_density
+            potential += kernel_function(target, source)*source_density
         target_densities[i] = potential
 
     return target_densities
@@ -431,16 +433,15 @@ def p2m(kernel_function,
 
     # 1.0 Compute check potential directly using leaves
     check_potential = potential_p2p(
-            kernel=kernel_function, 
-            targets=upward_check_surface, 
+            kernel_function=kernel_function,
+            targets=upward_check_surface,
             sources=leaf_sources,
             source_densities=leaf_source_densities
             )
 
     # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
-
     # 2.1 SVD decomposition of kernel matrix
-    u, s, vh = np.linalg.svd(kernel_matrix)
+    u, s, v_transpose = np.linalg.svd(kernel_matrix)
 
     # 2.2 Invert S
     tol = 1e-1
@@ -450,7 +451,7 @@ def p2m(kernel_function,
         else:
             s[i] = 1/val
 
-    tmp = np.matmul(vh.T, np.diag(s))
+    tmp = np.matmul(v_transpose.T, np.diag(s))
     kernel_matrix_inv = np.matmul(tmp, u.T)
 
     # 3.0 Compute upward equivalent density
@@ -518,7 +519,7 @@ def m2m(kernel,
     # 1. Calculate check potential from child equivelent density
     check_potential = np.zeros(shape=(len(parent_check_surface)))
 
-    for i, target in enumerate(parent_check_surface): 
+    for i, target in enumerate(parent_check_surface):
         potential = 0
         for j, source in enumerate(child_equivalent_surface):
             source_density = child_equivalent_density[j]
@@ -527,12 +528,26 @@ def m2m(kernel,
 
     # 2. Calculate equivalent density on parent equivalent surface
     # 2.1 Form gram matrix between parent check surface and equivalent surface
-    kernel_matrix = gram_matrix(kernel, parent_equivalent_surface, parent_check_surface)
+    kernel_matrix = gram_matrix(
+        kernel, parent_equivalent_surface, parent_check_surface)
 
     # 2.2 Invert gram matrix, and find equivalent density
-    parent_equivalent_density = np.matmul(pseudo_inverse(kernel_matrix), check_potential)
+    u, s, v_transpose = np.linalg.svd(kernel_matrix)
 
-    return parent_equivalent_density
+    # 2.3 Invert S
+    tol = 1e-1
+    for i, val in enumerate(s):
+        if  abs(val) < tol:
+            s[i] = 0
+        else:
+            s[i] = 1/val
+
+    tmp = np.matmul(v_transpose.T, np.diag(s))
+    kernel_matrix_inv = np.matmul(tmp, u.T)
+
+    parent_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+
+    return Potential(parent_equivalent_surface, parent_equivalent_density)
 
 
 def m2l():
