@@ -339,15 +339,7 @@ def gram_matrix(kernel, sources, targets):
     return matrix
 
 
-def pseudo_inverse(gram_matrix):
-    """
-    Compute the operator between the check and the equivalent surface.
-    """
-
-    return np.linalg.pinv(gram_matrix)
-
-
-def potential_p2p(kernel_function, targets, sources, source_densities):
+def p2p(kernel_function, targets, sources, source_densities):
     """
     Directly calculate potential at m targets from n sources.
 
@@ -360,7 +352,7 @@ def potential_p2p(kernel_function, targets, sources, source_densities):
 
     Returns:
     --------
-    np.array(shape=(m, 1))
+    Potential
         Potential from all sources at each target point.
     """
 
@@ -374,7 +366,7 @@ def potential_p2p(kernel_function, targets, sources, source_densities):
             potential += kernel_function(target, source)*source_density
         target_densities[i] = potential
 
-    return target_densities
+    return Potential(targets, target_densities)
 
 
 def p2m(kernel_function,
@@ -432,7 +424,7 @@ def p2m(kernel_function,
     leaf_source_densities = np.ones(shape=(len(leaf_sources)))
 
     # 1.0 Compute check potential directly using leaves
-    check_potential = potential_p2p(
+    check_potential = p2p(
             kernel_function=kernel_function,
             targets=upward_check_surface,
             sources=leaf_sources,
