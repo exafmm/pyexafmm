@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from fmm.octree import Octree
-from fmm.fmm import Fmm, laplace, surface, potential_p2p, p2m
+from fmm.fmm import Fmm, laplace, surface, p2p, p2m
 
 
 @pytest.fixture
@@ -31,16 +31,6 @@ def octree(n_points, max_level):
 
     return Octree(sources, targets, max_level)
 
-@pytest.fixture
-def dummy_surface(order, max_level, octree):
-
-    return surface(
-        order=order,
-        radius=octree.radius,
-        level=max_level,
-        center=octree.center,
-        alpha=2.95
-    )
 
 @pytest.mark.parametrize(
     "order, radius, level, center, alpha, ncoeffs",
@@ -64,70 +54,58 @@ def test_surface(order, radius, level, center, alpha, ncoeffs):
         assert np.mean(surf[:, i]) == center[i]
 
 
-def test_potential_p2p(octree, order, max_level): 
+@pytest.mark.parametrize(
+    "targets, sources, source_densities, expected",
+    [
+        # 1. Single source, single target, unit density
+        (
+            np.array([[0, 0, 0]]),
+            np.array([[0, 0, 1]]),
+            np.array([1]),
+            np.array([1/(4*np.pi)]))
+    ]
+)
+def test_p2p(targets, sources, source_densities, expected):
     """Test with single-layer Laplace kernel"""
 
-    sources = octree.sources
-    targets = octree.targets
+    result = p2p(laplace, targets, sources, source_densities).density
 
+    assert result == expected
+
+
+def test_p2m(octree, order, max_level):
+    """Test with single-layer Laplace kernel"""
+
+    # Attach unit densities to each source in Octree
+    sources = octree.sources
     source_densities = np.ones(shape=(len(sources)))
 
-    k, surf, densities = p2m(
-        laplace,
-        order,
-        octree.center,
-        octree.radius,
-        1,
-        octree.sources
-    )
+    # Evaluate p2m with a single-level Octree
+    result = p2m(
+        kernel_function=laplace,
+        order=order,
+        center=octree.center,
+        radius=octree.radius,
+        maximum_level=max_level,
+        leaf_sources=octree.sources
+        )
 
-    print('condition number', np.linalg.cond(k))
+    # Evaluate directly using the leaf sources, and compare to evaluating
+    # directly using the equivalent surface at a distant point in the far field.
 
-    # assert np.array_equal(result, expected)
-    distant_point = np.array([[2009, 0, 0], [0, 2500, 0]])
+    distant_point = np.array([[100, 0, 0], [0, 111, 0]])
 
-    direct = potential_p2p(laplace, distant_point, sources, source_densities)
-    print(f'direct {direct}')
+    direct = p2p(laplace, distant_point, sources, source_densities)
+    equivalent = p2p(laplace, distant_point, result.surface, result.density)
 
-    surface = potential_p2p(laplace, distant_point, surf, densities)
+    # Test that potentials are evaluated to approximately the same value.
+    for i in range(len(equivalent.density)):
+        a = equivalent.density[i][0]; b = direct.density[i][0]
+        assert np.isclose(a, b, rtol=1e-1)
 
-    print(f'surface {surface}')
+    # Test that the surfaces are not equal, as expected
+    assert ~np.array_equal(equivalent.surface, direct.surface)
 
-    print(surf.shape)
-
-    # Potential p2p needs to be passed the source densities to work
-    # properly for the comparison in the far field
-
-    assert False
-
-# def test_p2m(octree, order, max_level):
-#     """
-#     Compare far-field approximation at a 'distant point'
-#     """
-
-#     p2m_density = p2m(
-#         kernel=laplace,
-#         order=order,
-#         center=octree.center,
-#         radius=octree.radius,
-#         maximum_level=1,
-#         leaf_sources=octree.sources,
-#     )
-
-#     distant_point = np.array([[1000, 0, 0]])
-
-#     # Calculate effect at distant point
-#     direct_result = potential_p2p(laplace, distant_point, octree.sources)
-#     p2m_result = potential_p2p(laplace, distant_point, p2m_density)
-
-#     print(f'direct result {direct_result}')
-#     print(f'p2m result {p2m_result}')
-
-#     # print(p2m_density)
-
-#     print(p2m_density[0])
-
-#     assert True
 
 def test_m2m():
     assert True

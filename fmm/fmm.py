@@ -9,12 +9,12 @@ class Potential:
     Return object for computed potential, bundle equivalent density and its
         corresponding equivalent surface.
     """
-    def __init__(self, equivalent_surface, equivalent_density):
-        self.equivalent_surface = equivalent_surface
-        self.equivalent_density = equivalent_density
+    def __init__(self, surface, density):
+        self.surface = surface
+        self.density = density
 
     def __repr__(self):
-        return str((self.equivalent_surface. self.equivalent_density))
+        return str((self.surface, self.density))
 
 class Node:
     """Holds expansion and source/target indices for each tree node"""
@@ -140,7 +140,7 @@ class Fmm:
             maximum_level=self.octree.maximum_lev
         )
 
-        self._source_data[child_key].expansion = result.equivalent_density
+        self._source_data[child_key].expansion = result.density
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
@@ -168,7 +168,8 @@ class Fmm:
                 child_equivalent_density = self._source_data[child].expansion
 
                 # Compute expansion, and store
-                self._source_data[key].expansion += m2m(
+
+                result = m2m(
                     kernel=self.kernel,
                     parent_center=parent_center,
                     child_center=child_center,
@@ -178,6 +179,8 @@ class Fmm:
                     order=self.order,
                     child_equivalent_density=child_equivalent_density
                     )
+
+                self._source_data[key].expansion += result.density
 
     def multipole_to_local(self, source_node, target_node):
         """Compute multipole to local."""
@@ -243,8 +246,9 @@ def surface(order, radius, level, center, alpha):
 
     Returns:
     --------
-    vector
-        Vector of coordinates of surface points.
+    np.array(shape=(n_coeffs, 3))
+        Vector of coordinates of surface points. `n_coeffs` is the number of
+        points that discretise the surface of a cube.
     """
     n_coeffs = 6*(order-1)**2 + 2
     surf = np.zeros(shape=(n_coeffs, 3))
@@ -433,7 +437,7 @@ def p2m(kernel_function,
             targets=upward_check_surface,
             sources=leaf_sources,
             source_densities=leaf_source_densities
-            )
+            ).density
 
     # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
     # 2.1 SVD decomposition of kernel matrix
