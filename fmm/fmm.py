@@ -13,6 +13,9 @@ class Potential:
         self.equivalent_surface = equivalent_surface
         self.equivalent_density = equivalent_density
 
+    def __repr__(self):
+        return str((self.equivalent_surface. self.equivalent_density))
+
 class Node:
     """Holds expansion and source/target indices for each tree node"""
     def __init__(self, key, expansion, indices):
@@ -353,7 +356,7 @@ def p2p(kernel_function, targets, sources, source_densities):
     Returns:
     --------
     Potential
-        Potential from all sources at each target point.
+        Potential denities at all target points from from all sources.
     """
 
     # Potential at target locations
@@ -396,7 +399,8 @@ def p2m(kernel_function,
     Returns:
     --------
     Potential
-        Potential object, containing equivalent surface and equivalent density.
+        Potential densities calculated at the discrete points on the equivalent
+        surface.
     """
 
     # 0.1 Compute relevant surfaces
@@ -479,8 +483,8 @@ def m2m(kernel,
 
     Returns:
     --------
-    np.array(shape=(m))
-        The equivalent densities calculated at the `m` quadrature points of the
+    Potential
+        Potential densities calculated at the `m` quadrature points of the
         parent level.
     """
     # 0. Calculate surfaces
