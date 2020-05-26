@@ -159,3 +159,10 @@ def test_m2m(octree, order, n_points):
 
     # Test that the surfaces are not equal, as expected
     assert ~np.array_equal(parent_result.surface, child_result.surface)
+
+
+def test_m2l(octree, order):
+    pass
+
+def test_l2l():
+    pass

@@ -10,6 +10,14 @@ class Potential:
         corresponding equivalent surface.
     """
     def __init__(self, surface, density):
+        """
+        Parameters:
+        -----------
+        surface : np.array(shape=(n, 3))
+            `n` quadrature points discretising equivalent surface.
+        density : np.array(shape=(n))
+            `n` potential densities, corresponding to each quadrature point.
+        """
         self.surface = surface
         self.density = density
 
@@ -138,7 +146,7 @@ class Fmm:
             order=self.order,
             center=parent_center,
             radius=self.octree.radius,
-            maximum_level=self.octree.maximum_lev
+            maximum_level=self.octree.maximum_level
         )
 
         self._source_data[child_key].expansion = result.density
@@ -182,24 +190,82 @@ class Fmm:
 
                 self._source_data[key].expansion += result.density
 
-    def multipole_to_local(self, source_node, target_node):
+    def multipole_to_local(self, source_key, target_key):
         """Compute multipole to local."""
-        self._target_data[target_node].indices.update(
-                self._source_data[source_node].indices
+
+        # Compute centers, and levels
+        x0 = self.octree.center; r0 = self.octree.radius
+
+        source_center = hilbert.get_center_from_key(source_key, x0, r0)
+        source_level = hilbert.get_level(source_key)
+        target_center = hilbert.get_center_from_key(target_key, x0, r0)
+        target_level = hilbert.get_level(target_key)
+
+        # Get source equivalent density
+        source_equivalent_density = self._source_data[source_key].expansion
+
+        result = m2l(
+            kernel_function=self.kernel,
+            order=self.order,
+            radius=self.octree.radius,
+            source_center=source_center,
+            source_level=source_level,
+            target_center=target_center,
+            target_level=target_level,
+            source_equivalent_density=source_equivalent_density
+        )
+
+        # Add to target expansions
+        self._target_data[target_key].expansion += result.density
+
+        self._target_data[target_key].indices.update(
+                self._source_data[source_key].indices
                 )
 
-    def local_to_local(self, node):
+    def local_to_local(self, key):
         """Compute local to local."""
-        for child in hilbert.get_children(node):
+
+        # Compute center of parent boxes
+        parent_center = hilbert.get_center_from_key(
+            key, self.octree.center, self.octree.radius)
+        parent_level = hilbert.get_level(key)
+
+        for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
+
+                # Updating indices
                 self._target_data[child].indices.update(
-                        self._target_data[node].indices
+                        self._target_data[key].indices
                         )
+
+                # Compute center of child box in cartesian coordinates
+                child_center = hilbert.get_center_from_key(
+                    child, self.octree.center, self.octree.radius
+                    )
+                child_level = hilbert.get_level(child)
+
+                # Get parent equivalent density
+                parent_equivalent_density = self._target_data[key].expansion
+
+                # Compute expansion, and store
+                result = l2l(
+                    kernel_function=self.kernel,
+                    order=self.order,
+                    radius=self.octree.radius,
+                    parent_center=parent_center,
+                    parent_level=parent_level,
+                    child_center=child_center,
+                    child_level=child_level,
+                    parent_equivalent_density=parent_equivalent_density
+                )
+
+                self._target_data[key].expansion += result.density
 
     def local_to_particle(self, leaf_node_index):
         """Compute local to particle."""
         target_indices = self.octree.targets_by_leafs[
-                self.octree.target_index_ptr[leaf_node_index] : self.octree.target_index_ptr[leaf_node_index + 1]
+                self.octree.target_index_ptr[leaf_node_index]
+                    :self.octree.target_index_ptr[leaf_node_index + 1]
                 ]
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
         for target_index in target_indices:
@@ -210,7 +276,8 @@ class Fmm:
     def compute_near_field(self, leaf_node_index):
         """Compute near field."""
         target_indices = self.octree.targets_by_leafs[
-                self.octree.target_index_ptr[leaf_node_index] : self.octree.target_index_ptr[leaf_node_index + 1]
+                self.octree.target_index_ptr[leaf_node_index]
+                    :self.octree.target_index_ptr[leaf_node_index + 1]
                 ]
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
         for neighbor in self.octree.target_neighbors[
@@ -223,7 +290,8 @@ class Fmm:
                             )
         if self.octree.source_node_to_index[leaf_node_key] != -1:
             for target_index in target_indices:
-                self._result_data[target_index].update(self._source_data[leaf_node_key].indices)
+                self._result_data[target_index].update(
+                    self._source_data[leaf_node_key].indices)
 
 
 def surface(order, radius, level, center, alpha):
@@ -326,9 +394,9 @@ def gram_matrix(kernel, sources, targets):
     -----------
     kernel : function
         Kernel function
-    sources : np.array(shape=(n))
+    sources : np.array(shape=(n, 3))
         The n source locations on a surface.
-    targets : np.array(shape=(m))
+    targets : np.array(shape=(m, 3))
         The m target locations on a surface.
 
     Returns:
@@ -469,7 +537,7 @@ def m2m(kernel_function,
         parent_level,
         child_equivalent_density):
     """
-    Compute multipole expansion at parent level, from child level.
+    Translate a multipole expansion at parent level, from child level.
 
     Parameters:
     -----------
@@ -550,9 +618,158 @@ def m2m(kernel_function,
     return Potential(parent_equivalent_surface, parent_equivalent_density)
 
 
-def m2l():
-    pass
+def m2l(kernel_function,
+        order,
+        radius,
+        source_center,
+        source_level,
+        target_center,
+        target_level,
+        source_equivalent_density):
+    """
+    Translate a local expansion, from a multipole expansion in a box's
+        interaction list.
+
+    Parameters:
+    -----------
+
+    Returns:
+    --------
+    Potential
+    """
+
+    # 0. Compute surfaces
+    src_upward_equivalent_surface = surface(
+        order=order,
+        radius=radius,
+        level=source_level,
+        center=source_center,
+        alpha=1.05
+    )
+
+    tgt_downward_equivalent_surface = surface(
+        order=order,
+        radius=radius,
+        level=target_level,
+        center=target_center,
+        alpha=2.95
+    )
+
+    tgt_check_surface = surface(
+        order=order,
+        radius=radius,
+        level=target_level,
+        center=target_center,
+        alpha=1.05
+    )
+
+    # 1. Calculate check potential from source equivalent density
+    check_potential = np.zeros(shape=(len(tgt_check_surface)))
+
+    for i, target in enumerate(tgt_check_surface):
+        potential = 0
+        for j, source in enumerate(src_upward_equivalent_surface):
+            source_density = source_equivalent_density[j]
+            potential += kernel_function(target, source)*source_density
+        check_potential[i] = potential
+
+    # 2. Calculate downward equivalent density
+    # 2.1 Form gram-matrix between target and source box
+    kernel_matrix = gram_matrix(kernel_function,
+                                src_upward_equivalent_surface,
+                                tgt_downward_equivalent_surface)
+
+    # 2.2 Invert gram matrix with SVD
+    u, s, v_transpose = np.linalg.svd(kernel_matrix)
+
+    # 2.3 Invert S
+    tol = 1e-1
+    for i, val in enumerate(s):
+        if  abs(val) < tol:
+            s[i] = 0
+        else:
+            s[i] = 1/val
+
+    tmp = np.matmul(v_transpose.T, np.diag(s))
+    kernel_matrix_inv = np.matmul(tmp, u.T)
+
+    tgt_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+
+    return Potential(tgt_downward_equivalent_surface, tgt_equivalent_density)
 
 
-def l2l():
-    pass
+def l2l(kernel_function,
+        order,
+        radius,
+        parent_center,
+        parent_level,
+        child_center,
+        child_level,
+        parent_equivalent_density):
+    """
+    Translate a local expansion from a parent level box, to a child level box.
+
+    Parameters:
+    -----------
+
+    Returns:
+    --------
+    Potential
+    """
+
+    # 0. Compute surfaces
+    parent_equivalent_surface = surface(
+        order=order,
+        radius=radius,
+        level=parent_level,
+        center=parent_center,
+        alpha=4.95
+    )
+
+    child_equivalent_surface = surface(
+        order=order,
+        radius=radius,
+        level=child_level,
+        center=child_center,
+        alpha=1.95
+    )
+
+    child_check_surface = surface(
+        order=order,
+        radius=radius,
+        level=child_level,
+        center=child_center,
+        alpha=1.05
+    )
+
+    # 1. Calculate check potential from parent equivalent density
+    check_potential = np.zeros(shape=(len(child_check_surface)))
+
+    for i, target in enumerate(child_check_surface):
+        potential = 0
+        for j, source in enumerate(parent_equivalent_surface):
+            source_density = parent_equivalent_density[j]
+            potential += kernel_function(target, source)*source_density
+        check_potential[i] = potential
+
+    # 2. Calculate child downward equivalent density
+    kernel_matrix = gram_matrix(
+        kernel_function, parent_equivalent_surface, child_equivalent_surface)
+
+    # 2.2 Invert gram matrix with SVD
+    u, s, v_transpose = np.linalg.svd(kernel_matrix)
+
+    # 2.3 Invert S
+    tol = 1e-1
+    for i, val in enumerate(s):
+        if  abs(val) < tol:
+            s[i] = 0
+        else:
+            s[i] = 1/val
+
+    tmp = np.matmul(v_transpose.T, np.diag(s))
+    kernel_matrix_inv = np.matmul(tmp, u.T)
+
+    child_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+
+    return Potential(child_equivalent_surface, child_equivalent_density)
