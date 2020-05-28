@@ -1,36 +1,45 @@
 """
 Test the FMM
 """
+from functools import partial
+
 import numpy as np
 import pytest
 
-from fmm.fmm import Fmm, laplace, surface, p2p, p2m, m2m
+from fmm.fmm import Fmm, laplace, surface, p2p, p2m, m2m, m2l, l2l
 from fmm.octree import Octree
 import fmm.hilbert as hilbert
 
-
 @pytest.fixture
 def n_points():
-    return 500
+    return 100
 
-@pytest.fixture
-def max_level():
-    return 1
 
 @pytest.fixture
 def order():
-    return 5
+    return 2
+
 
 @pytest.fixture
-def octree(n_points, max_level):
-    """Fill up an octree."""
-
+def n_level_octree(n_points):
     rand = np.random.RandomState(0)
-
     sources = rand.rand(n_points, 3)
     targets = rand.rand(n_points, 3)
 
-    return Octree(sources, targets, max_level)
+    return partial(Octree, targets, sources)
+
+
+@pytest.mark.parametrize(
+    "x, y, expected",
+    [
+        # 1. Points closed together, potential set to large constant
+        (0, 0, 1e10),
+        # 2. Points well separated
+        (0, 1, 1/(4*np.pi))
+    ]
+)
+def test_laplace(x, y, expected):
+    assert laplace(x, y) == expected
 
 
 @pytest.mark.parametrize(
@@ -40,6 +49,10 @@ def octree(n_points, max_level):
     ]
 )
 def test_surface(order, radius, level, center, alpha, ncoeffs):
+    """
+    Strategy: test surface is centered at specified location, with specified
+    radius.
+    """
     ndim = 3
     surf = surface(order, radius, level, center, alpha)
 
@@ -48,7 +61,7 @@ def test_surface(order, radius, level, center, alpha, ncoeffs):
 
     # Test radius
     for i in range(ndim):
-        assert max(surf[:, i]) - min(surf[:, i]) == 2
+        assert max(surf[:, i]) - min(surf[:, i]) == 2*radius
 
     # Test center
     for i in range(ndim):
@@ -78,9 +91,10 @@ def test_p2p(targets, sources, source_densities, expected):
     assert result == expected
 
 
-def test_p2m(octree, order, max_level):
+def test_p2m(n_level_octree, order):
     """Test with single-layer Laplace kernel"""
 
+    octree = n_level_octree(maximum_level=1)
     sources = octree.sources
     source_densities = np.ones(shape=(len(sources)))
 
@@ -89,7 +103,7 @@ def test_p2m(octree, order, max_level):
         order=order,
         center=octree.center,
         radius=octree.radius,
-        maximum_level=max_level,
+        maximum_level=1,
         leaf_sources=octree.sources
         )
 
@@ -99,20 +113,22 @@ def test_p2m(octree, order, max_level):
     equivalent = p2p(laplace, distant_point, result.surface, result.density)
 
     for i in range(len(equivalent.density)):
-        a = equivalent.density[i][0]; b = direct.density[i][0]
+        a = equivalent.density[i]; b = direct.density[i]
         assert np.isclose(a, b, rtol=1e-1)
 
     # Test that the surfaces are not equal, as expected
     assert ~np.array_equal(equivalent.surface, direct.surface)
 
 
-def test_m2m(octree, order, n_points):
+def test_m2m(n_level_octree, order):
     """
     Test with single-layer Laplace kernel.
     Strategy: Test whether child equivalent density and parent equivalent
     density are approximately equivalent to each other in the far field.
     """
 
+    npoints = 6*(order-1)**2 + 2
+    octree = n_level_octree(maximum_level=1)
     parent_key = 0
     child_key = 1
 
@@ -123,7 +139,7 @@ def test_m2m(octree, order, n_points):
     parent_level = hilbert.get_level(parent_key)
     child_level = hilbert.get_level(child_key)
 
-    child_equivalent_density = np.ones(shape=(n_points))
+    child_equivalent_density = np.ones(shape=(npoints))
     child_equivalent_surface = surface(
         order=order,
         radius=r0,
@@ -155,6 +171,135 @@ def test_m2m(octree, order, n_points):
         laplace, distant_point, parent_equivalent_surface, parent_equivalent_density
     )
 
+    assert np.isclose(child_result.density[0], parent_result.density[0], rtol=1e-1)
+
+    # Test that the surfaces are not equal, as expected
+    assert ~np.array_equal(parent_result.surface, child_result.surface)
+
+
+def test_m2l(order):
+    """
+    Test with single-layer Laplace kernel
+    Strategy: Create two boxes in the far field of each other, translate the
+    multipole expansion from one box (the source) to the other (the target).
+    Measure for the equivalence of their potentials in the far field of both.
+    """
+
+    # Number of points discretising surface of box of a given order
+    npoints = 6*(order-1)**2 + 2
+
+    # Radius of root node
+    radius=1
+
+    # (Octree) Level of boxes
+    tgt_level = src_level = 5
+
+    # Ensure that the centre of both boxes are far enough from each other to be
+    # well separated at the specified level
+    src_center = np.array([0, 0, 0])
+    tgt_center = np.array([1, 1, 1])
+
+    # Set unit densities as multipole expansion terms for source box
+    src_equivalent_density = np.ones(shape=(npoints))
+
+    result = m2l(
+        kernel_function=laplace,
+        order=order,
+        radius=radius,
+        source_center=src_center,
+        source_level=src_level,
+        target_center=tgt_center,
+        target_level=tgt_level,
+        source_equivalent_density=src_equivalent_density
+    )
+
+    src_equivalent_surface = surface(
+        order=order,
+        radius=radius,
+        level=src_level,
+        center=src_center,
+        alpha=1.05
+    )
+
+    tgt_equivalent_surface, tgt_equivalent_density = result.surface, result.density
+
+    distant_point = np.array([[100, 0, 0]])
+
+    tgt_result = p2p(
+        kernel_function=laplace,
+        targets=distant_point,
+        sources=tgt_equivalent_surface,
+        source_densities=tgt_equivalent_density
+    )
+
+    src_result = p2p(
+        kernel_function=laplace,
+        targets=distant_point,
+        sources=src_equivalent_surface,
+        source_densities=src_equivalent_density
+    )
+
+    # Check equivalence of densities in far field
+    assert np.isclose(tgt_result.density, src_result.density, rtol=1e-1)
+
+    # Check that surfaces are not equivalent, as expected
+    assert ~np.array_equal(tgt_result.surface, src_result.surface)
+
+
+def test_l2l(n_level_octree, order):
+    """
+    Test with single-layer Laplace kernel
+    Strategy: Test whether child equivalent density is matched to it's parents
+    in the far field of both.
+    """
+
+    npoints = 6*(order-1)**2 + 2
+
+    octree = n_level_octree(maximum_level=1)
+    parent_key = 0
+    child_key = 1
+
+    x0 = octree.center; r0 = octree.radius
+
+    parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
+    child_center = hilbert.get_center_from_key(child_key, x0, r0)
+
+    parent_level = hilbert.get_level(parent_key)
+    child_level = hilbert.get_level(child_key)
+
+    parent_equivalent_density = np.ones(shape=(npoints))
+    parent_equivalent_surface = surface(
+        order=order,
+        radius=r0,
+        level=parent_level,
+        center=parent_center,
+        alpha=1.05
+    )
+
+    result = l2l(
+        kernel_function=laplace,
+        order=order,
+        radius=r0,
+        parent_center=parent_center,
+        parent_level=parent_level,
+        child_center=child_center,
+        child_level=child_level,
+        parent_equivalent_density=parent_equivalent_density
+    )
+
+    child_equivalent_surface, child_equivalent_density = result.surface, result.density
+
+    distant_point = np.array([[10, 0, 0]])
+
+    child_result = p2p(
+        laplace, distant_point, child_equivalent_surface, child_equivalent_density
+    )
+
+    parent_result = p2p(
+        laplace, distant_point, parent_equivalent_surface, parent_equivalent_density
+    )
+
+    # Check equivalence of densities in far field
     assert np.isclose(child_result.density[0], parent_result.density[0], rtol=1e-1)
 
     # Test that the surfaces are not equal, as expected

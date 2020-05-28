@@ -414,7 +414,7 @@ def _numba_sort_nodes_by_level(keys):
 
     sorted_keys = np.sort(keys)
 
-    next_level = 1 
+    next_level = 1
     next_offset = hilbert.level_offset(next_level)
     indexptr = [0]
     for index, key in enumerate(sorted_keys):
