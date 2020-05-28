@@ -14,9 +14,11 @@ import fmm.hilbert as hilbert
 def n_points():
     return 100
 
+
 @pytest.fixture
 def order():
     return 2
+
 
 @pytest.fixture
 def n_level_octree(n_points):
@@ -25,6 +27,19 @@ def n_level_octree(n_points):
     targets = rand.rand(n_points, 3)
 
     return partial(Octree, targets, sources)
+
+
+@pytest.mark.parametrize(
+    "x, y, expected",
+    [
+        # 1. Points closed together, potential set to large constant
+        (0, 0, 1e10),
+        # 2. Points well separated
+        (0, 1, 1/(4*np.pi))
+    ]
+)
+def test_laplace(x, y, expected):
+    assert laplace(x, y) == expected
 
 
 @pytest.mark.parametrize(
