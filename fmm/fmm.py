@@ -123,7 +123,7 @@ class Fmm:
                 :self.octree.source_index_ptr[leaf_node_index + 1]
                 ]
 
-        # 0.1 Find leaf sources
+        # Find leaf sources
         leaf_sources = self.octree.sources[source_indices]
 
         # Just adding index from argsort (sources by leafs)
@@ -131,15 +131,15 @@ class Fmm:
             self.octree.source_leaf_nodes[leaf_node_index]
             ].indices.update(source_indices)
 
-        # 0.2 Compute key corresponding to this leaf index, and its parent
+        # Compute key corresponding to this leaf index, and its parent
         child_key = self.octree.source_leaf_nodes[leaf_node_index]
         parent_key = hilbert.get_parent(child_key)
 
-        # 0.3 Compute center of parent box in cartesian coordinates
+        # Compute center of parent box in cartesian coordinates
         parent_center = hilbert.get_center_from_key(
             parent_key, self.octree.center, self.octree.radius)
 
-        # 1. Compute expansion, and add to source data
+        # Compute expansion, and add to source data
         result = p2m(
             kernel_function=self.kernel,
             leaf_sources=leaf_sources,
@@ -193,31 +193,6 @@ class Fmm:
     def multipole_to_local(self, source_key, target_key):
         """Compute multipole to local."""
 
-        # Compute centers, and levels
-        x0 = self.octree.center; r0 = self.octree.radius
-
-        source_center = hilbert.get_center_from_key(source_key, x0, r0)
-        source_level = hilbert.get_level(source_key)
-        target_center = hilbert.get_center_from_key(target_key, x0, r0)
-        target_level = hilbert.get_level(target_key)
-
-        # Get source equivalent density
-        source_equivalent_density = self._source_data[source_key].expansion
-
-        result = m2l(
-            kernel_function=self.kernel,
-            order=self.order,
-            radius=self.octree.radius,
-            source_center=source_center,
-            source_level=source_level,
-            target_center=target_center,
-            target_level=target_level,
-            source_equivalent_density=source_equivalent_density
-        )
-
-        # Add to target expansions
-        self._target_data[target_key].expansion += result.density
-
         self._target_data[target_key].indices.update(
                 self._source_data[source_key].indices
                 )
@@ -225,41 +200,12 @@ class Fmm:
     def local_to_local(self, key):
         """Compute local to local."""
 
-        # Compute center of parent boxes
-        parent_center = hilbert.get_center_from_key(
-            key, self.octree.center, self.octree.radius)
-        parent_level = hilbert.get_level(key)
-
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
 
-                # Updating indices
                 self._target_data[child].indices.update(
                         self._target_data[key].indices
                         )
-
-                # Compute center of child box in cartesian coordinates
-                child_center = hilbert.get_center_from_key(
-                    child, self.octree.center, self.octree.radius
-                    )
-                child_level = hilbert.get_level(child)
-
-                # Get parent equivalent density
-                parent_equivalent_density = self._target_data[key].expansion
-
-                # Compute expansion, and store
-                result = l2l(
-                    kernel_function=self.kernel,
-                    order=self.order,
-                    radius=self.octree.radius,
-                    parent_center=parent_center,
-                    parent_level=parent_level,
-                    child_center=child_center,
-                    child_level=child_level,
-                    parent_equivalent_density=parent_equivalent_density
-                )
-
-                self._target_data[key].expansion += result.density
 
     def local_to_particle(self, leaf_node_index):
         """Compute local to particle."""
