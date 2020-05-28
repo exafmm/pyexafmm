@@ -703,7 +703,7 @@ def l2l(kernel_function,
         radius=radius,
         level=parent_level,
         center=parent_center,
-        alpha=4.95
+        alpha=2.95
     )
 
     child_equivalent_surface = surface(
@@ -711,7 +711,7 @@ def l2l(kernel_function,
         radius=radius,
         level=child_level,
         center=child_center,
-        alpha=1.95
+        alpha=2.95
     )
 
     child_check_surface = surface(
