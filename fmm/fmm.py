@@ -414,6 +414,22 @@ def gram_matrix(kernel, sources, targets):
     return matrix
 
 
+def pseudo_inverse(matrix):
+
+    u, s, v_transpose = np.linalg.svd(matrix)
+
+    tol = 1e-1
+    for i, val in enumerate(s):
+        if  abs(val) < tol:
+            s[i] = 0
+        else:
+            s[i] = 1/val
+
+    tmp = np.matmul(v_transpose.T, np.diag(s))
+
+    return np.matmul(tmp, u.T)
+
+
 def p2p(kernel_function, targets, sources, source_densities):
     """
     Directly calculate potential at m targets from n sources.
@@ -508,19 +524,7 @@ def p2m(kernel_function,
             ).density
 
     # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
-    # 2.1 SVD decomposition of kernel matrix
-    u, s, v_transpose = np.linalg.svd(kernel_matrix)
-
-    # 2.2 Invert S
-    tol = 1e-1
-    for i, val in enumerate(s):
-        if  abs(val) < tol:
-            s[i] = 0
-        else:
-            s[i] = 1/val
-
-    tmp = np.matmul(v_transpose.T, np.diag(s))
-    kernel_matrix_inv = np.matmul(tmp, u.T)
+    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     # 3.0 Compute upward equivalent density
     upward_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
@@ -573,7 +577,7 @@ def m2m(kernel_function,
         radius=radius,
         level=parent_level,
         center=parent_center,
-        alpha=1.95
+        alpha=1.05
     )
 
     parent_check_surface = surface(
@@ -581,37 +585,25 @@ def m2m(kernel_function,
         radius=radius,
         level=parent_level,
         center=parent_center,
-        alpha=4.95
+        alpha=2.95
     )
 
     # 1. Calculate check potential from child equivelent density
     check_potential = np.zeros(shape=(len(parent_check_surface)))
 
-    for i, target in enumerate(parent_check_surface):
-        potential = 0
-        for j, source in enumerate(child_equivalent_surface):
-            source_density = child_equivalent_density[j]
-            potential += kernel_function(target, source)*source_density
-        check_potential[i] = potential
+    check_potential = p2p(
+        kernel_function=laplace,
+        targets=parent_check_surface,
+        sources=child_equivalent_surface,
+        source_densities=child_equivalent_density).density
 
     # 2. Calculate equivalent density on parent equivalent surface
     # 2.1 Form gram matrix between parent check surface and equivalent surface
     kernel_matrix = gram_matrix(
         kernel_function, parent_equivalent_surface, parent_check_surface)
 
-    # 2.2 Invert gram matrix, and find equivalent density
-    u, s, v_transpose = np.linalg.svd(kernel_matrix)
-
-    # 2.3 Invert S
-    tol = 1e-1
-    for i, val in enumerate(s):
-        if  abs(val) < tol:
-            s[i] = 0
-        else:
-            s[i] = 1/val
-
-    tmp = np.matmul(v_transpose.T, np.diag(s))
-    kernel_matrix_inv = np.matmul(tmp, u.T)
+    # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
+    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     parent_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
