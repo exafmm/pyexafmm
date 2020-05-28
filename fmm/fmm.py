@@ -723,32 +723,18 @@ def l2l(kernel_function,
     )
 
     # 1. Calculate check potential from parent equivalent density
-    check_potential = np.zeros(shape=(len(child_check_surface)))
-
-    for i, target in enumerate(child_check_surface):
-        potential = 0
-        for j, source in enumerate(parent_equivalent_surface):
-            source_density = parent_equivalent_density[j]
-            potential += kernel_function(target, source)*source_density
-        check_potential[i] = potential
+    check_potential = p2p(
+        kernel_function=kernel_function,
+        targets=child_check_surface,
+        sources=parent_equivalent_surface,
+        source_densities=parent_equivalent_density
+    ).density
 
     # 2. Calculate child downward equivalent density
     kernel_matrix = gram_matrix(
         kernel_function, parent_equivalent_surface, child_equivalent_surface)
 
-    # 2.2 Invert gram matrix with SVD
-    u, s, v_transpose = np.linalg.svd(kernel_matrix)
-
-    # 2.3 Invert S
-    tol = 1e-1
-    for i, val in enumerate(s):
-        if  abs(val) < tol:
-            s[i] = 0
-        else:
-            s[i] = 1/val
-
-    tmp = np.matmul(v_transpose.T, np.diag(s))
-    kernel_matrix_inv = np.matmul(tmp, u.T)
+    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     child_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
