@@ -49,6 +49,10 @@ def test_laplace(x, y, expected):
     ]
 )
 def test_surface(order, radius, level, center, alpha, ncoeffs):
+    """
+    Strategy: test surface is centered at specified location, with specified
+    radius.
+    """
     ndim = 3
     surf = surface(order, radius, level, center, alpha)
 
@@ -57,7 +61,7 @@ def test_surface(order, radius, level, center, alpha, ncoeffs):
 
     # Test radius
     for i in range(ndim):
-        assert max(surf[:, i]) - min(surf[:, i]) == 2
+        assert max(surf[:, i]) - min(surf[:, i]) == 2*radius
 
     # Test center
     for i in range(ndim):

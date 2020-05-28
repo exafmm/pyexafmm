@@ -417,7 +417,20 @@ def gram_matrix(kernel, sources, targets):
 
 
 def pseudo_inverse(matrix):
+    """
+    Compute a backward stable pseudo-inverse of a (n x m) matrix using an SVD
+        decomposition. For inverting the  singular diagonal S matrix, if a value
+        is less than a specified tolerance we set it to 0, otherwise we use the
+        value 1/e where e is a diagonal element of S.
 
+    Parameters:
+    -----------
+    matrix : np.array(shape=(n, m))
+
+    Returns:
+    --------
+    np.array(shape=(m, n))
+    """
     u, s, v_transpose = np.linalg.svd(matrix)
 
     tol = 1e-1
@@ -493,7 +506,7 @@ def p2m(kernel_function,
         surface.
     """
 
-    # 0.1 Compute relevant surfaces
+    # Compute relevant surfaces
     upward_check_surface = surface(
         order=order,
         radius=radius,
@@ -510,14 +523,14 @@ def p2m(kernel_function,
         alpha=1.05
     )
 
-    # 0.2 Compute Gram Matrix
+    # Compute Gram Matrix
     kernel_matrix = gram_matrix(
         kernel_function, upward_equivalent_surface, upward_check_surface)
 
-    # 0.3 Set unit densities at leaves for now
+    # Set unit densities at leaves for now
     leaf_source_densities = np.ones(shape=(len(leaf_sources)))
 
-    # 1.0 Compute check potential directly using leaves
+    # Compute check potential directly using leaves
     check_potential = p2p(
             kernel_function=kernel_function,
             targets=upward_check_surface,
@@ -525,10 +538,10 @@ def p2m(kernel_function,
             source_densities=leaf_source_densities
             ).density
 
-    # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
+    # Compute backward-stable pseudo-inverse of kernel matrix
     kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
-    # 3.0 Compute upward equivalent density
+    # Compute upward equivalent density
     upward_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
     return Potential(upward_equivalent_surface, upward_equivalent_density)
@@ -536,11 +549,11 @@ def p2m(kernel_function,
 
 def m2m(kernel_function,
         order,
+        radius,
         parent_center,
         child_center,
-        radius,
-        child_level,
         parent_level,
+        child_level,
         child_equivalent_density):
     """
     Translate a multipole expansion at parent level, from child level.
@@ -549,15 +562,15 @@ def m2m(kernel_function,
     -----------
     kernel_function : function
     order : int
-    parent_center : np.array(shape=(3))
-    child_center : np.array(shape=(3))
     radius : float
         Half-side length of root node.
-    child_level : int
+    parent_center : np.array(shape=(3))
+    child_center : np.array(shape=(3))
     parent_level : int
+    child_level : int
     child_equivalent_density : np.array(shape=(n))
-        The equivalent densities calculated in the previous step at the
-        `n` quadrature points at the child level.
+        The equivalent densities calculated in the previous step at the `n`
+        quadrature points at the child level.
 
     Returns:
     --------
@@ -565,7 +578,7 @@ def m2m(kernel_function,
         Potential densities calculated at the `m` quadrature points of the
         parent level.
     """
-    # 0. Calculate surfaces
+    # Calculate surfaces
     child_equivalent_surface = surface(
         order=order,
         radius=radius,
@@ -590,19 +603,19 @@ def m2m(kernel_function,
         alpha=2.95
     )
 
-    # 1. Calculate check potential from child equivelent density
+    # Calculate check potential from child equivelent density
     check_potential = p2p(
         kernel_function=kernel_function,
         targets=parent_check_surface,
         sources=child_equivalent_surface,
         source_densities=child_equivalent_density).density
 
-    # 2. Calculate equivalent density on parent equivalent surface
-    # 2.1 Form gram matrix between parent check surface and equivalent surface
+    # Calculate equivalent density on parent equivalent surface
+    # Form gram matrix between parent check surface and equivalent surface
     kernel_matrix = gram_matrix(
         kernel_function, parent_equivalent_surface, parent_check_surface)
 
-    # 2.0 Compute backward-stable pseudo-inverse of kernel matrix
+    # Compute backward-stable pseudo-inverse of kernel matrix
     kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     parent_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
@@ -620,17 +633,29 @@ def m2l(kernel_function,
         source_equivalent_density):
     """
     Translate a local expansion, from a multipole expansion in a box's
-        interaction list.
+        interaction list to a local expansion for the box.
 
     Parameters:
     -----------
+    kernel_function : function
+    order : int
+    radius : float
+        Half-side length of root node.
+    source_center : np.array(shape=(3))
+    source_level : int
+    target_center: np.array(shape=(3))
+    target_level : int
+    source_equivalent_density = np.array(shape=(n))
+        The equivalent densities calculated for the source box during the
+        upward pass.
 
     Returns:
     --------
     Potential
+        Potential densities for the local expansion around the target box.
     """
 
-    # 0. Compute surfaces
+    # Compute surfaces
     src_upward_equivalent_surface = surface(
         order=order,
         radius=radius,
@@ -655,7 +680,7 @@ def m2l(kernel_function,
         alpha=1.05
     )
 
-    # 1. Calculate check potential from source equivalent density
+    # Calculate check potential from source equivalent density
     check_potential = np.zeros(shape=(len(tgt_check_surface)))
 
     check_potential = p2p(
@@ -664,13 +689,13 @@ def m2l(kernel_function,
         sources=src_upward_equivalent_surface,
         source_densities=source_equivalent_density).density
 
-    # 2. Calculate downward equivalent density
-    # 2.1 Form gram-matrix between target and source box
+    # Calculate downward equivalent density
+    # Form gram-matrix between target and source box
     kernel_matrix = gram_matrix(kernel_function,
                                 src_upward_equivalent_surface,
                                 tgt_downward_equivalent_surface)
 
-    # 2.2 Invert gram matrix with SVD
+    # Invert gram matrix with SVD
     kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     tgt_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
@@ -682,22 +707,35 @@ def l2l(kernel_function,
         order,
         radius,
         parent_center,
-        parent_level,
         child_center,
+        parent_level,
         child_level,
         parent_equivalent_density):
     """
-    Translate a local expansion from a parent level box, to a child level box.
+    Translate a local expansion at parent level, to the child level.
 
     Parameters:
     -----------
+    kernel_function : function
+    order : int
+    radius : float
+        Half-side length of root node.
+    parent_center : np.array(shape=(3))
+    child_center : np.array(shape=(3))
+    child_level : int
+    parent_level : int
+    child_equivalent_density : np.array(shape=(n))
+        The equivalent densities calculated in the previous step at the `n`
+        quadrature points at the child level.
 
     Returns:
     --------
     Potential
+        Potential densities calculated at the `m` quadrature points of the
+        parent level.
     """
 
-    # 0. Compute surfaces
+    # Compute surfaces
     parent_equivalent_surface = surface(
         order=order,
         radius=radius,
@@ -722,7 +760,7 @@ def l2l(kernel_function,
         alpha=1.05
     )
 
-    # 1. Calculate check potential from parent equivalent density
+    # Calculate check potential from parent equivalent density
     check_potential = p2p(
         kernel_function=kernel_function,
         targets=child_check_surface,
@@ -730,7 +768,7 @@ def l2l(kernel_function,
         source_densities=parent_equivalent_density
     ).density
 
-    # 2. Calculate child downward equivalent density
+    # Calculate child downward equivalent density
     kernel_matrix = gram_matrix(
         kernel_function, parent_equivalent_surface, child_equivalent_surface)
 
