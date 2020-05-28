@@ -382,6 +382,8 @@ def laplace(x, y):
     """
     r = np.linalg.norm(x-y)
 
+    if np.isclose(r, 0, rtol=1e-1):
+        return 1e10
     return 1/(4*np.pi*r)
 
 
@@ -589,10 +591,8 @@ def m2m(kernel_function,
     )
 
     # 1. Calculate check potential from child equivelent density
-    check_potential = np.zeros(shape=(len(parent_check_surface)))
-
     check_potential = p2p(
-        kernel_function=laplace,
+        kernel_function=kernel_function,
         targets=parent_check_surface,
         sources=child_equivalent_surface,
         source_densities=child_equivalent_density).density
@@ -658,12 +658,11 @@ def m2l(kernel_function,
     # 1. Calculate check potential from source equivalent density
     check_potential = np.zeros(shape=(len(tgt_check_surface)))
 
-    for i, target in enumerate(tgt_check_surface):
-        potential = 0
-        for j, source in enumerate(src_upward_equivalent_surface):
-            source_density = source_equivalent_density[j]
-            potential += kernel_function(target, source)*source_density
-        check_potential[i] = potential
+    check_potential = p2p(
+        kernel_function=kernel_function,
+        targets=tgt_check_surface,
+        sources=src_upward_equivalent_surface,
+        source_densities=source_equivalent_density).density
 
     # 2. Calculate downward equivalent density
     # 2.1 Form gram-matrix between target and source box
@@ -672,18 +671,7 @@ def m2l(kernel_function,
                                 tgt_downward_equivalent_surface)
 
     # 2.2 Invert gram matrix with SVD
-    u, s, v_transpose = np.linalg.svd(kernel_matrix)
-
-    # 2.3 Invert S
-    tol = 1e-1
-    for i, val in enumerate(s):
-        if  abs(val) < tol:
-            s[i] = 0
-        else:
-            s[i] = 1/val
-
-    tmp = np.matmul(v_transpose.T, np.diag(s))
-    kernel_matrix_inv = np.matmul(tmp, u.T)
+    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     tgt_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
