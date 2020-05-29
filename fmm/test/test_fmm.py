@@ -12,7 +12,7 @@ import fmm.hilbert as hilbert
 
 @pytest.fixture
 def n_points():
-    return 100
+    return 10
 
 
 @pytest.fixture
@@ -304,3 +304,15 @@ def test_l2l(n_level_octree, order):
 
     # Test that the surfaces are not equal, as expected
     assert ~np.array_equal(parent_result.surface, child_result.surface)
+
+
+def test_upward_pass(n_level_octree):
+    octree = n_level_octree(3)
+
+    fmm = Fmm(octree, 2, laplace)
+
+    fmm.upward_pass()
+    fmm.downward_pass()
+
+    # print(fmm._target_data)
+    assert False

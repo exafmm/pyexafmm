@@ -81,6 +81,7 @@ class Fmm:
             self._source_data[key] = Node(
                     key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
                     )
+
         for key in self.octree.non_empty_target_nodes:
             self._target_data[key] = Node(
                     key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
@@ -208,15 +209,62 @@ class Fmm:
                 self._source_data[source_key].indices
                 )
 
-    def local_to_local(self, key):
+        x0 = self.octree.center; r0 = self.octree.radius
+
+        # Compute level and centers
+        target_center = hilbert.get_center_from_key(target_key, x0, r0)
+        target_level = hilbert.get_level(target_key)
+
+        source_center = hilbert.get_center_from_key(source_key, x0, r0)
+        source_level = hilbert.get_level(source_key)
+
+        # Get source equivalent_density
+        source_equivalent_density = self._source_data[source_key].expansion
+
+        result = m2l(
+            kernel_function=self.kernel,
+            order=self.order,
+            radius=self.octree.radius,
+            source_center=source_center,
+            source_level=source_level,
+            target_center=target_center,
+            target_level=target_level,
+            source_equivalent_density=source_equivalent_density
+        )
+
+        # Add to target expansion
+        self._target_data[target_key].expansion += result.density
+
+    def local_to_local(self, parent_key):
         """Compute local to local."""
 
-        for child in hilbert.get_children(key):
-            if self.octree.target_node_to_index[child] != -1:
+        x0 = self.octree.center; r0 = self.octree.radius
+        parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
+        parent_level = hilbert.get_level(parent_key)
 
-                self._target_data[child].indices.update(
-                        self._target_data[key].indices
+        parent_equivalent_density=self._target_data[parent_key].expansion
+
+        for child_key in hilbert.get_children(parent_key):
+            if self.octree.target_node_to_index[child_key] != -1:
+
+                self._target_data[child_key].indices.update(
+                        self._target_data[parent_key].indices
                         )
+
+                child_center = hilbert.get_center_from_key(child_key, x0, r0)
+                child_level = hilbert.get_level(child_key)
+
+                result = l2l(
+                    kernel_function=self.kernel,
+                    order=self.order,
+                    radius=self.octree.radius,
+                    parent_center=parent_center,
+                    child_center=child_center,
+                    parent_level=parent_level,
+                    child_level=child_level,
+                    parent_equivalent_density=parent_equivalent_density,
+                )
+                self._target_data[child_key].expansion += result.density
 
     def local_to_particle(self, leaf_node_index):
         """Compute local to particle."""
@@ -420,7 +468,7 @@ def p2p(kernel_function, targets, sources, source_densities):
     """
 
     # Potential at target locations
-    target_densities = np.zeros(shape=(len(targets), 1))
+    target_densities = np.zeros(shape=(len(targets)))
 
     for i, target in enumerate(targets):
         potential = 0
