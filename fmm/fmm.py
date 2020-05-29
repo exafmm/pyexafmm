@@ -47,6 +47,14 @@ class Node:
         return str((self.key, self.expansion, self.indices))
 
 
+class Result:
+    def __init__(self, expansion, indices):
+        self.expansion = expansion
+        self.indices = indices
+    def __repr__(self):
+        return str((self.expansion, self.indices))
+
+
 class Fmm:
     """Main Fmm class."""
 
@@ -64,7 +72,10 @@ class Fmm:
         self._source_data = {}
         self._target_data = {}
 
-        self._result_data = [set() for _ in range(octree.targets.shape[0])]
+        self._result_data = [
+            Result(np.zeros(self.ncoeffiecients, dtype='float64'), set())
+            for _ in range(octree.targets.shape[0])
+            ]
 
         for key in self.octree.non_empty_source_nodes:
             self._source_data[key] = Node(
@@ -215,7 +226,7 @@ class Fmm:
                 ]
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
         for target_index in target_indices:
-            self._result_data[target_index].update(
+            self._result_data[target_index].indices.update(
                     self._target_data[leaf_node_key].indices
                     )
 
@@ -231,12 +242,12 @@ class Fmm:
                 ]:
             if neighbor != -1:
                 for target_index in target_indices:
-                    self._result_data[target_index].update(
+                    self._result_data[target_index].indices.update(
                             self._source_data[neighbor].indices
                             )
         if self.octree.source_node_to_index[leaf_node_key] != -1:
             for target_index in target_indices:
-                self._result_data[target_index].update(
+                self._result_data[target_index].indices.update(
                     self._source_data[leaf_node_key].indices)
 
 
