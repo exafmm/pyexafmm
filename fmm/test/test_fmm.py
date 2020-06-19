@@ -197,7 +197,7 @@ def test_m2l(order):
     # Ensure that the centre of both boxes are far enough from each other to be
     # well separated at the specified level
     src_center = np.array([0, 0, 0])
-    tgt_center = np.array([1, 1, 1])
+    tgt_center = np.array([1, 0, 0])
 
     # Set unit densities as multipole expansion terms for source box
     src_equivalent_density = np.ones(shape=(npoints))
@@ -223,18 +223,18 @@ def test_m2l(order):
 
     tgt_equivalent_surface, tgt_equivalent_density = result.surface, result.density
 
-    distant_point = np.array([[100, 0, 0]])
+    local_point = np.array([[1, 0, 0]])
 
     tgt_result = p2p(
         kernel_function=laplace,
-        targets=distant_point,
+        targets=local_point,
         sources=tgt_equivalent_surface,
         source_densities=tgt_equivalent_density
     )
 
     src_result = p2p(
         kernel_function=laplace,
-        targets=distant_point,
+        targets=local_point,
         sources=src_equivalent_surface,
         source_densities=src_equivalent_density
     )
@@ -252,7 +252,7 @@ def test_l2l(n_level_octree, order):
     Strategy: Test whether child equivalent density is matched to it's parents
     in the far field of both.
     """
-
+    order=2
     npoints = 6*(order-1)**2 + 2
 
     octree = n_level_octree(maximum_level=1)
@@ -273,7 +273,7 @@ def test_l2l(n_level_octree, order):
         radius=r0,
         level=parent_level,
         center=parent_center,
-        alpha=1.05
+        alpha=2.95
     )
 
     result = l2l(
@@ -289,14 +289,14 @@ def test_l2l(n_level_octree, order):
 
     child_equivalent_surface, child_equivalent_density = result.surface, result.density
 
-    distant_point = np.array([[10, 0, 0]])
+    local_point = np.array([list(child_center)])
 
     child_result = p2p(
-        laplace, distant_point, child_equivalent_surface, child_equivalent_density
+        laplace, local_point, child_equivalent_surface, child_equivalent_density
     )
 
     parent_result = p2p(
-        laplace, distant_point, parent_equivalent_surface, parent_equivalent_density
+        laplace, local_point, parent_equivalent_surface, parent_equivalent_density
     )
 
     # Check equivalence of densities in far field

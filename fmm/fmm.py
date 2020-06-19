@@ -4,7 +4,7 @@ import scipy.sparse.linalg
 
 import fmm.hilbert as hilbert
 
-class Potential:
+class Charge:
     """
     Return object for computed potential, bundle equivalent density and its
         corresponding equivalent surface.
@@ -16,7 +16,7 @@ class Potential:
         surface : np.array(shape=(n, 3))
             `n` quadrature points discretising equivalent surface.
         density : np.array(shape=(n))
-            `n` potential densities, corresponding to each quadrature point.
+            `n` charge densities, corresponding to each quadrature point.
         """
         self.surface = surface
         self.density = density
@@ -379,7 +379,7 @@ def pseudo_inverse(matrix):
     """
     u, s, v_transpose = np.linalg.svd(matrix)
 
-    tol = 1e-1
+    tol = 1e-10
     for i, val in enumerate(s):
         if  abs(val) < tol:
             s[i] = 0
@@ -418,7 +418,7 @@ def p2p(kernel_function, targets, sources, source_densities):
             potential += kernel_function(target, source)*source_density
         target_densities[i] = potential
 
-    return Potential(targets, target_densities)
+    return Charge(targets, target_densities)
 
 
 def p2m(kernel_function,
@@ -447,8 +447,8 @@ def p2m(kernel_function,
 
     Returns:
     --------
-    Potential
-        Potential densities calculated at the discrete points on the equivalent
+    Charge
+        Charge densities calculated at the discrete points on the equivalent
         surface.
     """
 
@@ -490,7 +490,7 @@ def p2m(kernel_function,
     # Compute upward equivalent density
     upward_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
-    return Potential(upward_equivalent_surface, upward_equivalent_density)
+    return Charge(upward_equivalent_surface, upward_equivalent_density)
 
 
 def m2m(kernel_function,
@@ -520,8 +520,8 @@ def m2m(kernel_function,
 
     Returns:
     --------
-    Potential
-        Potential densities calculated at the `m` quadrature points of the
+    Charge
+        Charge densities calculated at the `m` quadrature points of the
         parent level.
     """
     # Calculate surfaces
@@ -550,23 +550,23 @@ def m2m(kernel_function,
     )
 
     # Calculate check potential from child equivelent density
-    check_potential = p2p(
-        kernel_function=kernel_function,
-        targets=parent_check_surface,
-        sources=child_equivalent_surface,
-        source_densities=child_equivalent_density).density
 
     # Calculate equivalent density on parent equivalent surface
     # Form gram matrix between parent check surface and equivalent surface
-    kernel_matrix = gram_matrix(
+    kernel_pe2pc = gram_matrix(
         kernel_function, parent_equivalent_surface, parent_check_surface)
 
+    kernel_ce2pc = gram_matrix(
+        kernel_function, child_equivalent_surface, parent_check_surface
+    )
+
     # Compute backward-stable pseudo-inverse of kernel matrix
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+    kernel_pe2pc_inv = pseudo_inverse(kernel_pe2pc)
 
-    parent_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+    m2m_matrix = np.matmul(kernel_pe2pc_inv, kernel_ce2pc)
+    parent_equivalent_density = np.matmul(m2m_matrix, child_equivalent_density)
 
-    return Potential(parent_equivalent_surface, parent_equivalent_density)
+    return Charge(parent_equivalent_surface, parent_equivalent_density)
 
 
 def m2l(kernel_function,
@@ -626,27 +626,21 @@ def m2l(kernel_function,
         alpha=1.05
     )
 
-    # Calculate check potential from source equivalent density
-    check_potential = np.zeros(shape=(len(tgt_check_surface)))
-
-    check_potential = p2p(
-        kernel_function=kernel_function,
-        targets=tgt_check_surface,
-        sources=src_upward_equivalent_surface,
-        source_densities=source_equivalent_density).density
-
-    # Calculate downward equivalent density
-    # Form gram-matrix between target and source box
-    kernel_matrix = gram_matrix(kernel_function,
-                                src_upward_equivalent_surface,
+    kernel_tc2te = gram_matrix(kernel_function,
+                                tgt_check_surface,
                                 tgt_downward_equivalent_surface)
 
+    kernel_se2tc = gram_matrix(
+        kernel_function, src_upward_equivalent_surface, tgt_check_surface)
+
     # Invert gram matrix with SVD
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+    kernel_se2te_inv = pseudo_inverse(kernel_tc2te)
 
-    tgt_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+    m2l_matrix = np.matmul(kernel_se2te_inv, kernel_se2tc)
 
-    return Potential(tgt_downward_equivalent_surface, tgt_equivalent_density)
+    tgt_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+
+    return Charge(tgt_downward_equivalent_surface, tgt_equivalent_density)
 
 
 def l2l(kernel_function,
@@ -706,20 +700,18 @@ def l2l(kernel_function,
         alpha=1.05
     )
 
-    # Calculate check potential from parent equivalent density
-    check_potential = p2p(
-        kernel_function=kernel_function,
-        targets=child_check_surface,
-        sources=parent_equivalent_surface,
-        source_densities=parent_equivalent_density
-    ).density
-
     # Calculate child downward equivalent density
-    kernel_matrix = gram_matrix(
-        kernel_function, parent_equivalent_surface, child_equivalent_surface)
+    kernel_se2tc = gram_matrix(
+        kernel_function, parent_equivalent_surface, child_check_surface)
 
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+    kernel_te2tc = gram_matrix(
+        kernel_function, child_equivalent_surface, child_check_surface
+    )
 
-    child_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+    kernel_te2tc_inv = pseudo_inverse(kernel_te2tc)
 
-    return Potential(child_equivalent_surface, child_equivalent_density)
+    l2l_matrix = np.matmul(kernel_te2tc_inv, kernel_se2tc)
+
+    child_equivalent_density = np.matmul(l2l_matrix, parent_equivalent_density)
+
+    return Charge(child_equivalent_surface, child_equivalent_density)
