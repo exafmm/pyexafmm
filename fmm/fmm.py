@@ -6,8 +6,8 @@ import fmm.hilbert as hilbert
 
 class Charge:
     """
-    Return object for computed potential, bundle equivalent density and its
-        corresponding equivalent surface.
+    Return object bundling equivalent density and its corresponding equivalent
+        surface.
     """
     def __init__(self, surface, density):
         """
@@ -17,6 +17,25 @@ class Charge:
             `n` quadrature points discretising equivalent surface.
         density : np.array(shape=(n))
             `n` charge densities, corresponding to each quadrature point.
+        """
+        self.surface = surface
+        self.density = density
+
+    def __repr__(self):
+        return str((self.surface, self.density))
+
+class Potential:
+    """
+    Return object bundling computed potential, at corresponding points.
+    """
+    def __init__(self, surface, density):
+        """
+        Parameters:
+        -----------
+        surface : np.array(shape=(n, 3))
+            `n` points discretising at which potential is being returned at.
+        density : np.array(shape=(n))
+            `n` potentials, corresponding to each point.
         """
         self.surface = surface
         self.density = density
@@ -89,6 +108,7 @@ class Fmm:
         for level in range(self.octree.maximum_level - 1, -1, -1):
             for key in self.octree.non_empty_source_nodes_by_level[level]:
                 self.multipole_to_multipole(key)
+                print(f"Algorithm here! key {key}")
 
     def downward_pass(self):
         """Downward pass."""
@@ -137,7 +157,8 @@ class Fmm:
 
         # Compute center of parent box in cartesian coordinates
         parent_center = hilbert.get_center_from_key(
-            parent_key, self.octree.center, self.octree.radius)
+            parent_key, self.octree.center, self.octree.radius
+        )
 
         # Compute expansion, and add to source data
         result = p2m(
@@ -379,7 +400,7 @@ def pseudo_inverse(matrix):
     """
     u, s, v_transpose = np.linalg.svd(matrix)
 
-    tol = 1e-10
+    tol = 1e-1 # m2m sensitive to this being too low ...
     for i, val in enumerate(s):
         if  abs(val) < tol:
             s[i] = 0
@@ -409,7 +430,7 @@ def p2p(kernel_function, targets, sources, source_densities):
     """
 
     # Potential at target locations
-    target_densities = np.zeros(shape=(len(targets), 1))
+    target_densities = np.zeros(shape=(len(targets)))
 
     for i, target in enumerate(targets):
         potential = 0
@@ -418,7 +439,7 @@ def p2p(kernel_function, targets, sources, source_densities):
             potential += kernel_function(target, source)*source_density
         target_densities[i] = potential
 
-    return Charge(targets, target_densities)
+    return Potential(targets, target_densities)
 
 
 def p2m(kernel_function,
@@ -549,10 +570,6 @@ def m2m(kernel_function,
         alpha=2.95
     )
 
-    # Calculate check potential from child equivelent density
-
-    # Calculate equivalent density on parent equivalent surface
-    # Form gram matrix between parent check surface and equivalent surface
     kernel_pe2pc = gram_matrix(
         kernel_function, parent_equivalent_surface, parent_check_surface)
 
@@ -560,7 +577,6 @@ def m2m(kernel_function,
         kernel_function, child_equivalent_surface, parent_check_surface
     )
 
-    # Compute backward-stable pseudo-inverse of kernel matrix
     kernel_pe2pc_inv = pseudo_inverse(kernel_pe2pc)
 
     m2m_matrix = np.matmul(kernel_pe2pc_inv, kernel_ce2pc)
@@ -597,7 +613,7 @@ def m2l(kernel_function,
 
     Returns:
     --------
-    Potential
+    Charge
         Potential densities for the local expansion around the target box.
     """
 
