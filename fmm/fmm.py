@@ -1,133 +1,175 @@
 """Implementation of the main FMM loop."""
+import abc
+
 import numpy as np
-import scipy.sparse.linalg
 
 import fmm.hilbert as hilbert
 
-class Potential:
-    """
-    Return object for computed potential, bundle equivalent density and its
-        corresponding equivalent surface.
-    """
+class AbstractDensity(abc.ABC):
+    """Base Return Object for calculations"""
     def __init__(self, surface, density):
         """
         Parameters:
         -----------
         surface : np.array(shape=(n, 3))
-            `n` quadrature points discretising equivalent surface.
+            `n` quadrature points discretising surface.
         density : np.array(shape=(n))
-            `n` potential densities, corresponding to each quadrature point.
+            `n` densities, corresponding to each quadrature point.
         """
-        self.surface = surface
-        self.density = density
+        if isinstance(surface, np.ndarray) and isinstance(density, np.ndarray):
+            self.surface = surface
+            self.density = density
+        else:
+            raise TypeError("`surface` and `density` must be numpy arrays")
+
+    @abc.abstractmethod
+    def __repr__(self):
+        raise NotImplementedError
+
+class Charge(AbstractDensity):
+    """
+    Return object bundling computed charge, at corresponding points.
+    """
+    def __repr__(self):
+        return str((self.surface, self.density))
+
+class Potential(AbstractDensity):
+    """
+    Return object bundling computed potential, at corresponding points.
+    """
+    def __init__(self, surface, density, indices=None):
+        super().__init__(surface, density)
+
+        if indices is None:
+            self.indices = set()
+        else:
+            self.indices = indices
 
     def __repr__(self):
         return str((self.surface, self.density))
 
-
 class Node:
     """Holds expansion and source/target indices for each tree node"""
-    def __init__(self, key, expansion, indices):
+    def __init__(self, key, ncoefficients, indices=None):
         """
         Parameters:
         ----------
         key : int
             Hilbert key for a node.
-        expansion : np.array(shape=(ncoefficients))
-            The expansion coefficients for this node's equivalent density.
+        ncoefficients: int
+            Number of expansion coefficients, corresponds to discrete points on
+            surface of box for this node.
         indices : set
             Set of indices.
         """
         self.key = key
-        self.expansion = expansion
-        self.indices = indices
+        self.expansion = np.zeros(ncoefficients, dtype='float64')
+
+        if indices is None:
+            self.indices = set()
+        else:
+            self.indices = indices
 
     def __repr__(self):
-        """Stringified repr of a node"""
         return str((self.key, self.expansion, self.indices))
 
 
 class Fmm:
-    """Main Fmm class."""
+    """
+    Main FMM loop.
+    Initialising with an Octree, run the FMM loop with a specified kernel
+    function, computing the expansion at a given precision specified by an
+    expansion order.
+    """
 
-    def __init__(self, octree, order, kernel):
-        """Initialize the Fmm."""
+    def __init__(self, octree, order, kernel_function):
+        """
+        Parameters:
+        -----------
+        octree : fmm.octree.Octree
+            Initialise a created Octree object.
+        order : int
+            Order of expansion, often referred to as 'p' in literature.
+        kernel_function : function
+            Kernel function.
+        """
 
-        self.kernel = kernel
+        # Kernel function
+        self.kernel_function = kernel_function
         self.order = order
-        self._octree = octree
+        self.octree = octree
 
-        # One for each point on surface of a cube based discretisation
-        self.ncoeffiecients = 6*(order-1)**2 + 2
+        # Coefficients discretising surface of a node
+        self.ncoefficients = 6*(self.order-1)**2 + 2
 
-        # Source and Target data indexed by Hilbert key
-        self._source_data = {}
-        self._target_data = {}
+        self.result_data = [
+            Potential(target, np.zeros(1, dtype='float64'))
+            for target in octree.targets
+            ]
 
-        self._result_data = [set() for _ in range(octree.targets.shape[0])]
+        self.source_data = {
+            key: Node(key, self.ncoefficients)
+            for key in octree.non_empty_source_nodes
+        }
 
-        for key in self.octree.non_empty_source_nodes:
-            self._source_data[key] = Node(
-                    key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
-                    )
-        for key in self.octree.non_empty_target_nodes:
-            self._target_data[key] = Node(
-                    key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
-                    )
-
-    @property
-    def octree(self):
-        """Return octree."""
-        return self._octree
+        self.target_data = {
+            key: Node(key, self.ncoefficients)
+            for key in octree.non_empty_target_nodes
+        }
 
     def upward_pass(self):
-        """Upward pass."""
-        number_of_leafs = len(self.octree.source_index_ptr) - 1
-        for index in range(number_of_leafs):
+        """Upward pass loop."""
+        nleaves = len(self.octree.source_index_ptr) - 1
+
+        # Form multipole expansions for all leaf nodes
+        for index in range(nleaves):
             self.particle_to_multipole(index)
 
+        # Post-order traversal of octree, translating multipole expansions from
+        # leaf nodes to root
         for level in range(self.octree.maximum_level - 1, -1, -1):
             for key in self.octree.non_empty_source_nodes_by_level[level]:
                 self.multipole_to_multipole(key)
 
     def downward_pass(self):
-        """Downward pass."""
+        """Downward pass loop."""
+
+        # Pre-order traversal of octree
         for level in range(2, 1 + self.octree.maximum_level):
             for key in self.octree.non_empty_target_nodes_by_level[level]:
                 index = self.octree.target_node_to_index[key]
+
+                # Translating mutlipole expansion in far field to a local
+                # expansion at currently examined node.
                 for neighbor_list in self.octree.interaction_list[index]:
                     for child in neighbor_list:
                         if child != -1:
                             self.multipole_to_local(child, key)
-                if level < self.octree.maximum_level:
-                        self.local_to_local(key)
 
+                # Translate local expansion to the node's children
+                if level < self.octree.maximum_level:
+                    self.local_to_local(key)
+
+        # Treat local expansion as charge density, and evaluate at each particle
+        # at leaf node, compute near field.
         for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
-
-    def set_source_values(self, values):
-        """Set source values."""
-        pass
-
-    def get_target_values(self):
-        """Get target values."""
-        pass
 
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
 
         # Source indices in a given leaf
         source_indices = self.octree.sources_by_leafs[
-                self.octree.source_index_ptr[leaf_node_index]
-                :self.octree.source_index_ptr[leaf_node_index + 1]
-                ]
+            self.octree.source_index_ptr[leaf_node_index]
+            : self.octree.source_index_ptr[leaf_node_index + 1]
+        ]
 
         # Find leaf sources
         leaf_sources = self.octree.sources[source_indices]
 
         # Just adding index from argsort (sources by leafs)
-        self._source_data[
+        self.source_data[
             self.octree.source_leaf_nodes[leaf_node_index]
             ].indices.update(source_indices)
 
@@ -137,11 +179,12 @@ class Fmm:
 
         # Compute center of parent box in cartesian coordinates
         parent_center = hilbert.get_center_from_key(
-            parent_key, self.octree.center, self.octree.radius)
+            parent_key, self.octree.center, self.octree.radius
+        )
 
         # Compute expansion, and add to source data
         result = p2m(
-            kernel_function=self.kernel,
+            kernel_function=self.kernel_function,
             leaf_sources=leaf_sources,
             order=self.order,
             center=parent_center,
@@ -149,7 +192,7 @@ class Fmm:
             maximum_level=self.octree.maximum_level
         )
 
-        self._source_data[child_key].expansion = result.density
+        self.source_data[child_key].expansion = result.density
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
@@ -169,16 +212,16 @@ class Fmm:
                 child_level = hilbert.get_level(child)
 
                 # Updating indices
-                self._source_data[key].indices.update(
-                    self._source_data[child].indices
+                self.source_data[key].indices.update(
+                    self.source_data[child].indices
                     )
 
                 # Get child equivalent density
-                child_equivalent_density = self._source_data[child].expansion
+                child_equivalent_density = self.source_data[child].expansion
 
                 # Compute expansion, and store
                 result = m2m(
-                    kernel_function=self.kernel,
+                    kernel_function=self.kernel_function,
                     parent_center=parent_center,
                     child_center=child_center,
                     child_level=child_level,
@@ -188,56 +231,245 @@ class Fmm:
                     child_equivalent_density=child_equivalent_density
                     )
 
-                self._source_data[key].expansion += result.density
+                self.source_data[key].expansion += result.density
 
     def multipole_to_local(self, source_key, target_key):
-        """Compute multipole to local."""
+        """
+        Translate multipole expansions in target's interaction list to local
+        expansions about the target.
+        """
 
-        self._target_data[target_key].indices.update(
-                self._source_data[source_key].indices
-                )
+        x0 = self.octree.center
+        r0 = self.octree.radius
+
+        # Updating indices
+        self.target_data[target_key].indices.update(
+            self.source_data[source_key].indices
+        )
+
+        source_level = hilbert.get_level(source_key)
+        source_center = hilbert.get_center_from_key(source_key, x0, r0)
+
+        target_level = hilbert.get_level(target_key)
+        target_center = hilbert.get_center_from_key(target_key, x0, r0)
+
+        source_equivalent_density = self.source_data[source_key].expansion
+
+        result = m2l(
+            kernel_function=self.kernel_function,
+            order=self.order,
+            radius=self.octree.radius,
+            source_center=source_center,
+            source_level=source_level,
+            target_center=target_center,
+            target_level=target_level,
+            source_equivalent_density=source_equivalent_density
+        )
+
+        self.target_data[target_key].expansion = result.density
 
     def local_to_local(self, key):
-        """Compute local to local."""
+        """Translate local expansion of a node to it's children."""
+
+        x0 = self.octree.center
+        r0 = self.octree.radius
+
+        parent_center = hilbert.get_center_from_key(key, x0, r0)
+        parent_level = hilbert.get_level(key)
+        parent_equivalent_density = self.target_data[key].expansion
 
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
 
-                self._target_data[child].indices.update(
-                        self._target_data[key].indices
-                        )
+                child_center = hilbert.get_center_from_key(child, x0, r0)
+                child_level = hilbert.get_level(child)
+
+                # Updating indices
+                self.target_data[child].indices.update(
+                    self.target_data[key].indices
+                )
+
+                result = l2l(
+                    kernel_function=self.kernel_function,
+                    order=self.order,
+                    radius=r0,
+                    parent_center=parent_center,
+                    parent_level=parent_level,
+                    child_center=child_center,
+                    child_level=child_level,
+                    parent_equivalent_density=parent_equivalent_density
+                )
+
+                self.target_data[child].expansion = result.density
 
     def local_to_particle(self, leaf_node_index):
-        """Compute local to particle."""
+        """
+        Directly evaluate potential at particles in a leaf node, treating the
+        local expansion points as sources.
+        """
+        x0 = self.octree.center
+        r0 = self.octree.radius
+
         target_indices = self.octree.targets_by_leafs[
-                self.octree.target_index_ptr[leaf_node_index]
-                    :self.octree.target_index_ptr[leaf_node_index + 1]
-                ]
+            self.octree.target_index_ptr[leaf_node_index]
+            : self.octree.target_index_ptr[leaf_node_index + 1]
+        ]
+
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
+        leaf_node_level = hilbert.get_level(leaf_node_key)
+        leaf_node_center = hilbert.get_center_from_key(leaf_node_key, x0, r0)
+
+        leaf_node_density = self.target_data[leaf_node_key].expansion
+
+        leaf_node_surface = surface(
+            order=self.order,
+            radius=self.octree.radius,
+            level=leaf_node_level,
+            center=leaf_node_center,
+            alpha=2.95
+        )
+
         for target_index in target_indices:
-            self._result_data[target_index].update(
-                    self._target_data[leaf_node_key].indices
-                    )
+
+            # Updating indices
+            self.result_data[target_index].indices.update(
+                self.target_data[leaf_node_key].indices
+            )
+
+            target = self.octree.targets[target_index].reshape(1, 3)
+
+            result = p2p(
+                kernel_function=self.kernel_function,
+                targets=target,
+                sources=leaf_node_surface,
+                source_densities=leaf_node_density
+            )
+
+            self.result_data[target_index].density = result.density
 
     def compute_near_field(self, leaf_node_index):
-        """Compute near field."""
+        """
+        Compute near field influence from neighbouring box's local expansions.
+        """
         target_indices = self.octree.targets_by_leafs[
-                self.octree.target_index_ptr[leaf_node_index]
-                    :self.octree.target_index_ptr[leaf_node_index + 1]
-                ]
+            self.octree.target_index_ptr[leaf_node_index]
+            : self.octree.target_index_ptr[leaf_node_index + 1]
+        ]
+
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
-        for neighbor in self.octree.target_neighbors[
+
+        x0 = self.octree.center
+        r0 = self.octree.radius
+
+        for neighbor_key in self.octree.target_neighbors[
                 self.octree.target_node_to_index[leaf_node_key]
                 ]:
-            if neighbor != -1:
+            if neighbor_key != -1:
+                neighbor_level = hilbert.get_level(neighbor_key)
+                neighbor_center = hilbert.get_center_from_key(neighbor_key, x0, r0)
+
+                neighbor_surface = surface(
+                    order=self.order,
+                    radius=r0,
+                    level=neighbor_level,
+                    center=neighbor_center,
+                    alpha=1.05
+                )
+
+                neighbor = self.source_data[neighbor_key]
+
                 for target_index in target_indices:
-                    self._result_data[target_index].update(
-                            self._source_data[neighbor].indices
-                            )
+
+                    # Updating indices
+                    self.result_data[target_index].indices.update(
+                        self.source_data[neighbor_key].indices
+                    )
+
+                    target = self.octree.targets[target_index].reshape(1, 3)
+
+                    result = p2p(
+                        kernel_function=self.kernel_function,
+                        targets=target,
+                        sources=neighbor_surface,
+                        source_densities=neighbor.expansion
+                    )
+
+                    self.result_data[target_index].density += result.density
+
         if self.octree.source_node_to_index[leaf_node_key] != -1:
+
+            leaf_level = hilbert.get_level(leaf_node_key)
+            leaf_center = hilbert.get_center_from_key(leaf_node_key, x0, r0)
+
+            leaf_surface = surface(
+                order=self.order,
+                radius=r0,
+                level=leaf_level,
+                center=leaf_center,
+                alpha=1.05
+            )
+
+            leaf = self.source_data[leaf_node_key]
+
             for target_index in target_indices:
-                self._result_data[target_index].update(
-                    self._source_data[leaf_node_key].indices)
+                target = self.octree.targets[target_index].reshape(1, 3)
+
+                result = p2p(
+                    kernel_function=self.kernel_function,
+                    targets=target,
+                    sources=leaf_surface,
+                    source_densities=leaf.expansion
+                )
+
+                self.result_data[target_index].density += result.density
+
+                # Updating indices
+                self.result_data[target_index].indices.update(
+                    self.source_data[leaf_node_key].indices)
+
+
+class Kernel(abc.ABC):
+    """
+    Abstract callable Kernel Class
+
+    Parameters:
+    -----------
+    x : np.array(shape=(n))
+        An n-dimensional vector corresponding to a point in n-dimensional space.
+    y : np.array(shape=(n))
+        Different n-dimensional vector corresponding to a point in n-dimensional
+        space.
+
+    Returns:
+    --------
+    float
+        Operator value (scaled by 4pi) between points x and y.
+    """
+
+    @abc.abstractstaticmethod
+    def kernel_function(x, y):
+        """ Implement static kernel function.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def __call__(self, x, y):
+        raise NotImplementedError
+
+
+class Laplace(Kernel):
+    """Single layer Laplace kernel
+    """
+    @staticmethod
+    def kernel_function(x, y):
+        r = np.linalg.norm(x-y)
+
+        if np.isclose(r, 0, rtol=1e-12):
+            return 1e10
+        return 1/(4*np.pi*r)
+
+    def __call__(self, x, y):
+        return self.kernel_function(x, y)
 
 
 def surface(order, radius, level, center, alpha):
@@ -308,31 +540,6 @@ def surface(order, radius, level, center, alpha):
     return surf
 
 
-def laplace(x, y):
-    """
-    3D single-layer Laplace kernel between two points. Alternatively called
-        particle to particle (P2P) operator.
-
-    Parameters:
-    -----------
-    x : np.array(shape=(n))
-        An n-dimensional vector corresponding to a point in n-dimensional space.
-    y : np.array(shape=(n))
-        Different n-dimensional vector corresponding to a point in n-dimensional
-        space.
-
-    Returns:
-    --------
-    float
-        Operator value (scaled by 4pi) between points x and y.
-    """
-    r = np.linalg.norm(x-y)
-
-    if np.isclose(r, 0, rtol=1e-1):
-        return 1e10
-    return 1/(4*np.pi*r)
-
-
 def gram_matrix(kernel, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
@@ -362,7 +569,7 @@ def gram_matrix(kernel, sources, targets):
     return matrix
 
 
-def pseudo_inverse(matrix):
+def pseudo_inverse(matrix, tol=1e-1):
     """
     Compute a backward stable pseudo-inverse of a (n x m) matrix using an SVD
         decomposition. For inverting the  singular diagonal S matrix, if a value
@@ -379,7 +586,6 @@ def pseudo_inverse(matrix):
     """
     u, s, v_transpose = np.linalg.svd(matrix)
 
-    tol = 1e-1
     for i, val in enumerate(s):
         if  abs(val) < tol:
             s[i] = 0
@@ -409,7 +615,7 @@ def p2p(kernel_function, targets, sources, source_densities):
     """
 
     # Potential at target locations
-    target_densities = np.zeros(shape=(len(targets), 1))
+    target_densities = np.zeros(shape=(len(targets)))
 
     for i, target in enumerate(targets):
         potential = 0
@@ -447,8 +653,8 @@ def p2m(kernel_function,
 
     Returns:
     --------
-    Potential
-        Potential densities calculated at the discrete points on the equivalent
+    Charge
+        Charge densities calculated at the discrete points on the equivalent
         surface.
     """
 
@@ -478,11 +684,11 @@ def p2m(kernel_function,
 
     # Compute check potential directly using leaves
     check_potential = p2p(
-            kernel_function=kernel_function,
-            targets=upward_check_surface,
-            sources=leaf_sources,
-            source_densities=leaf_source_densities
-            ).density
+        kernel_function=kernel_function,
+        targets=upward_check_surface,
+        sources=leaf_sources,
+        source_densities=leaf_source_densities
+        ).density
 
     # Compute backward-stable pseudo-inverse of kernel matrix
     kernel_matrix_inv = pseudo_inverse(kernel_matrix)
@@ -490,7 +696,7 @@ def p2m(kernel_function,
     # Compute upward equivalent density
     upward_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
 
-    return Potential(upward_equivalent_surface, upward_equivalent_density)
+    return Charge(upward_equivalent_surface, upward_equivalent_density)
 
 
 def m2m(kernel_function,
@@ -520,8 +726,8 @@ def m2m(kernel_function,
 
     Returns:
     --------
-    Potential
-        Potential densities calculated at the `m` quadrature points of the
+    Charge
+        Charge densities calculated at the `m` quadrature points of the
         parent level.
     """
     # Calculate surfaces
@@ -549,24 +755,19 @@ def m2m(kernel_function,
         alpha=2.95
     )
 
-    # Calculate check potential from child equivelent density
-    check_potential = p2p(
-        kernel_function=kernel_function,
-        targets=parent_check_surface,
-        sources=child_equivalent_surface,
-        source_densities=child_equivalent_density).density
-
-    # Calculate equivalent density on parent equivalent surface
-    # Form gram matrix between parent check surface and equivalent surface
-    kernel_matrix = gram_matrix(
+    kernel_pe2pc = gram_matrix(
         kernel_function, parent_equivalent_surface, parent_check_surface)
 
-    # Compute backward-stable pseudo-inverse of kernel matrix
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+    kernel_ce2pc = gram_matrix(
+        kernel_function, child_equivalent_surface, parent_check_surface
+    )
 
-    parent_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+    kernel_pe2pc_inv = pseudo_inverse(kernel_pe2pc)
 
-    return Potential(parent_equivalent_surface, parent_equivalent_density)
+    m2m_matrix = np.matmul(kernel_pe2pc_inv, kernel_ce2pc)
+    parent_equivalent_density = np.matmul(m2m_matrix, child_equivalent_density)
+
+    return Charge(parent_equivalent_surface, parent_equivalent_density)
 
 
 def m2l(kernel_function,
@@ -597,7 +798,7 @@ def m2l(kernel_function,
 
     Returns:
     --------
-    Potential
+    Charge
         Potential densities for the local expansion around the target box.
     """
 
@@ -626,27 +827,23 @@ def m2l(kernel_function,
         alpha=1.05
     )
 
-    # Calculate check potential from source equivalent density
-    check_potential = np.zeros(shape=(len(tgt_check_surface)))
+    kernel_tc2te = gram_matrix(
+        kernel_function,
+        tgt_check_surface,
+        tgt_downward_equivalent_surface
+    )
 
-    check_potential = p2p(
-        kernel_function=kernel_function,
-        targets=tgt_check_surface,
-        sources=src_upward_equivalent_surface,
-        source_densities=source_equivalent_density).density
-
-    # Calculate downward equivalent density
-    # Form gram-matrix between target and source box
-    kernel_matrix = gram_matrix(kernel_function,
-                                src_upward_equivalent_surface,
-                                tgt_downward_equivalent_surface)
+    kernel_se2tc = gram_matrix(
+        kernel_function, src_upward_equivalent_surface, tgt_check_surface)
 
     # Invert gram matrix with SVD
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+    kernel_se2te_inv = pseudo_inverse(kernel_tc2te)
 
-    tgt_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+    m2l_matrix = np.matmul(kernel_se2te_inv, kernel_se2tc)
 
-    return Potential(tgt_downward_equivalent_surface, tgt_equivalent_density)
+    tgt_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+
+    return Charge(tgt_downward_equivalent_surface, tgt_equivalent_density)
 
 
 def l2l(kernel_function,
@@ -706,20 +903,18 @@ def l2l(kernel_function,
         alpha=1.05
     )
 
-    # Calculate check potential from parent equivalent density
-    check_potential = p2p(
-        kernel_function=kernel_function,
-        targets=child_check_surface,
-        sources=parent_equivalent_surface,
-        source_densities=parent_equivalent_density
-    ).density
-
     # Calculate child downward equivalent density
-    kernel_matrix = gram_matrix(
-        kernel_function, parent_equivalent_surface, child_equivalent_surface)
+    kernel_se2tc = gram_matrix(
+        kernel_function, parent_equivalent_surface, child_check_surface)
 
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+    kernel_te2tc = gram_matrix(
+        kernel_function, child_equivalent_surface, child_check_surface
+    )
 
-    child_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
+    kernel_te2tc_inv = pseudo_inverse(kernel_te2tc)
 
-    return Potential(child_equivalent_surface, child_equivalent_density)
+    l2l_matrix = np.matmul(kernel_te2tc_inv, kernel_se2tc)
+
+    child_equivalent_density = np.matmul(l2l_matrix, parent_equivalent_density)
+
+    return Charge(child_equivalent_surface, child_equivalent_density)
