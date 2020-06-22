@@ -14,16 +14,19 @@ laplace = Laplace()
 
 @pytest.fixture
 def n_points():
-    return 50
+    """Number of source/target points"""
+    return 10
 
 
 @pytest.fixture
 def order():
+    """Expansion order"""
     return 2
 
 
 @pytest.fixture
 def n_level_octree(n_points):
+    """Parametrised octree"""
     rand = np.random.RandomState(0)
     sources = rand.rand(n_points, 3)
     targets = rand.rand(n_points, 3)
@@ -41,6 +44,7 @@ def n_level_octree(n_points):
     ]
 )
 def test_laplace(x, y, expected):
+    """Test single layer laplace kernel"""
     assert laplace(x, y) == expected
 
 
@@ -116,7 +120,8 @@ def test_p2m(n_level_octree, order):
     equivalent = p2p(laplace, distant_point, result.surface, result.density)
 
     for i in range(len(equivalent.density)):
-        a = equivalent.density[i]; b = direct.density[i]
+        a = equivalent.density[i]
+        b = direct.density[i]
         assert np.isclose(a, b, rtol=1e-1)
 
     # Test that the surfaces are not equal, as expected
@@ -135,7 +140,8 @@ def test_m2m(n_level_octree, order):
     parent_key = 0
     child_key = 1
 
-    x0 = octree.center; r0 = octree.radius
+    x0 = octree.center
+    r0 = octree.radius
     parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
     child_center = hilbert.get_center_from_key(child_key, x0, r0)
 
@@ -192,7 +198,7 @@ def test_m2l(order):
     npoints = 6*(order-1)**2 + 2
 
     # Radius of root node
-    radius=1
+    radius = 1
 
     # (Octree) Level of boxes
     tgt_level = src_level = 5
@@ -254,14 +260,15 @@ def test_l2l(n_level_octree, order):
     Strategy: Test whether child equivalent density is matched to it's parents
     in the far field of both.
     """
-    order=2
+    order = 2
     npoints = 6*(order-1)**2 + 2
 
     octree = n_level_octree(maximum_level=1)
     parent_key = 0
     child_key = 1
 
-    x0 = octree.center; r0 = octree.radius
+    x0 = octree.center
+    r0 = octree.radius
 
     parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
     child_center = hilbert.get_center_from_key(child_key, x0, r0)
@@ -309,12 +316,15 @@ def test_l2l(n_level_octree, order):
 
 
 def test_upward_pass(order, n_level_octree):
+    """Test whether Multipole expansion is translated to root node.
+    """
     octree = n_level_octree(1)
     fmm = Fmm(octree, order, laplace)
 
     fmm.upward_pass()
     fmm.downward_pass()
-    x0 = octree.center; r0 = octree.radius
+    x0 = octree.center
+    r0 = octree.radius
 
     equivalent_surface = surface(
         order=order,
@@ -342,6 +352,4 @@ def test_upward_pass(order, n_level_octree):
         source_densities=np.ones(len(octree.sources))
     )
 
-    print(fmm.octree.source_leaf_nodes[1])
-    # assert False
     assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)
