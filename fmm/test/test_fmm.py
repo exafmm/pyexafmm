@@ -6,18 +6,20 @@ from functools import partial
 import numpy as np
 import pytest
 
-from fmm.fmm import Fmm, laplace, surface, p2p, p2m, m2m, m2l, l2l
+from fmm.fmm import Fmm, Laplace, surface, p2p, p2m, m2m, m2l, l2l
 from fmm.octree import Octree
 import fmm.hilbert as hilbert
 
+laplace = Laplace()
+
 @pytest.fixture
 def n_points():
-    return 10
+    return 50
 
 
 @pytest.fixture
 def order():
-    return 3
+    return 2
 
 
 @pytest.fixture
@@ -306,55 +308,40 @@ def test_l2l(n_level_octree, order):
     assert ~np.array_equal(parent_result.surface, child_result.surface)
 
 
-# def test_upward_pass(order, n_level_octree):
-#     octree = n_level_octree(3)
-#     fmm = Fmm(octree, order, laplace)
-
-#     fmm.upward_pass()
-#     x0 = octree.center; r0 = octree.radius
-
-#     equivalent_surface = surface(
-#         order=order,
-#         radius=r0,
-#         level=0,
-#         center=x0,
-#         alpha=1.05
-#     )
-
-#     multipole_expansion = fmm._source_data[0]
-
-#     distant_point = np.array([[1e4, 0, 0]])
-
-#     multipole_result = p2p(
-#         kernel_function=laplace,
-#         targets=distant_point,
-#         sources=equivalent_surface,
-#         source_densities=multipole_expansion.expansion
-#     )
-
-#     direct_result = p2p(
-#         kernel_function=laplace,
-#         targets=distant_point,
-#         sources=octree.sources,
-#         source_densities=np.ones(len(octree.sources))
-#     )
-
-
-#     assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)
-
-
-def test_fmm(order, n_level_octree):
+def test_upward_pass(order, n_level_octree):
     octree = n_level_octree(1)
     fmm = Fmm(octree, order, laplace)
 
     fmm.upward_pass()
     fmm.downward_pass()
+    x0 = octree.center; r0 = octree.radius
 
-    print(fmm._result_data)
-
-    unit_sources = np.ones(len(octree.sources))
-    direct = p2p(
-        laplace, octree.targets, octree.sources, unit_sources
+    equivalent_surface = surface(
+        order=order,
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=1.05
     )
-    print(f"direct: {direct.density}")
-    assert False
+
+    multipole_expansion = fmm.source_data[0]
+
+    distant_point = np.array([[1e4, 0, 0]])
+
+    multipole_result = p2p(
+        kernel_function=laplace,
+        targets=distant_point,
+        sources=equivalent_surface,
+        source_densities=multipole_expansion.expansion
+    )
+
+    direct_result = p2p(
+        kernel_function=laplace,
+        targets=distant_point,
+        sources=octree.sources,
+        source_densities=np.ones(len(octree.sources))
+    )
+
+    print(fmm.octree.source_leaf_nodes[1])
+    # assert False
+    assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)

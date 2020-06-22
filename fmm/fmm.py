@@ -1,108 +1,126 @@
 """Implementation of the main FMM loop."""
+import abc
+
 import numpy as np
 import scipy.sparse.linalg
 
 import fmm.hilbert as hilbert
 
-class Charge:
-    """
-    Return object bundling equivalent density and its corresponding equivalent
-        surface.
-    """
+class AbstractDensity(abc.ABC):
+    """Base Return Object for calculations"""
     def __init__(self, surface, density):
         """
         Parameters:
         -----------
         surface : np.array(shape=(n, 3))
-            `n` quadrature points discretising equivalent surface.
+            `n` quadrature points discretising surface.
         density : np.array(shape=(n))
-            `n` charge densities, corresponding to each quadrature point.
+            `n` densities, corresponding to each quadrature point.
         """
-        self.surface = surface
-        self.density = density
+        if isinstance(surface, np.ndarray) and isinstance(density, np.ndarray):
+            self.surface = surface
+            self.density = density
+        else:
+            raise TypeError("`surface` and `density` must be numpy arrays")
+
+    @abc.abstractmethod
+    def __repr__(self):
+        raise NotImplementedError
+
+class Charge(AbstractDensity):
+    """
+    Return object bundling computed charge, at corresponding points.
+    """
+    def __repr__(self):
+        return str((self.surface, self.density))
+
+class Potential(AbstractDensity):
+    """
+    Return object bundling computed potential, at corresponding points.
+    """
+    def __init__(self, surface, density, indices=None):
+        super().__init__(surface, density)
+
+        if indices is None:
+            self.indices = set()
+        else:
+            self.indices = indices
 
     def __repr__(self):
         return str((self.surface, self.density))
 
-class Potential:
-    """
-    Return object bundling computed potential, at corresponding points.
-    """
-    def __init__(self, surface, density):
-        """
-        Parameters:
-        -----------
-        surface : np.array(shape=(n, 3))
-            `n` points discretising at which potential is being returned at.
-        density : np.array(shape=(n))
-            `n` potentials, corresponding to each point.
-        """
-        self.surface = surface
-        self.density = density
-
-    def __repr__(self):
-        # return str((self.surface, self.density))
-        return str(self.density)
-
 class Node:
     """Holds expansion and source/target indices for each tree node"""
-    def __init__(self, key, expansion, indices):
+    def __init__(self, key, ncoefficients, indices=None):
         """
         Parameters:
         ----------
         key : int
             Hilbert key for a node.
-        expansion : np.array(shape=(ncoefficients))
-            The expansion coefficients for this node's equivalent density.
+        ncoefficients: int
+            Number of expansion coefficients, corresponds to discrete points on
+            surface of box for this node.
         indices : set
             Set of indices.
         """
         self.key = key
-        self.expansion = expansion
-        self.indices = indices
+        self.expansion = np.zeros(ncoefficients, dtype='float64')
+
+        if indices is None:
+            self.indices = set()
+        else:
+            self.indices = indices
 
     def __repr__(self):
-        """Stringified repr of a node"""
         return str((self.key, self.expansion, self.indices))
 
 
 class Fmm:
-    """Main Fmm class."""
+    """
+    Main FMM loop.
+    Initialising with an Octree, run the FMM loop with a specified kernel
+    function, computing the expansion at a given precision specified by an
+    expansion order.
+    """
 
-    def __init__(self, octree, order, kernel):
-        """Initialize the Fmm."""
+    def __init__(self, octree, order, kernel_function):
+        """
+        Parameters:
+        -----------
+        octree : fmm.octree.Octree
+            Initialise a created Octree object.
+        order : int
+            Order of expansion, often referred to as 'p' in literature.
+        kernel_function : function
+            Kernel function.
+        """
 
-        self.kernel = kernel
+        # Kernel function
+        self.kernel_function = kernel_function
         self.order = order
-        self._octree = octree
+        self.octree = octree
 
-        # One for each point on surface of a cube based discretisation
-        self.ncoeffiecients = 6*(order-1)**2 + 2
+        # Coefficients discretising surface of Node/box
+        self.ncoefficients = 6*(self.order-1)**2 + 2
 
-        # Source and Target data indexed by Hilbert key
-        self._source_data = {}
-        self._target_data = {}
-
-        self._result_data = [
-            Potential(tgt, None) for tgt in octree.targets
+        self.result_data = [
+            Potential(target, np.zeros(1, dtype='float64'))
+            for target in octree.targets
             ]
 
-        for key in self.octree.non_empty_source_nodes:
-            self._source_data[key] = Node(
-                    key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
-                    )
-        for key in self.octree.non_empty_target_nodes:
-            self._target_data[key] = Node(
-                    key, np.zeros(self.ncoeffiecients, dtype='float64'), set()
-                    )
+        self.source_data = {
+            key: Node(key, self.ncoefficients)
+            for key in octree.non_empty_source_nodes
+        }
 
-    @property
-    def octree(self):
-        """Return octree."""
-        return self._octree
+        self.target_data = {
+            key: Node(key, self.ncoefficients)
+            for key in octree.non_empty_target_nodes
+        }
 
     def upward_pass(self):
         """Upward pass."""
+
         number_of_leafs = len(self.octree.source_index_ptr) - 1
         for index in range(number_of_leafs):
             self.particle_to_multipole(index)
@@ -127,14 +145,6 @@ class Fmm:
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
 
-    def set_source_values(self, values):
-        """Set source values."""
-        pass
-
-    def get_target_values(self):
-        """Get target values."""
-        pass
-
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
 
@@ -148,7 +158,7 @@ class Fmm:
         leaf_sources = self.octree.sources[source_indices]
 
         # Just adding index from argsort (sources by leafs)
-        self._source_data[
+        self.source_data[
             self.octree.source_leaf_nodes[leaf_node_index]
             ].indices.update(source_indices)
 
@@ -163,7 +173,7 @@ class Fmm:
 
         # Compute expansion, and add to source data
         result = p2m(
-            kernel_function=self.kernel,
+            kernel_function=self.kernel_function,
             leaf_sources=leaf_sources,
             order=self.order,
             center=parent_center,
@@ -171,7 +181,7 @@ class Fmm:
             maximum_level=self.octree.maximum_level
         )
 
-        self._source_data[child_key].expansion = result.density
+        self.source_data[child_key].expansion = result.density
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
@@ -180,8 +190,6 @@ class Fmm:
         parent_center = hilbert.get_center_from_key(
             key, self.octree.center, self.octree.radius)
         parent_level = hilbert.get_level(key)
-
-        print(f"level {parent_level}")
 
         for child in hilbert.get_children(key):
             if self.octree.source_node_to_index[child] != -1:
@@ -193,16 +201,16 @@ class Fmm:
                 child_level = hilbert.get_level(child)
 
                 # Updating indices
-                self._source_data[key].indices.update(
-                    self._source_data[child].indices
+                self.source_data[key].indices.update(
+                    self.source_data[child].indices
                     )
 
                 # Get child equivalent density
-                child_equivalent_density = self._source_data[child].expansion
+                child_equivalent_density = self.source_data[child].expansion
 
                 # Compute expansion, and store
                 result = m2m(
-                    kernel_function=self.kernel,
+                    kernel_function=self.kernel_function,
                     parent_center=parent_center,
                     child_center=child_center,
                     child_level=child_level,
@@ -212,15 +220,15 @@ class Fmm:
                     child_equivalent_density=child_equivalent_density
                     )
 
-                self._source_data[key].expansion += result.density
+                self.source_data[key].expansion += result.density
 
     def multipole_to_local(self, source_key, target_key):
         """Compute multipole to local."""
 
         x0 = self.octree.center; r0 = self.octree.radius
 
-        self._target_data[target_key].indices.update(
-                self._source_data[source_key].indices
+        self.target_data[target_key].indices.update(
+                self.source_data[source_key].indices
                 )
 
         source_level = hilbert.get_level(source_key)
@@ -229,10 +237,10 @@ class Fmm:
         target_level = hilbert.get_level(target_key)
         target_center = hilbert.get_center_from_key(target_key, x0, r0)
 
-        source_equivalent_density = self._source_data[source_key].expansion
+        source_equivalent_density = self.source_data[source_key].expansion
 
         result = m2l(
-            kernel_function=self.kernel,
+            kernel_function=self.kernel_function,
             order=self.order,
             radius=self.octree.radius,
             source_center=source_center,
@@ -242,7 +250,7 @@ class Fmm:
             source_equivalent_density=source_equivalent_density
         )
 
-        self._target_data[target_key].expansion = result.density
+        self.target_data[target_key].expansion = result.density
 
     def local_to_local(self, key):
         """Compute local to local."""
@@ -251,7 +259,7 @@ class Fmm:
 
         parent_center = hilbert.get_center_from_key(key, x0, r0)
         parent_level = hilbert.get_level(key)
-        parent_equivalent_density = self._target_data[key].expansion
+        parent_equivalent_density = self.target_data[key].expansion
 
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
@@ -259,12 +267,12 @@ class Fmm:
                 child_center = hilbert.get_center_from_key(child, x0, r0)
                 child_level = hilbert.get_level(child)
 
-                self._target_data[child].indices.update(
-                        self._target_data[key].indices
+                self.target_data[child].indices.update(
+                        self.target_data[key].indices
                         )
 
                 result = l2l(
-                    kernel_function=self.kernel,
+                    kernel_function=self.kernel_function,
                     order=self.order,
                     radius=r0,
                     parent_center=parent_center,
@@ -274,7 +282,7 @@ class Fmm:
                     parent_equivalent_density=parent_equivalent_density
                 )
 
-                self._target_data[child].expansion = result.density
+                self.target_data[child].expansion = result.density
 
     def local_to_particle(self, leaf_node_index):
         """Compute local to particle."""
@@ -287,25 +295,25 @@ class Fmm:
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
         leaf_node_level = hilbert.get_level(leaf_node_key)
 
-        leaf_node_density = self._target_data[leaf_node_key].expansion
+        leaf_node_density = self.target_data[leaf_node_key].expansion
         leaf_node_surface = surface(
             self.order, self.octree.radius, leaf_node_level, self.octree.center, 2.95
             )
 
         for target_index in target_indices:
-            # self._result_data_idxs[target_index].update(
-            #         self._target_data[leaf_node_key].indices
-            #         )
+            self.result_data[target_index].indices.update(
+                    self.target_data[leaf_node_key].indices
+                    )
 
             target = self.octree.targets[target_index].reshape(1, 3)
             result = p2p(
-                kernel_function=self.kernel,
+                kernel_function=self.kernel_function,
                 targets=target,
                 sources=leaf_node_surface,
                 source_densities=leaf_node_density
             )
 
-            self._result_data[target_index].density = result.density
+            self.result_data[target_index].density = result.density
 
     def compute_near_field(self, leaf_node_index):
         """Compute near field."""
@@ -327,24 +335,24 @@ class Fmm:
                 neighbor_surface  = surface(
                     self.order, r0, neighbor_level, x0, 1
                 )
-                neighbor_density = self._source_data[neighbor]
+                neighbor_density = self.source_data[neighbor]
 
                 for target_index in target_indices:
 
-                    # self._result_data[target_index].update(
-                    #         self._source_data[neighbor].indices
-                    #         )
+                    self.result_data[target_index].indices.update(
+                            self.source_data[neighbor].indices
+                            )
 
                     target = self.octree.targets[target_index].reshape(1, 3)
 
                     result = p2p(
-                        kernel_function=self.kernel,
+                        kernel_function=self.kernel_function,
                         targets=target,
                         sources=neighbor_surface,
                         source_densities=neighbor_density.expansion
                     )
 
-                    self._result_data[target_index].density += result.density
+                    self.result_data[target_index].density += result.density
 
         if self.octree.source_node_to_index[leaf_node_key] != -1:
 
@@ -353,20 +361,62 @@ class Fmm:
             leaf_surface = surface(
                 self.order, r0, leaf_level, x0, 1
             )
-            leaf_densities = self._source_data[leaf_node_key].expansion
+            leaf_densities = self.source_data[leaf_node_key].expansion
 
             for target_index in target_indices:
                 target = self.octree.targets[target_index].reshape(1, 3)
                 result = p2p(
-                    kernel_function=self.kernel,
+                    kernel_function=self.kernel_function,
                     targets=target,
                     sources=leaf_surface,
                     source_densities=leaf_densities
                 )
-                self._result_data[target_index].density += result.density
+                self.result_data[target_index].density += result.density
 
-                # self._result_data_idxs[target_index].update(
-                #     self._source_data[leaf_node_key].indices)
+                self.result_data[target_index].indices.update(
+                    self.source_data[leaf_node_key].indices)
+
+
+class Kernel(abc.ABC):
+    """
+    Abstract callable Kernel Class
+
+    Parameters:
+    -----------
+    x : np.array(shape=(n))
+        An n-dimensional vector corresponding to a point in n-dimensional space.
+    y : np.array(shape=(n))
+        Different n-dimensional vector corresponding to a point in n-dimensional
+        space.
+
+    Returns:
+    --------
+    float
+        Operator value (scaled by 4pi) between points x and y.
+    """
+
+    @abc.abstractstaticmethod
+    def kernel_function(*args, **kwargs):
+        """ Implement static kernel function.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class Laplace(Kernel):
+    @staticmethod
+    def kernel_function(x, y):
+        r = np.linalg.norm(x-y)
+
+        if np.isclose(r, 0, rtol=1e-12):
+            return 1e10
+        return 1/(4*np.pi*r)
+
+    def __call__(self, x, y):
+        return self.kernel_function(x, y)
 
 
 def surface(order, radius, level, center, alpha):
@@ -435,31 +485,6 @@ def surface(order, radius, level, center, alpha):
         surf[i] = surf[i]*b + center
 
     return surf
-
-
-def laplace(x, y):
-    """
-    3D single-layer Laplace kernel between two points. Alternatively called
-        particle to particle (P2P) operator.
-
-    Parameters:
-    -----------
-    x : np.array(shape=(n))
-        An n-dimensional vector corresponding to a point in n-dimensional space.
-    y : np.array(shape=(n))
-        Different n-dimensional vector corresponding to a point in n-dimensional
-        space.
-
-    Returns:
-    --------
-    float
-        Operator value (scaled by 4pi) between points x and y.
-    """
-    r = np.linalg.norm(x-y)
-
-    if np.isclose(r, 0, rtol=1e-12):
-        return 1e10
-    return 1/(4*np.pi*r)
 
 
 def gram_matrix(kernel, sources, targets):
