@@ -41,8 +41,8 @@ class Potential:
         self.density = density
 
     def __repr__(self):
-        return str((self.surface, self.density))
-
+        # return str((self.surface, self.density))
+        return str(self.density)
 
 class Node:
     """Holds expansion and source/target indices for each tree node"""
@@ -83,7 +83,9 @@ class Fmm:
         self._source_data = {}
         self._target_data = {}
 
-        self._result_data = [set() for _ in range(octree.targets.shape[0])]
+        self._result_data = [
+            Potential(tgt, None) for tgt in octree.targets
+            ]
 
         for key in self.octree.non_empty_source_nodes:
             self._source_data[key] = Node(
@@ -108,7 +110,6 @@ class Fmm:
         for level in range(self.octree.maximum_level - 1, -1, -1):
             for key in self.octree.non_empty_source_nodes_by_level[level]:
                 self.multipole_to_multipole(key)
-                print(f"Algorithm here! key {key}")
 
     def downward_pass(self):
         """Downward pass."""
@@ -180,6 +181,8 @@ class Fmm:
             key, self.octree.center, self.octree.radius)
         parent_level = hilbert.get_level(key)
 
+        print(f"level {parent_level}")
+
         for child in hilbert.get_children(key):
             if self.octree.source_node_to_index[child] != -1:
 
@@ -214,31 +217,95 @@ class Fmm:
     def multipole_to_local(self, source_key, target_key):
         """Compute multipole to local."""
 
+        x0 = self.octree.center; r0 = self.octree.radius
+
         self._target_data[target_key].indices.update(
                 self._source_data[source_key].indices
                 )
 
+        source_level = hilbert.get_level(source_key)
+        source_center = hilbert.get_center_from_key(source_key, x0, r0)
+
+        target_level = hilbert.get_level(target_key)
+        target_center = hilbert.get_center_from_key(target_key, x0, r0)
+
+        source_equivalent_density = self._source_data[source_key].expansion
+
+        result = m2l(
+            kernel_function=self.kernel,
+            order=self.order,
+            radius=self.octree.radius,
+            source_center=source_center,
+            source_level=source_level,
+            target_center=target_center,
+            target_level=target_level,
+            source_equivalent_density=source_equivalent_density
+        )
+
+        self._target_data[target_key].expansion = result.density
+
     def local_to_local(self, key):
         """Compute local to local."""
 
+        x0 = self.octree.center; r0 = self.octree.radius
+
+        parent_center = hilbert.get_center_from_key(key, x0, r0)
+        parent_level = hilbert.get_level(key)
+        parent_equivalent_density = self._target_data[key].expansion
+
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
+
+                child_center = hilbert.get_center_from_key(child, x0, r0)
+                child_level = hilbert.get_level(child)
 
                 self._target_data[child].indices.update(
                         self._target_data[key].indices
                         )
 
+                result = l2l(
+                    kernel_function=self.kernel,
+                    order=self.order,
+                    radius=r0,
+                    parent_center=parent_center,
+                    parent_level=parent_level,
+                    child_center=child_center,
+                    child_level=child_level,
+                    parent_equivalent_density=parent_equivalent_density
+                )
+
+                self._target_data[child].expansion = result.density
+
     def local_to_particle(self, leaf_node_index):
         """Compute local to particle."""
+
         target_indices = self.octree.targets_by_leafs[
                 self.octree.target_index_ptr[leaf_node_index]
                     :self.octree.target_index_ptr[leaf_node_index + 1]
                 ]
+
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
+        leaf_node_level = hilbert.get_level(leaf_node_key)
+
+        leaf_node_density = self._target_data[leaf_node_key].expansion
+        leaf_node_surface = surface(
+            self.order, self.octree.radius, leaf_node_level, self.octree.center, 2.95
+            )
+
         for target_index in target_indices:
-            self._result_data[target_index].update(
-                    self._target_data[leaf_node_key].indices
-                    )
+            # self._result_data_idxs[target_index].update(
+            #         self._target_data[leaf_node_key].indices
+            #         )
+
+            target = self.octree.targets[target_index].reshape(1, 3)
+            result = p2p(
+                kernel_function=self.kernel,
+                targets=target,
+                sources=leaf_node_surface,
+                source_densities=leaf_node_density
+            )
+
+            self._result_data[target_index].density = result.density
 
     def compute_near_field(self, leaf_node_index):
         """Compute near field."""
@@ -246,19 +313,60 @@ class Fmm:
                 self.octree.target_index_ptr[leaf_node_index]
                     :self.octree.target_index_ptr[leaf_node_index + 1]
                 ]
+
         leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
+
+        x0 = self.octree.center; r0 = self.octree.radius
+
         for neighbor in self.octree.target_neighbors[
                 self.octree.target_node_to_index[leaf_node_key]
                 ]:
             if neighbor != -1:
+                neighbor_level = hilbert.get_level(neighbor)
+
+                neighbor_surface  = surface(
+                    self.order, r0, neighbor_level, x0, 1
+                )
+                neighbor_density = self._source_data[neighbor]
+
                 for target_index in target_indices:
-                    self._result_data[target_index].update(
-                            self._source_data[neighbor].indices
-                            )
+
+                    # self._result_data[target_index].update(
+                    #         self._source_data[neighbor].indices
+                    #         )
+
+                    target = self.octree.targets[target_index].reshape(1, 3)
+
+                    result = p2p(
+                        kernel_function=self.kernel,
+                        targets=target,
+                        sources=neighbor_surface,
+                        source_densities=neighbor_density.expansion
+                    )
+
+                    self._result_data[target_index].density += result.density
+
         if self.octree.source_node_to_index[leaf_node_key] != -1:
+
+            leaf_level = hilbert.get_level(leaf_node_key)
+
+            leaf_surface = surface(
+                self.order, r0, leaf_level, x0, 1
+            )
+            leaf_densities = self._source_data[leaf_node_key].expansion
+
             for target_index in target_indices:
-                self._result_data[target_index].update(
-                    self._source_data[leaf_node_key].indices)
+                target = self.octree.targets[target_index].reshape(1, 3)
+                result = p2p(
+                    kernel_function=self.kernel,
+                    targets=target,
+                    sources=leaf_surface,
+                    source_densities=leaf_densities
+                )
+                self._result_data[target_index].density += result.density
+
+                # self._result_data_idxs[target_index].update(
+                #     self._source_data[leaf_node_key].indices)
 
 
 def surface(order, radius, level, center, alpha):
@@ -349,7 +457,7 @@ def laplace(x, y):
     """
     r = np.linalg.norm(x-y)
 
-    if np.isclose(r, 0, rtol=1e-1):
+    if np.isclose(r, 0, rtol=1e-12):
         return 1e10
     return 1/(4*np.pi*r)
 
@@ -383,7 +491,7 @@ def gram_matrix(kernel, sources, targets):
     return matrix
 
 
-def pseudo_inverse(matrix):
+def pseudo_inverse(matrix, tol=1e-1):
     """
     Compute a backward stable pseudo-inverse of a (n x m) matrix using an SVD
         decomposition. For inverting the  singular diagonal S matrix, if a value
@@ -400,7 +508,6 @@ def pseudo_inverse(matrix):
     """
     u, s, v_transpose = np.linalg.svd(matrix)
 
-    tol = 1e-1 # m2m sensitive to this being too low ...
     for i, val in enumerate(s):
         if  abs(val) < tol:
             s[i] = 0

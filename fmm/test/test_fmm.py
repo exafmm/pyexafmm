@@ -17,7 +17,7 @@ def n_points():
 
 @pytest.fixture
 def order():
-    return 2
+    return 3
 
 
 @pytest.fixture
@@ -162,7 +162,7 @@ def test_m2m(n_level_octree, order):
 
     parent_equivalent_surface, parent_equivalent_density = result.surface, result.density
 
-    distant_point = np.array([[10, 0, 0]])
+    distant_point = np.array([[1000, 0, 0]])
 
     child_result = p2p(
         laplace, distant_point, child_equivalent_surface, child_equivalent_density
@@ -172,7 +172,7 @@ def test_m2m(n_level_octree, order):
         laplace, distant_point, parent_equivalent_surface, parent_equivalent_density
     )
 
-    assert np.isclose(child_result.density[0], parent_result.density[0], rtol=1e-1)
+    assert np.isclose(child_result.density[0], parent_result.density[0], atol=1e-3)
 
     # Test that the surfaces are not equal, as expected
     assert ~np.array_equal(parent_result.surface, child_result.surface)
@@ -306,40 +306,55 @@ def test_l2l(n_level_octree, order):
     assert ~np.array_equal(parent_result.surface, child_result.surface)
 
 
-def test_upward_pass(order, n_level_octree):
+# def test_upward_pass(order, n_level_octree):
+#     octree = n_level_octree(3)
+#     fmm = Fmm(octree, order, laplace)
+
+#     fmm.upward_pass()
+#     x0 = octree.center; r0 = octree.radius
+
+#     equivalent_surface = surface(
+#         order=order,
+#         radius=r0,
+#         level=0,
+#         center=x0,
+#         alpha=1.05
+#     )
+
+#     multipole_expansion = fmm._source_data[0]
+
+#     distant_point = np.array([[1e4, 0, 0]])
+
+#     multipole_result = p2p(
+#         kernel_function=laplace,
+#         targets=distant_point,
+#         sources=equivalent_surface,
+#         source_densities=multipole_expansion.expansion
+#     )
+
+#     direct_result = p2p(
+#         kernel_function=laplace,
+#         targets=distant_point,
+#         sources=octree.sources,
+#         source_densities=np.ones(len(octree.sources))
+#     )
+
+
+#     assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)
+
+
+def test_fmm(order, n_level_octree):
     octree = n_level_octree(1)
     fmm = Fmm(octree, order, laplace)
 
     fmm.upward_pass()
-    x0 = octree.center; r0 = octree.radius
+    fmm.downward_pass()
 
-    equivalent_surface = surface(
-        order=order,
-        radius=r0,
-        level=0,
-        center=x0,
-        alpha=1.05
+    print(fmm._result_data)
+
+    unit_sources = np.ones(len(octree.sources))
+    direct = p2p(
+        laplace, octree.targets, octree.sources, unit_sources
     )
-
-    multipole_expansion = fmm._source_data[0]
-
-    distant_point = np.array([[10, 0, 0]])
-    print(f"multipole expansion {multipole_expansion.expansion}")
-
-    multipole_result = p2p(
-        kernel_function=laplace,
-        targets=distant_point,
-        sources=equivalent_surface,
-        source_densities=multipole_expansion.expansion
-    )
-
-    direct_result = p2p(
-        kernel_function=laplace,
-        targets=distant_point,
-        sources=octree.sources,
-        source_densities=np.ones(len(octree.sources))
-    )
-
-    print(f"multipole result {multipole_result.density}")
-    print(f"direct result {direct_result.density}")
+    print(f"direct: {direct.density}")
     assert False
