@@ -154,7 +154,7 @@ class Fmm:
         # at leaf node, compute near field.
         for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
             self.local_to_particle(leaf_node_index)
-            self.compute_near_field(leaf_node_index)
+            # self.compute_near_field(leaf_node_index)
 
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""

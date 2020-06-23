@@ -315,10 +315,16 @@ def test_l2l(n_level_octree, order):
     assert ~np.array_equal(parent_result.surface, child_result.surface)
 
 
-def test_upward_pass(order, n_level_octree):
+@pytest.mark.parametrize(
+    "level",
+    [
+        1, 2, 3
+    ]
+)
+def test_upward_pass(level, order, n_level_octree):
     """Test whether Multipole expansion is translated to root node.
     """
-    octree = n_level_octree(1)
+    octree = n_level_octree(level)
     fmm = Fmm(octree, order, laplace)
 
     fmm.upward_pass()
@@ -351,12 +357,12 @@ def test_upward_pass(order, n_level_octree):
         source_densities=np.ones(len(octree.sources))
     )
 
-    assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)
+    assert np.isclose(direct_result.density, multipole_result.density, rtol=1.5e-1)
 
 
 def test_downward_pass(n_level_octree, order):
 
-    level = 3
+    level = 4
     octree = n_level_octree(level)
 
     fmm = Fmm(octree, order, laplace)
