@@ -322,7 +322,6 @@ def test_upward_pass(order, n_level_octree):
     fmm = Fmm(octree, order, laplace)
 
     fmm.upward_pass()
-    fmm.downward_pass()
     x0 = octree.center
     r0 = octree.radius
 
@@ -353,3 +352,28 @@ def test_upward_pass(order, n_level_octree):
     )
 
     assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)
+
+
+def test_downward_pass(n_level_octree, order):
+
+    level = 3
+    octree = n_level_octree(level)
+
+    fmm = Fmm(octree, order, laplace)
+
+    fmm.upward_pass()
+    fmm.downward_pass()
+
+    direct_p2p = p2p(
+        kernel_function=laplace,
+        targets=octree.targets,
+        sources=octree.sources,
+        source_densities=np.ones(len(octree.sources))
+    )
+
+    fmm_p2p = np.array([res.density[0] for res in fmm.result_data])
+
+    print(f"direct p2p: {direct_p2p.density}")
+    print(f"fmm p2p: {fmm_p2p}")
+    print(f"error: {fmm_p2p-direct_p2p.density}")
+    assert False
