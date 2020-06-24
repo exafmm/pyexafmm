@@ -15,7 +15,7 @@ laplace = Laplace()
 @pytest.fixture
 def n_points():
     """Number of source/target points"""
-    return 10
+    return 20
 
 
 @pytest.fixture
@@ -201,7 +201,7 @@ def test_m2l(order):
     radius = 1
 
     # (Octree) Level of boxes
-    tgt_level = src_level = 5
+    tgt_level = src_level = 3
 
     # Ensure that the centre of both boxes are far enough from each other to be
     # well separated at the specified level
@@ -362,7 +362,7 @@ def test_upward_pass(level, order, n_level_octree):
 
 def test_downward_pass(n_level_octree, order):
 
-    level = 4
+    level = 1
     octree = n_level_octree(level)
 
     fmm = Fmm(octree, order, laplace)
