@@ -213,15 +213,6 @@ class Octree:
         """Return index of a given target node key."""
         return self._target_node_to_index
 
-    def parent(self, node_index):
-        """Return the parent index of a node."""
-        return hilbert.get_parent(node_index)
-
-    def children(self, node_index):
-        """Return an iterator over the child indices."""
-
-        return hilbert.get_children(node_index)
-
     def nodes_per_side(self, level):
         """Return number of nodes along each dimension."""
         return 1 << level
@@ -241,12 +232,12 @@ class Octree:
 
         Returns:
         --------
-        nodes : list
-            Non-empty leaf nodes, sorted by numeric value.
-        point_indices_by_node : list
+        nodes : list[int]
+            Non-empty leaf node keys, sorted by numeric value.
+        point_indices_by_node : list[int]
             Indices that link (unsorted) array of points to (sorted) list of
             nodes returned by this method.
-        index_ptr : list
+        index_ptr : list[int]
             Pointers (indices) that link the (sorted) array of points to each
             (unique) non-empty node returned by `nodes`.
         """
@@ -276,28 +267,60 @@ class Octree:
         return nodes, point_indices_by_node, index_ptr
 
     def _enumerate_non_empty_nodes(self, leaf_nodes):
-        """Enumerate all non-empty nodes across the tree."""
+        """
+        Enumerate all non-empty nodes across the tree.
+
+        Parameters:
+        -----------
+        leaf_nodes : list[int]
+            List of leaf node keys.
+
+        Returns:
+        --------
+        list_of_nodes: list
+
+        node_map: np.array(shape=(n_nodes))
+
+        """
 
         nleafs = len(leaf_nodes)
 
-        node_map = - np.ones(
+        node_map = -1*np.ones(
             hilbert.get_number_of_all_nodes(self.maximum_level), dtype=np.int64
         )
 
+        # Enumerate non empty leaf nodes with a value from range(nleafs)
         node_map[leaf_nodes] = range(nleafs)
+        # print("node map 1", node_map)
+        # print("leaf nodes ", leaf_nodes)
 
         count = nleafs
+        # print("initial count", count)
         for node in leaf_nodes:
+            # print('node', node)
             parent = node
             while parent != 0:
-                parent = self.parent(parent)
+                parent = hilbert.get_parent(parent)
+                # print('parent', parent)
                 if node_map[parent] == -1:
                     node_map[parent] = count
                     count += 1
+                    # print('count', count)
 
+        # print("node map 2", node_map, len(node_map))
+
+        # Returns indices of node_map not equal to -1
         list_of_nodes = np.flatnonzero(node_map != -1)
+
+        # print("list of nodes", list_of_nodes)
+
+        # node_map[list_of_nodes] = non-empty node values (count)
+        # indices sorted by counts
         indices = np.argsort(node_map[list_of_nodes])
 
+        # print("indices", indices)
+
+        # print("list_of_nodes[indices]", list_of_nodes[indices], len(list_of_nodes))
         return list_of_nodes[indices], node_map
 
 

@@ -64,7 +64,7 @@ def test_parents(octree):
         key = hilbert.get_key_from_point(
             point, octree.maximum_level, octree.center, octree.radius
         )
-        actual = octree.parent(key)
+        actual = hilbert.get_parent(key)
         expected = hilbert.get_key_from_point(
             point, octree.maximum_level - 1, octree.center, octree.radius
         )

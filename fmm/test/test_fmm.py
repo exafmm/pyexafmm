@@ -15,7 +15,7 @@ laplace = Laplace()
 @pytest.fixture
 def n_points():
     """Number of source/target points"""
-    return 10
+    return 50
 
 
 @pytest.fixture
@@ -201,7 +201,7 @@ def test_m2l(order):
     radius = 1
 
     # (Octree) Level of boxes
-    tgt_level = src_level = 5
+    tgt_level = src_level = 3
 
     # Ensure that the centre of both boxes are far enough from each other to be
     # well separated at the specified level
@@ -315,14 +315,19 @@ def test_l2l(n_level_octree, order):
     assert ~np.array_equal(parent_result.surface, child_result.surface)
 
 
-def test_upward_pass(order, n_level_octree):
+@pytest.mark.parametrize(
+    "level",
+    [
+        1, 2, 3
+    ]
+)
+def test_upward_pass(level, order, n_level_octree):
     """Test whether Multipole expansion is translated to root node.
     """
-    octree = n_level_octree(1)
+    octree = n_level_octree(level)
     fmm = Fmm(octree, order, laplace)
 
     fmm.upward_pass()
-    fmm.downward_pass()
     x0 = octree.center
     r0 = octree.radius
 
@@ -352,4 +357,29 @@ def test_upward_pass(order, n_level_octree):
         source_densities=np.ones(len(octree.sources))
     )
 
-    assert np.isclose(direct_result.density, multipole_result.density, rtol=1e-1)
+    assert np.isclose(direct_result.density, multipole_result.density, rtol=1.5e-1)
+
+
+def test_downward_pass(n_level_octree, order):
+
+    level = 1
+    octree = n_level_octree(level)
+
+    fmm = Fmm(octree, order, laplace)
+
+    fmm.upward_pass()
+    fmm.downward_pass()
+
+    direct_p2p = p2p(
+        kernel_function=laplace,
+        targets=octree.targets,
+        sources=octree.sources,
+        source_densities=np.ones(len(octree.sources))
+    )
+
+    fmm_p2p = np.array([res.density[0] for res in fmm.result_data])
+
+    print(f"direct p2p: {direct_p2p.density}")
+    print(f"fmm p2p: {fmm_p2p}")
+    print(f"error: {fmm_p2p-direct_p2p.density}")
+    assert False
