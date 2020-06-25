@@ -364,7 +364,7 @@ class Fmm:
                 ]:
             if neighbor_key != -1:
 
-                neighbor_index = self.octree.source_leaf_key_to_index[neighbor_key]
+                neighbor_index = self.octree.source_node_to_index[neighbor_key]
 
                 neighbor_source_indices = self.octree.sources_by_leafs[
                     self.octree.source_index_ptr[neighbor_index]:
@@ -393,7 +393,7 @@ class Fmm:
 
         if self.octree.source_node_to_index[leaf_node_key] != -1:
 
-            leaf_index = self.octree.source_leaf_key_to_index[leaf_node_key]
+            leaf_index = self.octree.source_node_to_index[leaf_node_key]
 
             leaf_source_indices = self.octree.sources_by_leafs[
                 self.octree.source_index_ptr[leaf_index]:

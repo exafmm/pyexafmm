@@ -15,7 +15,7 @@ laplace = Laplace()
 @pytest.fixture
 def n_points():
     """Number of source/target points"""
-    return 20
+    return 50
 
 
 @pytest.fixture
