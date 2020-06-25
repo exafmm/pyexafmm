@@ -449,13 +449,15 @@ class Kernel(abc.ABC):
 
 
 class Identity(Kernel):
-
+    """Identity operation
+    """
     @staticmethod
     def kernel_function(x, y):
-        return np.ones(shape=(len(x), len(y)))
+        return np.dot(x, y)
 
     def __call__(self, x, y):
         return self.kernel_function(x, y)
+
 
 class Laplace(Kernel):
     """Single layer Laplace kernel
