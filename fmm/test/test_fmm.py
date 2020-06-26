@@ -101,7 +101,7 @@ def test_p2p(targets, sources, source_densities, expected):
 def test_p2m(n_level_octree, order):
     """Test with single-layer Laplace kernel"""
 
-    octree = n_level_octree(maximum_level=1)
+    octree = n_level_octree(maximum_level=0)
     sources = octree.sources
     source_densities = np.ones(shape=(len(sources)))
 
@@ -110,19 +110,16 @@ def test_p2m(n_level_octree, order):
         order=order,
         center=octree.center,
         radius=octree.radius,
-        maximum_level=1,
+        maximum_level=0,
         leaf_sources=octree.sources
         )
 
-    distant_point = np.array([[10, 0, 0]])
+    distant_point = np.array([[1e4, 0, 0]])
 
     direct = p2p(laplace, distant_point, sources, source_densities)
     equivalent = p2p(laplace, distant_point, result.surface, result.density)
 
-    for i in range(len(equivalent.density)):
-        a = equivalent.density[i]
-        b = direct.density[i]
-        assert np.isclose(a, b, rtol=1e-1)
+    assert np.isclose(equivalent.density, direct.density, rtol=1e-2)
 
     # Test that the surfaces are not equal, as expected
     assert ~np.array_equal(equivalent.surface, direct.surface)
@@ -170,7 +167,7 @@ def test_m2m(n_level_octree, order):
 
     parent_equivalent_surface, parent_equivalent_density = result.surface, result.density
 
-    distant_point = np.array([[1000, 0, 0]])
+    distant_point = np.array([[1e4, 0, 0]])
 
     child_result = p2p(
         laplace, distant_point, child_equivalent_surface, child_equivalent_density
@@ -180,7 +177,7 @@ def test_m2m(n_level_octree, order):
         laplace, distant_point, parent_equivalent_surface, parent_equivalent_density
     )
 
-    assert np.isclose(child_result.density[0], parent_result.density[0], atol=1e-3)
+    assert np.isclose(child_result.density, parent_result.density, rtol=1e-2)
 
     # Test that the surfaces are not equal, as expected
     assert ~np.array_equal(parent_result.surface, child_result.surface)
@@ -357,12 +354,14 @@ def test_upward_pass(level, order, n_level_octree):
         source_densities=np.ones(len(octree.sources))
     )
 
+    print(direct_result)
+
     assert np.isclose(direct_result.density, multipole_result.density, rtol=1.5e-1)
 
 
 def test_downward_pass(n_level_octree, order):
 
-    level = 1
+    level = 2
     octree = n_level_octree(level)
 
     fmm = Fmm(octree, order, laplace)
@@ -375,11 +374,12 @@ def test_downward_pass(n_level_octree, order):
         targets=octree.targets,
         sources=octree.sources,
         source_densities=np.ones(len(octree.sources))
-    )
+    ).density
 
     fmm_p2p = np.array([res.density[0] for res in fmm.result_data])
 
-    print(f"direct p2p: {direct_p2p.density}")
-    print(f"fmm p2p: {fmm_p2p}")
-    print(f"error: {fmm_p2p-direct_p2p.density}")
-    assert False
+    # print(fmm_p2p)
+    # print(direct_p2p)
+
+    for i in range(len(direct_p2p)):
+        assert np.isclose(direct_p2p[i], fmm_p2p[i], rtol=0.1)
