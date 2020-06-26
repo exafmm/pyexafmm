@@ -378,8 +378,5 @@ def test_downward_pass(n_level_octree, order):
 
     fmm_p2p = np.array([res.density[0] for res in fmm.result_data])
 
-    # print(fmm_p2p)
-    # print(direct_p2p)
-
     for i in range(len(direct_p2p)):
         assert np.isclose(direct_p2p[i], fmm_p2p[i], rtol=0.1)
