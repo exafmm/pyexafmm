@@ -135,7 +135,8 @@ class Fmm:
         """Downward pass loop."""
 
         # Pre-order traversal of octree
-        for level in range(2, 1 + self.octree.maximum_level):
+        for level in range(1, 1 + self.octree.maximum_level):
+
             for key in self.octree.non_empty_target_nodes_by_level[level]:
                 index = self.octree.target_node_to_index[key]
 
@@ -156,6 +157,7 @@ class Fmm:
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
 
+
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
 
@@ -173,13 +175,12 @@ class Fmm:
             self.octree.source_leaf_nodes[leaf_node_index]
             ].indices.update(source_indices)
 
-        # Compute key corresponding to this leaf index, and its parent
-        child_key = self.octree.source_leaf_nodes[leaf_node_index]
-        parent_key = hilbert.get_parent(child_key)
+        # Compute key corresponding to this leaf index
+        leaf_key = self.octree.non_empty_source_nodes[leaf_node_index]
 
-        # Compute center of parent box in cartesian coordinates
-        parent_center = hilbert.get_center_from_key(
-            parent_key, self.octree.center, self.octree.radius
+        # Compute center of leaf box in cartesian coordinates
+        leaf_center = hilbert.get_center_from_key(
+            leaf_key, self.octree.center, self.octree.radius
         )
 
         # Compute expansion, and add to source data
@@ -187,28 +188,32 @@ class Fmm:
             kernel_function=self.kernel_function,
             leaf_sources=leaf_sources,
             order=self.order,
-            center=parent_center,
+            center=leaf_center,
             radius=self.octree.radius,
             maximum_level=self.octree.maximum_level
         )
 
-        self.source_data[child_key].expansion = result.density
+        self.source_data[leaf_key].expansion = result.density
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
 
         # Compute center of parent boxes
+
         parent_center = hilbert.get_center_from_key(
             key, self.octree.center, self.octree.radius)
         parent_level = hilbert.get_level(key)
 
+
         for child in hilbert.get_children(key):
+            # Only going through non-empty child nodes
             if self.octree.source_node_to_index[child] != -1:
 
                 # Compute center of child box in cartesian coordinates
                 child_center = hilbert.get_center_from_key(
                     child, self.octree.center, self.octree.radius
                     )
+
                 child_level = hilbert.get_level(child)
 
                 # Updating indices
@@ -266,7 +271,7 @@ class Fmm:
             source_equivalent_density=source_equivalent_density
         )
 
-        self.target_data[target_key].expansion = result.density
+        self.target_data[target_key].expansion += result.density
 
     def local_to_local(self, key):
         """Translate local expansion of a node to it's children."""
@@ -446,6 +451,17 @@ class Kernel(abc.ABC):
     @abc.abstractmethod
     def __call__(self, x, y):
         raise NotImplementedError
+
+
+class Identity(Kernel):
+    """Identity operation
+    """
+    @staticmethod
+    def kernel_function(x, y):
+        return np.dot(x, y)
+
+    def __call__(self, x, y):
+        return self.kernel_function(x, y)
 
 
 class Laplace(Kernel):
@@ -810,7 +826,7 @@ def m2l(kernel_function,
         alpha=2.95
     )
 
-    tgt_check_surface = surface(
+    tgt_downward_check_surface = surface(
         order=order,
         radius=radius,
         level=target_level,
@@ -820,17 +836,20 @@ def m2l(kernel_function,
 
     kernel_tc2te = gram_matrix(
         kernel_function,
-        tgt_check_surface,
+        tgt_downward_check_surface,
         tgt_downward_equivalent_surface
     )
 
     kernel_se2tc = gram_matrix(
-        kernel_function, src_upward_equivalent_surface, tgt_check_surface)
+        kernel_function,
+        src_upward_equivalent_surface,
+        tgt_downward_check_surface
+    )
 
     # Invert gram matrix with SVD
-    kernel_se2te_inv = pseudo_inverse(kernel_tc2te)
+    kernel_tc2te_inv = pseudo_inverse(kernel_tc2te)
 
-    m2l_matrix = np.matmul(kernel_se2te_inv, kernel_se2tc)
+    m2l_matrix = np.matmul(kernel_tc2te_inv, kernel_se2tc)
 
     tgt_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
 
