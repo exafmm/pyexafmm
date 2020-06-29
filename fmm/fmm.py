@@ -157,7 +157,6 @@ class Fmm:
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
 
-
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
 
@@ -201,9 +200,9 @@ class Fmm:
         # Compute center of parent boxes
 
         parent_center = hilbert.get_center_from_key(
-            key, self.octree.center, self.octree.radius)
+            key, self.octree.center, self.octree.radius
+        )
         parent_level = hilbert.get_level(key)
-
 
         for child in hilbert.get_children(key):
             # Only going through non-empty child nodes
@@ -689,6 +688,9 @@ def p2m(kernel_function,
     # Set unit densities at leaves for now
     leaf_source_densities = np.ones(shape=(len(leaf_sources)))
 
+    # Compute backward-stable pseudo-inverse of kernel matrix
+    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
+
     # Compute check potential directly using leaves
     check_potential = p2p(
         kernel_function=kernel_function,
@@ -696,9 +698,6 @@ def p2m(kernel_function,
         sources=leaf_sources,
         source_densities=leaf_source_densities
         ).density
-
-    # Compute backward-stable pseudo-inverse of kernel matrix
-    kernel_matrix_inv = pseudo_inverse(kernel_matrix)
 
     # Compute upward equivalent density
     upward_equivalent_density = np.matmul(kernel_matrix_inv, check_potential)
