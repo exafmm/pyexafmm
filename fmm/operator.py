@@ -109,3 +109,31 @@ def gram_matrix(kernel, sources, targets):
 
     return matrix
 
+
+def compute_check_to_equivalent(
+    kernel_function, upward_check_surface, upward_equivalent_surface):
+
+    # Compute Gram Matrix of upward check to upward equivalent surfaces
+    upward_check_to_equivalent = gram_matrix(
+        kernel_function, upward_check_surface, upward_equivalent_surface)
+
+    # Compute SVD of Gram Matrix
+    u, s, v_t = np.linalg.svd(upward_check_to_equivalent)
+
+    # Compute Pseudo-Inverse of Gram matrix
+    tol = 1e-1
+    for i, val in enumerate(s):
+        if  abs(val) < tol:
+            s[i] = 0
+        else:
+            s[i] = 1/val
+
+    s = np.diag(s)
+
+    uc2e_v = np.matmul(v_t.T, s)
+    uc2e_u = u.T
+
+    dc2e_v = np.matmul(u, s)
+    dc2e_u = v_t
+
+    return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)

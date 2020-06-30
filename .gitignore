@@ -7,8 +7,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Data
-precomputed/*.hdf5
+# Data files
+**/*.hdf5
 
 # C extensions
 *.so

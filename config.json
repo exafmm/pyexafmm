@@ -1,0 +1,12 @@
+{
+    "order": 5,
+    "check_to_equivalent_filename": "check_to_equivalent",
+    "surface_filename": "surface",
+    "dirname": "../precomputed_order_5/",
+    "kernel": "laplace",
+    "root_node_radius": 1,
+    "root_node_level": 0,
+    "root_node_center": "origin",
+    "alpha_inner": 1.05,
+    "alpha_outer": 2.95
+}
