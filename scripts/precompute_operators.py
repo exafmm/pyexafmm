@@ -128,6 +128,41 @@ CONFIG_OBJECTS = {
 }
 
 
+def compute_neighbors(key):
+    vec = fmm.hilbert.get_4d_index_from_key(key)
+    count = -1
+    offset = np.zeros(4, dtype=np.int64)
+
+    neighbors = []
+
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            for k in range(-1, 2):
+                count += 1
+                offset[:3] = i, j, k
+                neighbor_vec = vec + offset
+                neighbor_key = fmm.hilbert.get_key(neighbor_vec)
+                neighbors.append(neighbor_key)
+
+    return neighbors
+
+
+def compute_interaction_list(key):
+    parent_key = fmm.hilbert.get_parent(key)
+
+    parent_neighbors = compute_neighbors(parent_key)
+    child_neighbors = compute_neighbors(key)
+
+    interaction_list = []
+    for parent_neighbor in parent_neighbors:
+        children = fmm.hilbert.get_children(parent_neighbor)
+        for child in children:
+            if child not in child_neighbors:
+                interaction_list.append(child)
+
+    return interaction_list
+
+
 def main(
     dirname,
     surface_filename,
@@ -250,6 +285,34 @@ def main(
 
     # Compute M2L operator
 
+    # Centre cube at level 3
+
+    x0 = np.array([[0, 0, 0]])
+    r0 = 1
+
+    center_key = fmm.hilbert.get_key_from_point(x0, 3, x0, r0)
+    center_vec = fmm.hilbert.get_center_from_key(center_key, x0, r0)
+    center_4d_idx = fmm.hilbert.get_4d_index_from_key(center_key)
+
+    interaction_list = compute_interaction_list(center_key)
+
+    source_to_target_vecs = np.zeros(shape=(189, 5))
+    for source_idx, source in enumerate(interaction_list):
+
+        source_4d_idx = fmm.hilbert.get_4d_index_from_key(source)
+
+        diff = source_4d_idx[:3] - center_4d_idx[:3]
+        magnitude = np.linalg.norm(diff)
+
+        source_to_target_vecs[source_idx][:3] = diff
+        source_to_target_vecs[source_idx][3] = magnitude
+        source_to_target_vecs[source_idx][4] = source
+
+    # Sort based on relative distance between sources and target
+    source_to_target_vecs = \
+        source_to_target_vecs[source_to_target_vecs[:, 3].argsort()]
+
+    print(source_to_target_vecs)
 
 
 
