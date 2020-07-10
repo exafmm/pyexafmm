@@ -11,16 +11,21 @@ from fmm.operator import (
 import fmm.hilbert
 
 
-def save_array_to_hdf5(dirname, filename, array):
+def save_array_to_hdf5(directory, filename, array):
     """
     Save a Numpy Array to HDF5 format.
 
     Parameters:
     -----------
+    dirname : str
     filename : str
     array : np.ndarray
+
+    Returns:
+    --------
+    None
     """
-    dirpath = pathlib.Path(dirname)
+    dirpath = pathlib.Path(directory)
     dirpath.mkdir(parents=True, exist_ok=True)
     filepath = dirpath / f'{filename}.hdf5'
 
@@ -29,7 +34,18 @@ def save_array_to_hdf5(dirname, filename, array):
 
 
 def load_hdf5(filename, directory):
+    """
+    Load HDF5 file from disk.
 
+    Parameters:
+    -----------
+    filename : str
+    directory : str
+
+    Returns:
+    --------
+    h5py.File
+    """
     dirpath = pathlib.Path(directory)
     filepath = dirpath / f'{filename}.hdf5'
 
@@ -37,6 +53,20 @@ def load_hdf5(filename, directory):
 
 
 def load_hdf5_to_array(dataname, filename, directory):
+    """
+    Load HDF5 file from disk into an Numpy array object.
+
+    Parameters:
+    ----------
+    dataname : str
+        HDF5 object data name
+    filename : str
+    directory : str
+
+    Returns:
+    --------
+    np.ndarray
+    """
 
     hdf5_file = load_hdf5(filename, directory)
 
@@ -44,6 +74,18 @@ def load_hdf5_to_array(dataname, filename, directory):
 
 
 def load_json(filename, directory):
+    """
+    Load json into dictionary.
+
+    Parameters:
+    -----------
+    filename : str
+    directory : str
+
+    Returns:
+    --------
+    dict
+    """
 
     dirpath = pathlib.Path(directory)
     filepath = dirpath/ f'{filename}.json'
@@ -57,8 +99,14 @@ def file_in_directory(filename, directory):
     """
     Check if a file with a given name already exists in a given directory.
 
+    Parameters:
+    -----------
     filename : str
     directory: str
+
+    Returns:
+    --------
+    bool
     """
     dirpath = pathlib.Path(directory).glob('*.hdf5')
 
@@ -142,7 +190,6 @@ def main(
         save_array_to_hdf5(dirname, 'dc2e_v', dc2e_v)
         save_array_to_hdf5(dirname, 'dc2e_u', dc2e_u)
 
-
     # Compute M2M operator
     if file_in_directory('m2m', dirname) and file_in_directory('l2l', dirname):
         print(f"Already Computed M2M & L2L Operators of Order {order}")
@@ -202,8 +249,6 @@ def main(
         save_array_to_hdf5(dirname, 'l2l', l2l)
 
     # Compute M2L operator
-
-    print(m2m[0].shape)
 
 
 
