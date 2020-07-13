@@ -278,44 +278,94 @@ def main(
 
         # Save m2m & l2l operators
         m2m = np.array(m2m)
+        print(m2m[0])
         l2l = np.array(l2l)
         print("Saving M2M & L2L Operators")
         save_array_to_hdf5(dirname, 'm2m', m2m)
         save_array_to_hdf5(dirname, 'l2l', l2l)
 
-    # Compute M2L operator
+    # Compute M2L operators
 
-    # Centre cube at level 3
+    if file_in_directory('m2l', dirname):
+        print(f"Already Computed M2L Operators of Order {order}")
 
-    x0 = np.array([[0, 0, 0]])
-    r0 = 1
+    else:
+        print(f"Computing M2L Operators of Order {order}")
+        m2l = []
+        # Centre cube at level 3
 
-    center_key = fmm.hilbert.get_key_from_point(x0, 3, x0, r0)
-    center_vec = fmm.hilbert.get_center_from_key(center_key, x0, r0)
-    center_4d_idx = fmm.hilbert.get_4d_index_from_key(center_key)
+        x0 = np.array([[0, 0, 0]])
+        r0 = 1
+        target_level = 3
 
-    interaction_list = compute_interaction_list(center_key)
+        center_key = fmm.hilbert.get_key_from_point(x0, target_level, x0, r0)
+        center_4d_idx = fmm.hilbert.get_4d_index_from_key(center_key)
 
-    source_to_target_vecs = np.zeros(shape=(189, 5))
-    for source_idx, source in enumerate(interaction_list):
+        interaction_list = compute_interaction_list(center_key)
 
-        source_4d_idx = fmm.hilbert.get_4d_index_from_key(source)
+        source_to_target_vecs = np.zeros(shape=(189, 5))
+        for source_idx, source in enumerate(interaction_list):
 
-        diff = source_4d_idx[:3] - center_4d_idx[:3]
-        magnitude = np.linalg.norm(diff)
+            source_4d_idx = fmm.hilbert.get_4d_index_from_key(source)
 
-        source_to_target_vecs[source_idx][:3] = diff
-        source_to_target_vecs[source_idx][3] = magnitude
-        source_to_target_vecs[source_idx][4] = source
+            diff = source_4d_idx[:3] - center_4d_idx[:3]
+            magnitude = np.linalg.norm(diff)
 
-    # Sort based on relative distance between sources and target
-    source_to_target_vecs = \
-        source_to_target_vecs[source_to_target_vecs[:, 3].argsort()]
+            source_to_target_vecs[source_idx][:3] = diff
+            source_to_target_vecs[source_idx][3] = magnitude
+            source_to_target_vecs[source_idx][4] = source
 
-    print(source_to_target_vecs)
+        # Sort based on relative distance between sources and target
+        source_to_target_vecs = \
+            source_to_target_vecs[source_to_target_vecs[:, 3].argsort()]
 
+        # Only need to compute M2L operators for unique distance vector
+        distances_considered = []
 
+        kernel_function = CONFIG_OBJECTS['kernel_functions'][kernel]
 
+        loading = '.'
+        for idx, source_to_target_vec in enumerate(source_to_target_vecs):
+            if source_to_target_vec[3] not in distances_considered:
+                print(loading)
+                loading += '.'
+                # Compute source surface
+                distances_considered.append(source_to_target_vec[3])
+                source_key = int(source_to_target_vec[-1])
+                source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
+                source_level = target_level
+
+                source_upward_equivalent_surface = scale_surface(
+                    surface, r0, source_level, source_center, alpha_inner
+                )
+
+                # Compute target surfaces
+                target_upward_check_surface = scale_surface(
+                    surface, r0, target_level, x0, alpha_outer
+                )
+
+                target_upward_equivalent_surface = scale_surface(
+                    surface, r0, target_level, x0, alpha_inner
+                )
+
+                uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent(
+                    kernel_function,
+                    target_upward_check_surface,
+                    target_upward_equivalent_surface
+                )
+
+                s2tc = gram_matrix(
+                    kernel_function,
+                    source_upward_equivalent_surface,
+                    target_upward_check_surface
+                )
+
+                tmp = np.matmul(uc2e_u, s2tc)
+                m2l.append(np.matmul(uc2e_v, tmp))
+
+        m2l = np.array(m2l)
+        print("Saving M2L Operators")
+        save_array_to_hdf5(dirname, 'm2l', m2l)
 
 
 if __name__ == "__main__":
