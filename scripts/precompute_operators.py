@@ -164,7 +164,7 @@ def compute_interaction_list(key):
 
 
 def main(
-    dirname,
+    operator_dirname,
     surface_filename,
     order,
     root_node_radius,
@@ -176,25 +176,25 @@ def main(
     ):
 
     # Check if surface already exists
-    if file_in_directory(surface_filename, dirname):
+    if file_in_directory(surface_filename, operator_dirname):
         print(f"Already Computed Surface of Order {order}")
         print(f"Loading ...")
-        surface = load_hdf5_to_array(surface_filename, surface_filename, dirname)
+        surface = load_hdf5_to_array(surface_filename, surface_filename, operator_dirname)
 
     else:
         print(f"Computing Surface of Order {order}")
         surface = compute_surface(order)
         print("Saving Surface to HDF5")
-        save_array_to_hdf5(dirname, f'{surface_filename}', surface)
+        save_array_to_hdf5(operator_dirname, f'{surface_filename}', surface)
 
     # Use surfaces to compute check to equivalent Gram matrix
-    if file_in_directory('uc2e_u', dirname):
+    if file_in_directory('uc2e_u', operator_dirname):
         print(f"Already Computed Check To Equivalent Kernel of Order {order}")
         print("Loading...")
-        uc2e_u = load_hdf5_to_array('uc2e_u', 'uc2e_u', dirname)
-        uc2e_v = load_hdf5_to_array('uc2e_v', 'uc2e_v', dirname)
-        dc2e_u = load_hdf5_to_array('dc2e_u', 'dc2e_u', dirname)
-        dc2e_v = load_hdf5_to_array('dc2e_v', 'dc2e_v', dirname)
+        uc2e_u = load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirname)
+        uc2e_v = load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirname)
+        dc2e_u = load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirname)
+        dc2e_v = load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirname)
 
     else:
         print(f"Computing SVD Decompositions of Check To Equivalent Gram Matrix of Order {order}")
@@ -220,13 +220,13 @@ def main(
 
         # Save matrices
         print("Saving SVD Decompositions")
-        save_array_to_hdf5(dirname, 'uc2e_v', uc2e_v)
-        save_array_to_hdf5(dirname, 'uc2e_u', uc2e_u)
-        save_array_to_hdf5(dirname, 'dc2e_v', dc2e_v)
-        save_array_to_hdf5(dirname, 'dc2e_u', dc2e_u)
+        save_array_to_hdf5(operator_dirname, 'uc2e_v', uc2e_v)
+        save_array_to_hdf5(operator_dirname, 'uc2e_u', uc2e_u)
+        save_array_to_hdf5(operator_dirname, 'dc2e_v', dc2e_v)
+        save_array_to_hdf5(operator_dirname, 'dc2e_u', dc2e_u)
 
     # Compute M2M operator
-    if file_in_directory('m2m', dirname) and file_in_directory('l2l', dirname):
+    if file_in_directory('m2m', operator_dirname) and file_in_directory('l2l', operator_dirname):
         print(f"Already Computed M2M & L2L Operators of Order {order}")
 
     else:
@@ -281,12 +281,12 @@ def main(
         print(m2m[0])
         l2l = np.array(l2l)
         print("Saving M2M & L2L Operators")
-        save_array_to_hdf5(dirname, 'm2m', m2m)
-        save_array_to_hdf5(dirname, 'l2l', l2l)
+        save_array_to_hdf5(operator_dirname, 'm2m', m2m)
+        save_array_to_hdf5(operator_dirname, 'l2l', l2l)
 
     # Compute M2L operators
 
-    if file_in_directory('m2l', dirname):
+    if file_in_directory('m2l', operator_dirname):
         print(f"Already Computed M2L Operators of Order {order}")
 
     else:
@@ -365,7 +365,7 @@ def main(
 
         m2l = np.array(m2l)
         print("Saving M2L Operators")
-        save_array_to_hdf5(dirname, 'm2l', m2l)
+        save_array_to_hdf5(operator_dirname, 'm2l', m2l)
 
 
 if __name__ == "__main__":
