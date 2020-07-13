@@ -1,3 +1,6 @@
+"""
+Script to precompute and store M2M/L2L and M2L operators.
+"""
 import pathlib
 
 import h5py
@@ -5,8 +8,9 @@ import json
 import numpy as np
 
 from fmm.fmm import Laplace
+from fmm.octree import Octree
 from fmm.operator import (
-    compute_surface, gram_matrix, scale_surface, compute_check_to_equivalent
+    compute_surface, gram_matrix, scale_surface, compute_check_to_equivalent_inverse
     )
 import fmm.hilbert
 
@@ -119,62 +123,34 @@ def file_in_directory(filename, directory):
 
 
 CONFIG_OBJECTS = {
-    'centers': {
-        'origin': np.array([[0, 0, 0]])
-    },
     'kernel_functions': {
         'laplace': Laplace()
     }
 }
 
 
-def compute_neighbors(key):
-    vec = fmm.hilbert.get_4d_index_from_key(key)
-    count = -1
-    offset = np.zeros(4, dtype=np.int64)
-
-    neighbors = []
-
-    for i in range(-1, 2):
-        for j in range(-1, 2):
-            for k in range(-1, 2):
-                count += 1
-                offset[:3] = i, j, k
-                neighbor_vec = vec + offset
-                neighbor_key = fmm.hilbert.get_key(neighbor_vec)
-                neighbors.append(neighbor_key)
-
-    return neighbors
-
-
-def compute_interaction_list(key):
-    parent_key = fmm.hilbert.get_parent(key)
-
-    parent_neighbors = compute_neighbors(parent_key)
-    child_neighbors = compute_neighbors(key)
-
-    interaction_list = []
-    for parent_neighbor in parent_neighbors:
-        children = fmm.hilbert.get_children(parent_neighbor)
-        for child in children:
-            if child not in child_neighbors:
-                interaction_list.append(child)
-
-    return interaction_list
-
-
 def main(
     operator_dirname,
     surface_filename,
     order,
-    root_node_radius,
-    root_node_level,
-    root_node_center,
     alpha_inner,
     alpha_outer,
     kernel,
+    data_dirname,
+    source_filename,
+    target_filename,
+    octree_max_level
     ):
 
+    # Step 0: onstruct Octree and load Python config objs
+    sources = load_hdf5_to_array('sources', source_filename, data_dirname)
+    targets = load_hdf5_to_array('targets', target_filename, data_dirname)
+    octree = Octree(sources, targets, octree_max_level)
+
+    # Load required Python objects
+    kernel_function = CONFIG_OBJECTS['kernel_functions'][kernel]
+
+    # Step 1: Compute a surface of a given order
     # Check if surface already exists
     if file_in_directory(surface_filename, operator_dirname):
         print(f"Already Computed Surface of Order {order}")
@@ -187,34 +163,45 @@ def main(
         print("Saving Surface to HDF5")
         save_array_to_hdf5(operator_dirname, f'{surface_filename}', surface)
 
-    # Use surfaces to compute check to equivalent Gram matrix
+    # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
+    # This is a useful quantity that will form the basis of most operators.
+
     if file_in_directory('uc2e_u', operator_dirname):
-        print(f"Already Computed Check To Equivalent Kernel of Order {order}")
+        print(f"Already Computed Inverse of Check To Equivalent Kernel of Order {order}")
         print("Loading...")
+
+        # Upward check to upward equivalent
         uc2e_u = load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirname)
         uc2e_v = load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirname)
+
+        # Downward check to downward equivalent
         dc2e_u = load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirname)
         dc2e_v = load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirname)
 
     else:
-        print(f"Computing SVD Decompositions of Check To Equivalent Gram Matrix of Order {order}")
-        center = CONFIG_OBJECTS['centers'][root_node_center]
-        level = root_node_level
-        radius = root_node_radius
+        print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {order}")
 
-        kernel_function = CONFIG_OBJECTS['kernel_functions'][kernel]
 
         # Compute upward check surface and upward equivalent surface
         # These are computed in a decomposed from the SVD of the Gram matrix
         # of these two surfaces
         upward_equivalent_surface = scale_surface(
-            surface, radius, level, center, alpha_inner
-        )
-        upward_check_surface = scale_surface(
-            surface, radius, level, center, alpha_outer
+            surface=surface,
+            radius=octree.radius,
+            level=0,
+            center=octree.center,
+            alpha=alpha_inner
         )
 
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent(
+        upward_check_surface = scale_surface(
+            surface=surface,
+            radius=octree.radius,
+            level=0,
+            center=octree.center,
+            alpha=alpha_outer
+        )
+
+        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent_inverse(
             kernel_function, upward_check_surface, upward_equivalent_surface
         )
 
@@ -230,10 +217,8 @@ def main(
         print(f"Already Computed M2M & L2L Operators of Order {order}")
 
     else:
-        parent_center = CONFIG_OBJECTS['centers'][root_node_center]
-        kernel_function = CONFIG_OBJECTS['kernel_functions'][kernel]
-
-        parent_radius = root_node_radius
+        parent_center = octree.center
+        parent_radius = octree.radius
         parent_level = 0
         child_level = 1
 
@@ -252,7 +237,7 @@ def main(
         loading = '.'
 
         print(f"Computing M2M & L2L Operators of Order {order}")
-        for child_center in child_centers:
+        for child_idx, child_center in enumerate(child_centers):
             print(loading)
 
             child_upward_equivalent_surface = scale_surface(
@@ -276,59 +261,67 @@ def main(
 
             loading += '.'
 
-        # Save m2m & l2l operators
+        # Save m2m & l2l operators, index is equivalent to their Hilbert key
         m2m = np.array(m2m)
-        print(m2m[0])
         l2l = np.array(l2l)
         print("Saving M2M & L2L Operators")
         save_array_to_hdf5(operator_dirname, 'm2m', m2m)
         save_array_to_hdf5(operator_dirname, 'l2l', l2l)
 
     # Compute M2L operators
-
     if file_in_directory('m2l', operator_dirname):
         print(f"Already Computed M2L Operators of Order {order}")
 
     else:
         print(f"Computing M2L Operators of Order {order}")
         m2l = []
-        # Centre cube at level 3
+        # Consider central cube at level 3, with a dense interaction list.
+        # This will be used to calculate all the m2l operators for a given
+        # Octree.
 
-        x0 = np.array([[0, 0, 0]])
-        r0 = 1
-        target_level = 3
+        x0 = octree.center
+        r0 = octree.radius
+        target_level = source_level = 3
 
         center_key = fmm.hilbert.get_key_from_point(x0, target_level, x0, r0)
-        center_4d_idx = fmm.hilbert.get_4d_index_from_key(center_key)
+        center_4d_index = fmm.hilbert.get_4d_index_from_key(center_key)
 
-        interaction_list = compute_interaction_list(center_key)
+        # Compute interaction list for the central node
+        interaction_list = fmm.hilbert.compute_interaction_list(center_key)
 
-        source_to_target_vecs = np.zeros(shape=(189, 5))
-        for source_idx, source in enumerate(interaction_list):
+        # Data structure to hold relative vector of sources 2 target, distance
+        # of the source node from the target in units of box width, and the key
+        # of the source node.
+        sources_relative_to_targets = np.zeros(shape=(189, 5))
 
-            source_4d_idx = fmm.hilbert.get_4d_index_from_key(source)
+        for source_idx, source_key in enumerate(interaction_list):
 
-            diff = source_4d_idx[:3] - center_4d_idx[:3]
-            magnitude = np.linalg.norm(diff)
+            source_4d_idx = fmm.hilbert.get_4d_index_from_key(source_key)
 
-            source_to_target_vecs[source_idx][:3] = diff
-            source_to_target_vecs[source_idx][3] = magnitude
-            source_to_target_vecs[source_idx][4] = source
+            source_relatie_to_target = source_4d_idx[:3] - center_4d_index[:3]
+            magnitude = np.linalg.norm(source_relatie_to_target)
+
+            sources_relative_to_targets[source_idx][:3] = source_relatie_to_target
+            sources_relative_to_targets[source_idx][3] = magnitude
+            sources_relative_to_targets[source_idx][4] = source_key
 
         # Sort based on relative distance between sources and target
-        source_to_target_vecs = \
-            source_to_target_vecs[source_to_target_vecs[:, 3].argsort()]
+        sources_relative_to_targets = \
+            sources_relative_to_targets[sources_relative_to_targets[:, 3].argsort()]
 
-        # Only need to compute M2L operators for unique distance vector
+        # Only need to compute M2L operators for unique distance vector, as if
+        # the distance is the same the M2L operation is actually the same.
         distances_considered = []
-
-        kernel_function = CONFIG_OBJECTS['kernel_functions'][kernel]
+        sources_relative_to_targets_idx_ptr = []
 
         loading = '.'
-        for idx, source_to_target_vec in enumerate(source_to_target_vecs):
+        for idx, source_to_target_vec in enumerate(sources_relative_to_targets):
             if source_to_target_vec[3] not in distances_considered:
                 print(loading)
-                loading += '.'
+
+                # Retain index pointer
+                sources_relative_to_targets_idx_ptr.append(idx)
+
                 # Compute source surface
                 distances_considered.append(source_to_target_vec[3])
                 source_key = int(source_to_target_vec[-1])
@@ -339,20 +332,14 @@ def main(
                     surface, r0, source_level, source_center, alpha_inner
                 )
 
-                # Compute target surfaces
+                # Compute target check surface
                 target_upward_check_surface = scale_surface(
                     surface, r0, target_level, x0, alpha_outer
                 )
 
-                target_upward_equivalent_surface = scale_surface(
-                    surface, r0, target_level, x0, alpha_inner
-                )
-
-                uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent(
-                    kernel_function,
-                    target_upward_check_surface,
-                    target_upward_equivalent_surface
-                )
+                scale = 2**(source_level)
+                uc2e_v = scale * uc2e_v
+                uc2e_u = scale * uc2e_u
 
                 s2tc = gram_matrix(
                     kernel_function,
@@ -363,9 +350,26 @@ def main(
                 tmp = np.matmul(uc2e_u, s2tc)
                 m2l.append(np.matmul(uc2e_v, tmp))
 
+                loading += '.'
+
         m2l = np.array(m2l)
         print("Saving M2L Operators")
+
+        # Indexes in m2l array are related to the `sources_relative_to_targets`
+        # datastructure via corresponding index pointer.
         save_array_to_hdf5(operator_dirname, 'm2l', m2l)
+
+        save_array_to_hdf5(
+            operator_dirname,
+            'sources_relative_to_targets',
+            sources_relative_to_targets
+        )
+
+        save_array_to_hdf5(
+            operator_dirname,
+            'sources_relative_to_targets_idx_ptr',
+            sources_relative_to_targets_idx_ptr
+        )
 
 
 if __name__ == "__main__":

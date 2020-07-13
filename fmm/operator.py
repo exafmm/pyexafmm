@@ -110,7 +110,7 @@ def gram_matrix(kernel, sources, targets):
     return matrix
 
 
-def compute_check_to_equivalent(
+def compute_check_to_equivalent_inverse(
     kernel_function, upward_check_surface, upward_equivalent_surface):
 
     # Compute Gram Matrix of upward check to upward equivalent surfaces
@@ -137,5 +137,3 @@ def compute_check_to_equivalent(
     dc2e_u = v_t
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
-
-

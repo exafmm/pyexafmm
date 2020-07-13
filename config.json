@@ -3,12 +3,10 @@
     "operator_dirname": "../precomputed_operators_order_2/",
     "surface_filename": "surface",
     "kernel": "laplace",
-    "root_node_radius": 1,
-    "root_node_level": 0,
-    "root_node_center": "origin",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
-    "data_dirname": "data",
+    "data_dirname": "../data",
     "source_filename": "random_sources",
-    "target_filename": "random_sources"
+    "target_filename": "random_targets",
+    "octree_max_level": 5
 }
