@@ -5,6 +5,7 @@ Data manipulation and i/o utils.
 import pathlib
 
 import h5py
+import json
 
 
 def save_array_to_hdf5(directory, filename, array):

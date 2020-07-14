@@ -23,17 +23,17 @@ CONFIG_OBJECTS = {
 
 
 def main(
-    operator_dirname,
-    surface_filename,
-    order,
-    alpha_inner,
-    alpha_outer,
-    kernel,
-    data_dirname,
-    source_filename,
-    target_filename,
-    octree_max_level
-    ):
+        operator_dirname,
+        surface_filename,
+        order,
+        alpha_inner,
+        alpha_outer,
+        kernel,
+        data_dirname,
+        source_filename,
+        target_filename,
+        octree_max_level
+        ):
 
     # Step 0: onstruct Octree and load Python config objs
     sources = data.load_hdf5_to_array('sources', source_filename, data_dirname)
@@ -78,6 +78,7 @@ def main(
         # Compute upward check surface and upward equivalent surface
         # These are computed in a decomposed from the SVD of the Gram matrix
         # of these two surfaces
+
         upward_equivalent_surface = scale_surface(
             surface=surface,
             radius=octree.radius,
@@ -106,7 +107,10 @@ def main(
         data.save_array_to_hdf5(operator_dirname, 'dc2e_u', dc2e_u)
 
     # Compute M2M operator
-    if file_in_directory('m2m', operator_dirname) and file_in_directory('l2l', operator_dirname):
+    if (
+            data.file_in_directory('m2m', operator_dirname)
+            and data.file_in_directory('l2l', operator_dirname)
+       ):
         print(f"Already Computed M2M & L2L Operators of Order {order}")
 
     else:
@@ -139,8 +143,8 @@ def main(
 
             pc2ce = gram_matrix(
                 kernel_function,
+                child_upward_equivalent_surface,
                 parent_upward_check_surface,
-                child_upward_equivalent_surface
             )
 
             # Compute M2M operator for this octant
@@ -266,5 +270,5 @@ def main(
 
 
 if __name__ == "__main__":
-    config = load_json('config', '../')
+    config = data.load_json('config', '../')
     main(**config)

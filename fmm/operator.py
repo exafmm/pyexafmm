@@ -1,4 +1,5 @@
-"""Cached Operator Class
+"""
+Operator helper methods.
 """
 import numpy as np
 
@@ -75,10 +76,12 @@ def scale_surface(surface, radius, level, center, alpha):
     scaled_radius = (0.5)**level * radius
     dilated_radius = alpha*scaled_radius
 
-    for i in range(n_coeffs):
-        surface[i] = surface[i]*dilated_radius + center
+    scaled_surface = np.copy(surface)
 
-    return surface
+    for i in range(n_coeffs):
+        scaled_surface[i] = surface[i]*dilated_radius + center
+
+    return scaled_surface
 
 
 def gram_matrix(kernel, sources, targets):
@@ -121,7 +124,7 @@ def compute_check_to_equivalent_inverse(
     u, s, v_t = np.linalg.svd(upward_check_to_equivalent)
 
     # Compute Pseudo-Inverse of Gram matrix
-    tol = 1e-1
+    tol = 1e-5
     for i, val in enumerate(s):
         if  abs(val) < tol:
             s[i] = 0
