@@ -16,8 +16,8 @@ import fmm.hilbert
 
 import utils.data as data
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PARENT = pathlib.Path(HERE).parent
+HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+PARENT = HERE.parent
 
 
 CONFIG_OBJECTS = {
