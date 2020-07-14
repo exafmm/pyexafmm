@@ -2,10 +2,10 @@
 Data manipulation and i/o utils.
 """
 
+import json
 import pathlib
 
 import h5py
-import json
 
 
 def save_array_to_hdf5(directory, filename, array):
@@ -70,7 +70,7 @@ def load_hdf5_to_array(dataname, filename, directory):
     return hdf5_file[dataname][:]
 
 
-def load_json(filename, directory):
+def load_json(filepath):
     """
     Load json into dictionary.
 
@@ -83,9 +83,6 @@ def load_json(filename, directory):
     --------
     dict
     """
-
-    dirpath = pathlib.Path(directory)
-    filepath = dirpath/ f'{filename}.json'
 
     with open(filepath, 'r') as f:
         obj = json.load(f)

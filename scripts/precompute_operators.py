@@ -1,8 +1,10 @@
 """
 Script to precompute and store M2M/L2L and M2L operators.
 """
+import os
+import pathlib
+import sys
 
-import json
 import numpy as np
 
 from fmm.fmm import Laplace
@@ -13,6 +15,9 @@ from fmm.operator import (
 import fmm.hilbert
 
 import utils.data as data
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PARENT = pathlib.Path(HERE).parent
 
 
 CONFIG_OBJECTS = {
@@ -35,9 +40,15 @@ def main(
         octree_max_level
         ):
 
+    data_dirpath = PARENT / f"{data_dirname}/"
+
+    operator_dirpath = PARENT / f"{operator_dirname}/"
+
     # Step 0: onstruct Octree and load Python config objs
-    sources = data.load_hdf5_to_array('sources', source_filename, data_dirname)
-    targets = data.load_hdf5_to_array('targets', target_filename, data_dirname)
+    print("source filename", data_dirpath)
+
+    sources = data.load_hdf5_to_array('sources', source_filename, data_dirpath)
+    targets = data.load_hdf5_to_array('targets', target_filename, data_dirpath)
     octree = Octree(sources, targets, octree_max_level)
 
     # Load required Python objects
@@ -45,31 +56,31 @@ def main(
 
     # Step 1: Compute a surface of a given order
     # Check if surface already exists
-    if data.file_in_directory(surface_filename, operator_dirname):
+    if data.file_in_directory(surface_filename, operator_dirpath):
         print(f"Already Computed Surface of Order {order}")
         print(f"Loading ...")
-        surface = data.load_hdf5_to_array(surface_filename, surface_filename, operator_dirname)
+        surface = data.load_hdf5_to_array(surface_filename, surface_filename, operator_dirpath)
 
     else:
         print(f"Computing Surface of Order {order}")
         surface = compute_surface(order)
         print("Saving Surface to HDF5")
-        data.save_array_to_hdf5(operator_dirname, f'{surface_filename}', surface)
+        data.save_array_to_hdf5(operator_dirpath, f'{surface_filename}', surface)
 
     # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # This is a useful quantity that will form the basis of most operators.
 
-    if data.file_in_directory('uc2e_u', operator_dirname):
+    if data.file_in_directory('uc2e_u', operator_dirpath):
         print(f"Already Computed Inverse of Check To Equivalent Kernel of Order {order}")
         print("Loading...")
 
         # Upward check to upward equivalent
-        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirname)
-        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirname)
+        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
+        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
 
         # Downward check to downward equivalent
-        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirname)
-        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirname)
+        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirpath)
+        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirpath)
 
     else:
         print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {order}")
@@ -101,15 +112,15 @@ def main(
 
         # Save matrices
         print("Saving SVD Decompositions")
-        data.save_array_to_hdf5(operator_dirname, 'uc2e_v', uc2e_v)
-        data.save_array_to_hdf5(operator_dirname, 'uc2e_u', uc2e_u)
-        data.save_array_to_hdf5(operator_dirname, 'dc2e_v', dc2e_v)
-        data.save_array_to_hdf5(operator_dirname, 'dc2e_u', dc2e_u)
+        data.save_array_to_hdf5(operator_dirpath, 'uc2e_v', uc2e_v)
+        data.save_array_to_hdf5(operator_dirpath, 'uc2e_u', uc2e_u)
+        data.save_array_to_hdf5(operator_dirpath, 'dc2e_v', dc2e_v)
+        data.save_array_to_hdf5(operator_dirpath, 'dc2e_u', dc2e_u)
 
     # Compute M2M operator
     if (
-            data.file_in_directory('m2m', operator_dirname)
-            and data.file_in_directory('l2l', operator_dirname)
+            data.file_in_directory('m2m', operator_dirpath)
+            and data.file_in_directory('l2l', operator_dirpath)
        ):
         print(f"Already Computed M2M & L2L Operators of Order {order}")
 
@@ -162,11 +173,11 @@ def main(
         m2m = np.array(m2m)
         l2l = np.array(l2l)
         print("Saving M2M & L2L Operators")
-        data.save_array_to_hdf5(operator_dirname, 'm2m', m2m)
-        data.save_array_to_hdf5(operator_dirname, 'l2l', l2l)
+        data.save_array_to_hdf5(operator_dirpath, 'm2m', m2m)
+        data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
 
     # Compute M2L operators
-    if data.file_in_directory('m2l', operator_dirname):
+    if data.file_in_directory('m2l', operator_dirpath):
         print(f"Already Computed M2L Operators of Order {order}")
 
     else:
@@ -254,7 +265,7 @@ def main(
 
         # Indexes in m2l array are related to the `sources_relative_to_targets`
         # datastructure via corresponding index pointer.
-        data.save_array_to_hdf5(operator_dirname, 'm2l', m2l)
+        data.save_array_to_hdf5(operator_dirpath, 'm2l', m2l)
 
         data.save_array_to_hdf5(
             operator_dirname,
@@ -270,5 +281,11 @@ def main(
 
 
 if __name__ == "__main__":
-    config = data.load_json('config', '../')
-    main(**config)
+
+    if len(sys.argv) < 2:
+        raise ValueError(
+            f'Must Specify Config F! python precompute_operators.py <config>.json')
+    else:
+        config_filepath = sys.argv[1]
+        config = data.load_json(config_filepath)
+        main(**config)

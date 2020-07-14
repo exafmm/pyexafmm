@@ -46,3 +46,4 @@ ci [OPTIONS] COMMAND [ARGS]
 | `build`	| Build dev version in current python env |
 | `test`	| Run test suite	|
 | `lint`	| Run project linter 	|
+| `compute-operators` | Run operator pre-computations |
