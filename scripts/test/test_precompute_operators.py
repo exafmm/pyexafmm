@@ -20,16 +20,10 @@ from utils.data import load_json
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
 CONFIG = load_json(CONFIG_FILEPATH)
+
 ORDER = CONFIG['order']
-
-@pytest.fixture
-def surface():
-    return compute_surface(ORDER)
-
-
-@pytest.fixture
-def kernel_function():
-    return Laplace()
+SURFACE = compute_surface(ORDER)
+KERNEL_FUNCTION = Laplace()
 
 
 def setup_module(module):
@@ -43,7 +37,7 @@ def teardown_module(module):
     subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
 
 
-def test_m2m(kernel_function, surface):
+def test_m2m():
 
     sources = data.load_hdf5_to_array('sources', 'random_sources', '../../data')
     targets = data.load_hdf5_to_array('targets', 'random_targets', '../../data')
@@ -73,11 +67,11 @@ def test_m2m(kernel_function, surface):
 
     distant_point = np.array([[1e3, 0, 0]])
 
-    child_equivalent_surface = scale_surface(surface, r0, child_level, child_center, 1.05)
-    parent_equivalent_surface = scale_surface(surface, r0, parent_level, parent_center, 1.05)
+    child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 1.05)
+    parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 1.05)
 
-    parent_direct = p2p(kernel_function, distant_point, parent_equivalent_surface, parent_equivalent_density)
-    child_direct = p2p(kernel_function, distant_point, child_equivalent_surface, child_equivalent_density)
+    parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
+    child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
 
     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
 
