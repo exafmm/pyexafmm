@@ -85,7 +85,6 @@ def main(
     else:
         print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {order}")
 
-
         # Compute upward check surface and upward equivalent surface
         # These are computed in a decomposed from the SVD of the Gram matrix
         # of these two surfaces
@@ -216,50 +215,37 @@ def main(
             sources_relative_to_targets[source_idx][3] = magnitude
             sources_relative_to_targets[source_idx][4] = source_key
 
-        # Sort based on relative distance between sources and target
-        sources_relative_to_targets = \
-            sources_relative_to_targets[sources_relative_to_targets[:, 3].argsort()]
-
-        # Only need to compute M2L operators for unique distance vector, as if
-        # the distance is the same the M2L operation is actually the same.
-        distances_considered = []
-        sources_relative_to_targets_idx_ptr = []
-
         loading = '.'
+
         for idx, source_to_target_vec in enumerate(sources_relative_to_targets):
-            if source_to_target_vec[3] not in distances_considered:
-                print(loading)
+            print(loading)
 
-                # Retain index pointer
-                sources_relative_to_targets_idx_ptr.append(idx)
-
-                # Compute source surface
-                distances_considered.append(source_to_target_vec[3])
-                source_key = int(source_to_target_vec[-1])
-                source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
-                source_level = target_level
-
-                source_upward_equivalent_surface = scale_surface(
-                    surface, r0, source_level, source_center, alpha_inner
+            source_key = int(source_to_target_vec[-1])
+            source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
+            source_level = target_level
+            source_upward_equivalent_surface = scale_surface(
+                surface, r0, source_level, source_center, alpha_inner
                 )
 
-                # Compute target check surface
-                target_upward_check_surface = scale_surface(
-                    surface, r0, target_level, x0, alpha_outer
-                )
+            target_center = fmm.hilbert.get_center_from_key(center_key, x0, r0)
 
-                scale = 2**(source_level)
+            # Compute target check surface
+            target_downward_check_surface = scale_surface(
+                surface, r0, target_level, target_center, alpha_inner
+            )
 
-                s2tc = gram_matrix(
-                    kernel_function,
-                    source_upward_equivalent_surface,
-                    target_upward_check_surface
-                )
+            scale = (1/2)**(target_level)
 
-                tmp = np.matmul(scale*uc2e_u, s2tc)
-                m2l.append(np.matmul(uc2e_v, tmp))
+            se2tc = gram_matrix(
+                kernel_function,
+                source_upward_equivalent_surface,
+                target_downward_check_surface
+            )
 
-                loading += '.'
+            tmp = np.matmul(dc2e_u, se2tc)
+            m2l.append(np.matmul(scale*dc2e_v, tmp))
+
+            loading += '.'
 
         m2l = np.array(m2l)
         print("Saving M2L Operators")
@@ -272,12 +258,6 @@ def main(
             operator_dirpath,
             'sources_relative_to_targets',
             sources_relative_to_targets
-        )
-
-        data.save_array_to_hdf5(
-            operator_dirpath,
-            'sources_relative_to_targets_idx_ptr',
-            sources_relative_to_targets_idx_ptr
         )
 
 

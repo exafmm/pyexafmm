@@ -628,6 +628,7 @@ def p2p(kernel_function, targets, sources, source_densities):
         for j, source in enumerate(sources):
             source_density = source_densities[j]
             potential += kernel_function(target, source)*source_density
+
         target_densities[i] = potential
 
     return Potential(targets, target_densities)
