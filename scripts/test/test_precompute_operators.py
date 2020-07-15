@@ -69,14 +69,6 @@ def sources_relative_to_targets():
     )
 
 
-# @pytest.fixture
-# def sources_relative_to_targets_idx_ptr():
-#     return data.load_hdf5_to_array(
-#         'sources_relative_to_targets_idx_ptr', 'sources_relative_to_targets_idx_ptr',
-#         OPERATOR_DIRPATH
-#     )
-
-
 @pytest.fixture
 def npoints():
     return 6*(ORDER-1)**2 + 2
@@ -164,12 +156,7 @@ def test_m2l(
 
     relative_index = source_index - target_index
 
-    print(source_index)
     result = np.where(np.all(sources_relative_to_targets[:, :3] == relative_index[:3], axis=1))
-
-    print('result', result)
-
-    # a = sources_relative_to_targets_idx_ptr
 
     operator_index = result[0]
 

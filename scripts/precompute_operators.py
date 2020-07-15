@@ -141,13 +141,13 @@ def main(
         m2m = []
         l2l = []
 
-        loading = '.'
+        loading = len(child_centers)
 
         scale = (1/2)**(child_level)
 
         print(f"Computing M2M & L2L Operators of Order {order}")
         for child_idx, child_center in enumerate(child_centers):
-            print(loading)
+            print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
 
             child_upward_equivalent_surface = scale_surface(
                 surface, parent_radius, child_level, child_center, alpha_inner
@@ -168,8 +168,6 @@ def main(
             pc2ce = pc2ce.T
             tmp = np.matmul(pc2ce, scale*dc2e_v)
             l2l.append(np.matmul(tmp, dc2e_u))
-
-            loading += '.'
 
         # Save m2m & l2l operators, index is equivalent to their Hilbert key
         m2m = np.array(m2m)
@@ -215,10 +213,10 @@ def main(
             sources_relative_to_targets[source_idx][3] = magnitude
             sources_relative_to_targets[source_idx][4] = source_key
 
-        loading = '.'
+        loading = f'{len(sources_relative_to_targets)}'
 
         for idx, source_to_target_vec in enumerate(sources_relative_to_targets):
-            print(loading)
+            print(f'Computed ({idx+1}/{loading}) M2L operators')
 
             source_key = int(source_to_target_vec[-1])
             source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
@@ -244,8 +242,6 @@ def main(
 
             tmp = np.matmul(dc2e_u, se2tc)
             m2l.append(np.matmul(scale*dc2e_v, tmp))
-
-            loading += '.'
 
         m2l = np.array(m2l)
         print("Saving M2L Operators")
