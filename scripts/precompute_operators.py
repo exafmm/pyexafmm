@@ -144,6 +144,8 @@ def main(
 
         loading = '.'
 
+        scale = (1/2)**(child_level)
+
         print(f"Computing M2M & L2L Operators of Order {order}")
         for child_idx, child_center in enumerate(child_centers):
             print(loading)
@@ -158,13 +160,14 @@ def main(
                 parent_upward_check_surface,
             )
 
+
             # Compute M2M operator for this octant
             tmp = np.matmul(uc2e_u, pc2ce)
             m2m.append(np.matmul(uc2e_v, tmp))
 
             # Compute L2L operator for this octant
             pc2ce = pc2ce.T
-            tmp = np.matmul(pc2ce, dc2e_v)
+            tmp = np.matmul(pc2ce, scale*dc2e_v)
             l2l.append(np.matmul(tmp, dc2e_u))
 
             loading += '.'
@@ -206,10 +209,10 @@ def main(
 
             source_4d_idx = fmm.hilbert.get_4d_index_from_key(source_key)
 
-            source_relatie_to_target = source_4d_idx[:3] - center_4d_index[:3]
-            magnitude = np.linalg.norm(source_relatie_to_target)
+            source_relative_to_target = source_4d_idx[:3] - center_4d_index[:3]
+            magnitude = np.linalg.norm(source_relative_to_target)
 
-            sources_relative_to_targets[source_idx][:3] = source_relatie_to_target
+            sources_relative_to_targets[source_idx][:3] = source_relative_to_target
             sources_relative_to_targets[source_idx][3] = magnitude
             sources_relative_to_targets[source_idx][4] = source_key
 
@@ -246,8 +249,6 @@ def main(
                 )
 
                 scale = 2**(source_level)
-                uc2e_v = scale * uc2e_v
-                uc2e_u = scale * uc2e_u
 
                 s2tc = gram_matrix(
                     kernel_function,
@@ -255,7 +256,7 @@ def main(
                     target_upward_check_surface
                 )
 
-                tmp = np.matmul(uc2e_u, s2tc)
+                tmp = np.matmul(scale*uc2e_u, s2tc)
                 m2l.append(np.matmul(uc2e_v, tmp))
 
                 loading += '.'
@@ -268,13 +269,13 @@ def main(
         data.save_array_to_hdf5(operator_dirpath, 'm2l', m2l)
 
         data.save_array_to_hdf5(
-            operator_dirname,
+            operator_dirpath,
             'sources_relative_to_targets',
             sources_relative_to_targets
         )
 
         data.save_array_to_hdf5(
-            operator_dirname,
+            operator_dirpath,
             'sources_relative_to_targets_idx_ptr',
             sources_relative_to_targets_idx_ptr
         )
@@ -284,7 +285,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         raise ValueError(
-            f'Must Specify Config F! python precompute_operators.py <config>.json')
+            f'Must Specify Config Filepath!\
+                e.g. `python precompute_operators.py /path/to/config.json`')
     else:
         config_filepath = sys.argv[1]
         config = data.load_json(config_filepath)
