@@ -1,6 +1,6 @@
 {
-    "order": 9,
-    "operator_dirname": "precomputed_operators_order_9",
+    "order": 2,
+    "operator_dirname": "precomputed_operators_order_2",
     "surface_filename": "surface",
     "kernel": "laplace",
     "alpha_inner": 1.05,

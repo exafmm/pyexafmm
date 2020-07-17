@@ -8,7 +8,7 @@ import fmm.hilbert as hilbert
 class Octree:
     """Data structure for handling Octrees."""
 
-    def __init__(self, sources, targets, maximum_level):
+    def __init__(self, sources, targets, maximum_level, source_densities):
         """
         Initialize an Octree.
 
@@ -28,6 +28,9 @@ class Octree:
 
         # The actual targets
         self._targets = targets
+
+        # Densities at sources
+        self._source_densities = source_densities
 
         # Center of the box and radius of the box
         self._center, self._radius = compute_bounds(sources, targets)
@@ -132,6 +135,10 @@ class Octree:
     def targets(self):
         """Return the targets."""
         return self._targets
+
+    @property
+    def source_densities(self):
+        return self._source_densities
 
     @property
     def target_neighbors(self):

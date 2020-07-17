@@ -1,61 +1,43 @@
 """
 Test the FMM
 """
-from functools import partial
-
 import numpy as np
 import pytest
 
-from fmm.fmm import Fmm, Laplace, surface, p2p, p2m, m2m, m2l, l2l
+from fmm.fmm import Fmm
 from fmm.octree import Octree
+from fmm.operator import scale_surface, p2p
 import fmm.hilbert as hilbert
 
 
-@pytest.mark.parametrize(
-    "level",
-    [
-        1, 2, 3
-    ]
-)
-def test_upward_pass(level, order, n_level_octree):
-    """Test whether Multipole expansion is translated to root node.
-    """
-    octree = n_level_octree(level)
-    fmm = Fmm()
-
+def test_upward_pass():
+    fmm = Fmm(config_filename='test_config.json')
     fmm.upward_pass()
-    x0 = octree.center
-    r0 = octree.radius
 
-    equivalent_surface = surface(
-        order=order,
-        radius=r0,
-        level=0,
-        center=x0,
-        alpha=1.05
+    root_equivalent_surface = scale_surface(
+        fmm.surface, fmm.octree.radius, 0, fmm.octree.center, 1.05
     )
 
-    multipole_expansion = fmm.source_data[0]
+    # print(fmm.source_data[0])
 
-    distant_point = np.array([[1e4, 0, 0]])
+    distant_point = np.array([[1e3, 0, 0]])
 
-    multipole_result = p2p(
-        kernel_function=laplace,
-        targets=distant_point,
-        sources=equivalent_surface,
-        source_densities=multipole_expansion.expansion
+    direct_fmm = p2p(
+        fmm.kernel_function,
+        distant_point,
+        root_equivalent_surface,
+        fmm.source_densities
     )
 
-    direct_result = p2p(
-        kernel_function=laplace,
-        targets=distant_point,
-        sources=octree.sources,
-        source_densities=np.ones(len(octree.sources))
+    direct_particles = p2p(
+        fmm.kernel_function,
+        distant_point,
+        fmm.sources,
+        fmm.source_densities
     )
+    print(direct_fmm, direct_particles)
+    assert False
 
-    print(direct_result)
-
-    assert np.isclose(direct_result.density, multipole_result.density, rtol=1.5e-1)
 
 
 # def test_downward_pass(n_level_octree, order):

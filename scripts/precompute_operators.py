@@ -35,7 +35,6 @@ def main(
         ):
 
     data_dirpath = PARENT / f"{data_dirname}/"
-
     operator_dirpath = PARENT / f"{operator_dirname}/"
 
     # Step 0: onstruct Octree and load Python config objs
@@ -43,7 +42,9 @@ def main(
 
     sources = data.load_hdf5_to_array('sources', source_filename, data_dirpath)
     targets = data.load_hdf5_to_array('targets', target_filename, data_dirpath)
-    octree = Octree(sources, targets, octree_max_level)
+    source_densities = data.load_hdf5_to_array(
+        'source_densities', source_densities_filename, data_dirpath)
+    octree = Octree(sources, targets, octree_max_level, source_densities)
 
     # Load required Python objects
     kernel_function = KERNELS[kernel]()

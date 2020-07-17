@@ -1,6 +1,6 @@
 {
-    "order": 2,
-    "operator_dirname": "precomputed_operators_order_2",
+    "order": 5,
+    "operator_dirname": "precomputed_operators_order_5",
     "surface_filename": "surface",
     "kernel": "laplace",
     "alpha_inner": 1.05,
@@ -9,5 +9,5 @@
     "source_filename": "random_sources",
     "target_filename": "random_targets",
     "source_densities_filename": "source_densities",
-    "octree_max_level": 5
+    "octree_max_level": 3
 }

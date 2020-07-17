@@ -41,8 +41,10 @@ def teardown_module(module):
 def octree():
     sources = data.load_hdf5_to_array('sources', 'random_sources', '../../data')
     targets = data.load_hdf5_to_array('targets', 'random_targets', '../../data')
+    source_densities = data.load_hdf5_to_array(
+        'source_densities', 'source_densities', '../../data')
 
-    return Octree(sources, targets, maximum_level=5)
+    return Octree(sources, targets, 5, source_densities)
 
 @pytest.fixture
 def m2m():

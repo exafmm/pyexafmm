@@ -7,7 +7,7 @@ import numpy as np
 import fmm.hilbert as hilbert
 from fmm.density import Potential
 from fmm.node import Node
-from fmm.operator import p2p, p2m
+from fmm.operator import p2p, scale_surface
 from fmm.kernel import KERNELS
 from fmm.octree import Octree
 
@@ -35,26 +35,36 @@ class Fmm:
 
         self.config = load_json(config_filepath)
 
-        self.operator_dirpath = PARENT/ self.config["operator_dirname"]
+        operator_dirpath = PARENT/ self.config["operator_dirname"]
         source_filename = self.config['source_filename']
         target_filename = self.config['target_filename']
         source_densities_filename = self.config['source_densities_filename']
 
-        sources = load_hdf5_to_array('sources', source_filename, data_dirpath)
-        targets = load_hdf5_to_array('targets', target_filename, data_dirpath)
-
-        source_densities = load_hdf5_to_array(
+        # Load sources, targets and source densities
+        self.surface = load_hdf5_to_array('surface', 'surface', operator_dirpath)
+        self.sources = load_hdf5_to_array('sources', source_filename, data_dirpath)
+        self.targets = load_hdf5_to_array('targets', target_filename, data_dirpath)
+        self.source_densities = load_hdf5_to_array(
             'source_densities', source_densities_filename, data_dirpath)
 
-        # Extract config properties
+        # Load precomputed operators
+        self.uc2e_u = load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
+        self.uc2e_v = load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
+        self.m2m = load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
+        self.l2l = load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
+        self.m2l = load_hdf5_to_array('m2l', 'm2l', operator_dirpath)
+
+        # Load configuration properties
+        self.maximum_level = self.config['octree_max_level']
         self.kernel_function = KERNELS[self.config['kernel']]()
         self.order = self.config['order']
-        self.maximum_level = self.config['octree_max_level']
-        self.octree = Octree(sources, targets, self.maximum_level)
+        self.octree = Octree(
+            self.sources, self.targets, self.maximum_level, self.source_densities)
 
         # Coefficients discretising surface of a node
         self.ncoefficients = 6*(self.order-1)**2 + 2
 
+        # Containers for results
         self.result_data = [
             Potential(target, np.zeros(1, dtype='float64'))
             for target in self.octree.targets
@@ -80,7 +90,7 @@ class Fmm:
 
         # Post-order traversal of octree, translating multipole expansions from
         # leaf nodes to root
-        for level in range(self.octree.maximum_level - 1, -1, -1):
+        for level in range(self.octree.maximum_level-1, -1, -1):
             for key in self.octree.non_empty_source_nodes_by_level[level]:
                 self.multipole_to_multipole(key)
 
@@ -119,8 +129,9 @@ class Fmm:
             : self.octree.source_index_ptr[leaf_node_index + 1]
         ]
 
-        # Find leaf sources
+        # Find leaf sources, and leaf source densities
         leaf_sources = self.octree.sources[source_indices]
+        leaf_source_densities = self.octree.source_densities[source_indices]
 
         # Just adding index from argsort (sources by leafs)
         self.source_data[
@@ -135,39 +146,37 @@ class Fmm:
             leaf_key, self.octree.center, self.octree.radius
         )
 
-        # Compute expansion, and add to source data
-        result = p2m(
-            operator_dirpath=self.operator_dirpath,
-            kernel_function=self.kernel_function,
-            leaf_sources=leaf_sources,
-            leaf_source_densities=np.ones(len(leaf_sources)),
-            center=leaf_center,
+        upward_check_surface = scale_surface(
+            surface=self.surface,
             radius=self.octree.radius,
-            level=self.octree.maximum_level
+            level=self.octree.maximum_level,
+            center=leaf_center,
+            alpha=2.95
         )
 
-        self.source_data[leaf_key].expansion = result.density
+        scale = (1/2)**self.octree.maximum_level
+
+        check_potential = p2p(
+            kernel_function=self.kernel_function,
+            targets=upward_check_surface,
+            sources=leaf_sources,
+            source_densities=leaf_source_densities
+            ).density
+
+        tmp = np.matmul(scale*self.uc2e_u, check_potential)
+        upward_equivalent_density = np.matmul(self.uc2e_v, tmp)
+
+        self.source_data[leaf_key].expansion = upward_equivalent_density
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
-
-        # Compute center of parent boxes
-
-        parent_center = hilbert.get_center_from_key(
-            key, self.octree.center, self.octree.radius
-        )
-        parent_level = hilbert.get_level(key)
 
         for child in hilbert.get_children(key):
             # Only going through non-empty child nodes
             if self.octree.source_node_to_index[child] != -1:
 
-                # Compute center of child box in cartesian coordinates
-                child_center = hilbert.get_center_from_key(
-                    child, self.octree.center, self.octree.radius
-                    )
-
-                child_level = hilbert.get_level(child)
+                # Compute operator index
+                operator_idx = (child % 8) - 1
 
                 # Updating indices
                 self.source_data[key].indices.update(
@@ -177,19 +186,12 @@ class Fmm:
                 # Get child equivalent density
                 child_equivalent_density = self.source_data[child].expansion
 
-                # Compute expansion, and store
-                # result = m2m(
-                #     kernel_function=self.kernel_function,
-                #     parent_center=parent_center,
-                #     child_center=child_center,
-                #     child_level=child_level,
-                #     parent_level=parent_level,
-                #     radius=self.octree.radius,
-                #     order=self.order,
-                #     child_equivalent_density=child_equivalent_density
-                # )
+                # Compute parent equivalent density
+                parent_equivalent_density = np.matmul(
+                    self.m2m[operator_idx], child_equivalent_density)
 
-                # self.source_data[key].expansion += result.density
+                # Add to source data
+                self.source_data[key].expansion += parent_equivalent_density
 
     def multipole_to_local(self, source_key, target_key):
         """
