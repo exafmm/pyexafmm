@@ -15,25 +15,6 @@ from utils.data import load_json, load_hdf5_to_array
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
-CONFIG_FILEPATH = PARENT / "config.json"
-DATA_DIRPATH = PARENT / "data"
-CONFIG = load_json(CONFIG_FILEPATH)
-
-OPERATOR_DIRPATH = PARENT/ CONFIG["operator_dirname"]
-KERNEL_FUNCTION = KERNELS[CONFIG['kernel']]()
-SOURCE_FILENAME = CONFIG['source_filename']
-TARGET_FILENAME = CONFIG['target_filename']
-SOURCE_DENSITIES_FILENAME = CONFIG['source_densities_filename']
-MAXIMUM_LEVEL = CONFIG['octree_max_level']
-ORDER = CONFIG['order']
-
-SOURCES = load_hdf5_to_array('sources', SOURCE_FILENAME, DATA_DIRPATH)
-TARGETS = load_hdf5_to_array('targets', TARGET_FILENAME, DATA_DIRPATH)
-SOURCE_DENSITIES_FILENAME = load_hdf5_to_array(
-    'source_densities', SOURCE_DENSITIES_FILENAME, DATA_DIRPATH)
-
-OCTREE = Octree(SOURCES, TARGETS, MAXIMUM_LEVEL)
-
 
 class Fmm:
     """
@@ -43,12 +24,33 @@ class Fmm:
     expansion order.
     """
 
-    def __init__(self):
+    def __init__(self, config_filename=None):
 
-        # Kernel function
-        self.kernel_function = KERNEL_FUNCTION
-        self.order = ORDER
-        self.octree = OCTREE
+        if config_filename is not None:
+            config_filepath = PARENT / config_filename
+        else:
+            config_filepath = PARENT / "config.json"
+
+        data_dirpath = PARENT / "data"
+
+        self.config = load_json(config_filepath)
+
+        self.operator_dirpath = PARENT/ self.config["operator_dirname"]
+        source_filename = self.config['source_filename']
+        target_filename = self.config['target_filename']
+        source_densities_filename = self.config['source_densities_filename']
+
+        sources = load_hdf5_to_array('sources', source_filename, data_dirpath)
+        targets = load_hdf5_to_array('targets', target_filename, data_dirpath)
+
+        source_densities = load_hdf5_to_array(
+            'source_densities', source_densities_filename, data_dirpath)
+
+        # Extract config properties
+        self.kernel_function = KERNELS[self.config['kernel']]()
+        self.order = self.config['order']
+        self.maximum_level = self.config['octree_max_level']
+        self.octree = Octree(sources, targets, self.maximum_level)
 
         # Coefficients discretising surface of a node
         self.ncoefficients = 6*(self.order-1)**2 + 2
@@ -82,31 +84,31 @@ class Fmm:
             for key in self.octree.non_empty_source_nodes_by_level[level]:
                 self.multipole_to_multipole(key)
 
-    def downward_pass(self):
-        """Downward pass loop."""
+    # def downward_pass(self):
+    #     """Downward pass loop."""
 
-        # Pre-order traversal of octree
-        for level in range(1, 1 + self.octree.maximum_level):
+    #     # Pre-order traversal of octree
+    #     for level in range(1, 1 + self.octree.maximum_level):
 
-            for key in self.octree.non_empty_target_nodes_by_level[level]:
-                index = self.octree.target_node_to_index[key]
+    #         for key in self.octree.non_empty_target_nodes_by_level[level]:
+    #             index = self.octree.target_node_to_index[key]
 
-                # Translating mutlipole expansion in far field to a local
-                # expansion at currently examined node.
-                for neighbor_list in self.octree.interaction_list[index]:
-                    for child in neighbor_list:
-                        if child != -1:
-                            self.multipole_to_local(child, key)
+    #             # Translating mutlipole expansion in far field to a local
+    #             # expansion at currently examined node.
+    #             for neighbor_list in self.octree.interaction_list[index]:
+    #                 for child in neighbor_list:
+    #                     if child != -1:
+    #                         self.multipole_to_local(child, key)
 
-                # Translate local expansion to the node's children
-                if level < self.octree.maximum_level:
-                    self.local_to_local(key)
+    #             # Translate local expansion to the node's children
+    #             if level < self.octree.maximum_level:
+    #                 self.local_to_local(key)
 
         # Treat local expansion as charge density, and evaluate at each particle
         # at leaf node, compute near field.
-        for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
-            self.local_to_particle(leaf_node_index)
-            self.compute_near_field(leaf_node_index)
+        # for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
+        #     self.local_to_particle(leaf_node_index)
+        #     self.compute_near_field(leaf_node_index)
 
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
@@ -135,7 +137,7 @@ class Fmm:
 
         # Compute expansion, and add to source data
         result = p2m(
-            operator_dirpath=OPERATOR_DIRPATH,
+            operator_dirpath=self.operator_dirpath,
             kernel_function=self.kernel_function,
             leaf_sources=leaf_sources,
             leaf_source_densities=np.ones(len(leaf_sources)),

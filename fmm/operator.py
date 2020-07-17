@@ -205,7 +205,7 @@ def p2m(
         The center of expansion.
     radius : float
         Half-side length of root node.
-    maximum_level : int
+    level : int
         The maximium level of the octree.
     leaf_sources : np.array(shape=(n, 3))
         Sources in a given leaf node, at which multipole expansion is being
