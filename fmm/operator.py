@@ -3,10 +3,20 @@ Operator helper methods.
 """
 import numpy as np
 
+from fmm.density import Charge, Potential
+
+import utils.data as data
+
 
 def compute_surface(order):
     """
-    Compute surface to a specified order
+    Compute surface to a specified order.
+
+    Parameters:
+    -----------
+    order : int
+        Order
+
     """
     n_coeffs = 6*(order-1)**2 + 2
     surf = np.zeros(shape=(n_coeffs, 3))
@@ -48,7 +58,7 @@ def compute_surface(order):
 def scale_surface(surface, radius, level, center, alpha):
     """
     Compute vectors to correspond to quadrature points on surface of a specified
-        cube.
+        node.
 
     Parameters:
     -----------
@@ -57,17 +67,17 @@ def scale_surface(surface, radius, level, center, alpha):
     radius : float
         Half side length of the octree's root node.
     level : int
-        (Octree) level of cube.
+        (Octree) level of node.
     center : coordinate
-        Coordinates of the centre of the cube.
+        Coordinates of the centre of the node.
     alpha : float
-        Ratio between side length of surface cube and original cube.
+        Ratio between side length of surface node and original node.
 
     Returns:
     --------
     np.array(shape=(n_coeffs, 3))
         Vector of coordinates of surface points. `n_coeffs` is the number of
-        points that discretise the surface of a cube.
+        points that discretise the surface of a node.
     """
 
     n_coeffs = len(surface)
@@ -140,3 +150,140 @@ def compute_check_to_equivalent_inverse(
     dc2e_u = v_t
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
+
+
+def p2p(kernel_function, targets, sources, source_densities):
+    """
+    Directly calculate potential at m targets from n sources.
+
+    Parameters:
+    -----------
+    kernel_function : function
+    targets : np.array(shape=(m, 3))
+    sources : np.array(shape=(n, 3))
+    source_densities : np.array(shape=(n))
+
+    Returns:
+    --------
+    Potential
+        Potential denities at all target points from from all sources.
+    """
+
+    # Potential at target locations
+    target_densities = np.zeros(shape=(len(targets)))
+
+    for i, target in enumerate(targets):
+        potential = 0
+        for j, source in enumerate(sources):
+            source_density = source_densities[j]
+            potential += kernel_function(target, source)*source_density
+
+        target_densities[i] = potential
+
+    return Potential(targets, target_densities)
+
+
+def p2m(
+        operator_dirpath,
+        kernel_function,
+        radius,
+        level,
+        center,
+        leaf_sources,
+        leaf_source_densities
+    ):
+    """
+    Compute multipole expansion from sources at the leaf level supported at
+        discrete points on the upward equivalent surface.
+
+    Parameters:
+    -----------
+    operator_dirpath : str
+        Where precomputed operators are stored.
+    kernel_function : function
+    center : np.array(shape=(3))
+        The center of expansion.
+    radius : float
+        Half-side length of root node.
+    maximum_level : int
+        The maximium level of the octree.
+    leaf_sources : np.array(shape=(n, 3))
+        Sources in a given leaf node, at which multipole expansion is being
+        computed.
+    leaf_source_densities : np.array(shape=(n, 1))
+        Source densities corresponding to leaf points.
+
+    Returns:
+    --------
+    Charge
+        Charge densities calculated at the discrete points on the equivalent
+        surface.
+    """
+
+    surface = data.load_hdf5_to_array('surface', 'surface', operator_dirpath)
+
+    upward_check_surface = scale_surface(
+        surface=surface,
+        radius=radius,
+        level=level,
+        center=center,
+        alpha=2.95
+    )
+
+    upward_equivalent_surface = scale_surface(
+        surface=surface,
+        radius=radius,
+        level=level,
+        center=center,
+        alpha=1.05
+    )
+
+    # Set unit densities at leaves for now
+    leaf_source_densities = np.ones(shape=(len(leaf_sources)))
+
+    # Lookup pseudo-inverse of kernel matrix
+    uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
+    uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
+
+    scale = (1/2)**(level)
+
+    # Compute check potential directly using leaves
+    check_potential = p2p(
+        kernel_function=kernel_function,
+        targets=upward_check_surface,
+        sources=leaf_sources,
+        source_densities=leaf_source_densities
+        ).density
+
+    # Compute upward equivalent density
+    tmp = np.matmul(scale*uc2e_u, check_potential)
+    upward_equivalent_density = np.matmul(uc2e_v, tmp)
+
+    return Charge(upward_equivalent_surface, upward_equivalent_density)
+
+
+def compute_m2l_operator_index(sources_relative_to_targets, source_4d_index, target_4d_index):
+    """
+    Return the index of the m2l operator for a given source and target box.
+
+    Parameters:
+    -----------
+    sources_relative_to_targets: np.array(shape=(n, 5), dtype=np.float64)
+        Where `n` is the number of sources. Of the form
+        [[xidx, yidx, zidx, relative_distance, key]...]
+    source_4d_index : np.array(shape=(1, 4), dtype=np.int64)
+        Of the form [xidx, yidx, zidx, level]
+    target_4d_index : np.array(shape=(1, 4), dtype=np.int64)
+
+    Returns:
+    --------
+    int
+        Operator index.
+    """
+    relative_4d_index = source_4d_index - target_4d_index
+
+    operator_index = np.where(
+        np.all(sources_relative_to_targets[:, :3] == relative_4d_index[:3], axis=1)
+    )
+
+    return operator_index

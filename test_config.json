@@ -8,5 +8,6 @@
     "data_dirname": "data",
     "source_filename": "random_sources",
     "target_filename": "random_targets",
+    "source_densities_filename": "source_densities",
     "octree_max_level": 5
 }

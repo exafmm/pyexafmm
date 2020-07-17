@@ -10,16 +10,14 @@ import pytest
 
 from fmm.octree import Octree
 import fmm.hilbert
+from fmm.kernel import Laplace
+from fmm.operator import compute_surface, scale_surface, p2p, compute_m2l_operator_index
 import utils.data as data
-from fmm.fmm import p2p, Laplace, gram_matrix
-from fmm.operator import compute_surface, scale_surface
-from fmm.hilbert import compute_interaction_list, get_key_from_point, get_center_from_key, get_4d_index_from_key
-from utils.data import load_json
 
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
-CONFIG = load_json(CONFIG_FILEPATH)
+CONFIG = data.load_json(CONFIG_FILEPATH)
 
 ORDER = CONFIG['order']
 SURFACE = compute_surface(ORDER)
@@ -131,7 +129,6 @@ def test_l2l(npoints, octree, l2l):
 
     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
 
-
 def test_m2l(
     npoints,
     octree,
@@ -144,21 +141,18 @@ def test_m2l(
     r0 = octree.radius
 
     # pick a source box on level 3 or below
-    source_key = get_key_from_point(x0, source_level, x0, r0)
-    source_index = get_4d_index_from_key(source_key)
-    source_center = get_center_from_key(source_key, x0, r0)
-    interaction_list = compute_interaction_list(source_key)
+    source_key = fmm.hilbert.get_key_from_point(x0, source_level, x0, r0)
+    source_4d_index = fmm.hilbert.get_4d_index_from_key(source_key)
+    source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
+    interaction_list = fmm.hilbert.compute_interaction_list(source_key)
 
     # pick a target box in source's interaction list
     target_key = interaction_list[3]
-    target_center = get_center_from_key(target_key, x0, r0)
-    target_index = get_4d_index_from_key(target_key)
+    target_center = fmm.hilbert.get_center_from_key(target_key, x0, r0)
+    target_4d_index = fmm.hilbert.get_4d_index_from_key(target_key)
 
-    relative_index = source_index - target_index
-
-    result = np.where(np.all(sources_relative_to_targets[:, :3] == relative_index[:3], axis=1))
-
-    operator_index = result[0]
+    operator_index = compute_m2l_operator_index(
+        sources_relative_to_targets, source_4d_index, target_4d_index)
 
     # place unit densities on source box
     source_equivalent_density = np.ones(shape=(npoints))

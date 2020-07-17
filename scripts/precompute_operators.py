@@ -7,7 +7,7 @@ import sys
 
 import numpy as np
 
-from fmm.fmm import Laplace
+from fmm.kernel import KERNELS
 from fmm.octree import Octree
 from fmm.operator import (
     compute_surface, gram_matrix, scale_surface, compute_check_to_equivalent_inverse
@@ -20,13 +20,6 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
-CONFIG_OBJECTS = {
-    'kernel_functions': {
-        'laplace': Laplace()
-    }
-}
-
-
 def main(
         operator_dirname,
         surface_filename,
@@ -37,6 +30,7 @@ def main(
         data_dirname,
         source_filename,
         target_filename,
+        source_densities_filename,
         octree_max_level
         ):
 
@@ -52,7 +46,7 @@ def main(
     octree = Octree(sources, targets, octree_max_level)
 
     # Load required Python objects
-    kernel_function = CONFIG_OBJECTS['kernel_functions'][kernel]
+    kernel_function = KERNELS[kernel]()
 
     # Step 1: Compute a surface of a given order
     # Check if surface already exists
@@ -116,7 +110,7 @@ def main(
         data.save_array_to_hdf5(operator_dirpath, 'dc2e_v', dc2e_v)
         data.save_array_to_hdf5(operator_dirpath, 'dc2e_u', dc2e_u)
 
-    # Compute M2M operator
+    # Compute M2M/L2L operators
     if (
             data.file_in_directory('m2m', operator_dirpath)
             and data.file_in_directory('l2l', operator_dirpath)
