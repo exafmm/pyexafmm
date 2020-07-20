@@ -4,6 +4,7 @@ Operator helper methods.
 import numpy as np
 
 from fmm.density import Charge, Potential
+import fmm.rotation_matrices as rotations
 
 import utils.data as data
 
@@ -184,67 +185,39 @@ def p2p(kernel_function, targets, sources, source_densities):
 
 
 def compute_equivalent_orientations(vector):
+    """
+    Compute equivalent rotations/reflections of a given vector. This is a helper
+        method to look up the correct precomputed M2L operator.
 
-    x_rot = np.array([
-        [1, 0, 0],
-        [0, 0, -1],
-        [0, 1, 0]
-    ])
-
-    x_ref = np.array([
-        [-1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-    ])
-
-    y_rot = np.array([
-        [0, 0, 1],
-        [0, 1, 0],
-        [-1, 0, 0]
-    ])
-
-    y_ref = np.array([
-        [1, 0, 0],
-        [0, -1, 0],
-        [0, 0, 1]
-    ])
-
-    z_rot = np.array([
-        [0, -1, 0],
-        [1, 0, 0],
-        [0, 0, 1]
-    ])
-
-    z_ref = np.array([
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, -1]
-    ])
+    Parameters:
+    -----------
+    vector : np.array(shape=(1, 3))
+        A 3D cartesian vector
+    """
 
     orientations = np.zeros(shape=(48, 3))
 
-    idx = 0
-
     tmp = vector
+    idx = 0
     for _ in range(4):
-        tmp = np.matmul(x_rot, tmp)
+        tmp = np.matmul(rotations.X_ROT_90, tmp)
         orientations[idx] = tmp
         idx += 1
 
     for _ in range(4):
-        tmp = np.matmul(y_rot, tmp)
+        tmp = np.matmul(rotations.Y_ROT_90, tmp)
         orientations[idx] = tmp
         idx += 1
 
     for _ in range(4):
-        tmp = np.matmul(z_rot, tmp)
+        tmp = np.matmul(rotations.Z_ROT_90, tmp)
         orientations[idx] = tmp
         idx += 1
 
     for i in range(12):
-        orientations[idx] = np.matmul(x_ref, orientations[i])
-        orientations[idx+1] = np.matmul(y_ref, orientations[i])
-        orientations[idx+2] = np.matmul(z_ref, orientations[i])
+        orientations[idx] = np.matmul(rotations.X_REF, orientations[i])
+        orientations[idx+1] = np.matmul(rotations.Y_REF, orientations[i])
+        orientations[idx+2] = np.matmul(rotations.Z_REF, orientations[i])
         idx += 3
 
     orientations = np.unique(orientations, axis=0)
