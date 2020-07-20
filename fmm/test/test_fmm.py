@@ -42,6 +42,6 @@ def test_downward_pass():
     fmm.upward_pass()
     fmm.downward_pass()
 
-    print(fmm.target_data[68])
+    print(fmm.result_data)
 
     assert False

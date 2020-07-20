@@ -120,8 +120,8 @@ class Fmm:
 
         # Treat local expansion as charge density, and evaluate at each particle
         # at leaf node, compute near field.
-        # for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
-        #     self.local_to_particle(leaf_node_index)
+        for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
+            self.local_to_particle(leaf_node_index)
         #     self.compute_near_field(leaf_node_index)
 
     def particle_to_multipole(self, leaf_node_index):
@@ -223,7 +223,6 @@ class Fmm:
         target_equivalent_density = np.matmul(operator, source_equivalent_density)
         self.target_data[target_key].expansion += target_equivalent_density
 
-
     def local_to_local(self, key):
         """Translate local expansion of a node to it's children."""
 
@@ -246,50 +245,48 @@ class Fmm:
 
                 self.target_data[child].expansion = child_equivalent_density
 
-    # def local_to_particle(self, leaf_node_index):
-    #     """
-    #     Directly evaluate potential at particles in a leaf node, treating the
-    #     local expansion points as sources.
-    #     """
-    #     x0 = self.octree.center
-    #     r0 = self.octree.radius
+    def local_to_particle(self, leaf_index):
+        """
+        Directly evaluate potential at particles in a leaf node, treating the
+        local expansion points as sources.
+        """
 
-    #     target_indices = self.octree.targets_by_leafs[
-    #         self.octree.target_index_ptr[leaf_node_index]
-    #         : self.octree.target_index_ptr[leaf_node_index + 1]
-    #     ]
+        target_indices = self.octree.targets_by_leafs[
+            self.octree.target_index_ptr[leaf_index]
+            : self.octree.target_index_ptr[leaf_index + 1]
+        ]
 
-    #     leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
-    #     leaf_node_level = hilbert.get_level(leaf_node_key)
-    #     leaf_node_center = hilbert.get_center_from_key(leaf_node_key, x0, r0)
+        leaf_key = self.octree.target_leaf_nodes[leaf_index]
+        leaf_center = hilbert.get_center_from_key(
+            leaf_key, self.octree.center, self.octree.radius)
 
-    #     leaf_node_density = self.target_data[leaf_node_key].expansion
+        leaf_density = self.target_data[leaf_key].expansion
 
-    #     leaf_node_surface = surface(
-    #         order=self.order,
-    #         radius=self.octree.radius,
-    #         level=leaf_node_level,
-    #         center=leaf_node_center,
-    #         alpha=2.95
-    #     )
+        leaf_surface = scale_surface(
+            surface=self.surface,
+            radius=self.octree.radius,
+            level=self.octree.maximum_level,
+            center=leaf_center,
+            alpha=self.config['alpha_outer']
+        )
 
-    #     for target_index in target_indices:
+        for target_index in target_indices:
 
-    #         # Updating indices
-    #         self.result_data[target_index].indices.update(
-    #             self.target_data[leaf_node_key].indices
-    #         )
+            # Updating indices
+            self.result_data[target_index].indices.update(
+                self.target_data[leaf_key].indices
+            )
 
-    #         target = self.octree.targets[target_index].reshape(1, 3)
+            target = self.octree.targets[target_index].reshape(1, 3)
 
-    #         result = p2p(
-    #             kernel_function=self.kernel_function,
-    #             targets=target,
-    #             sources=leaf_node_surface,
-    #             source_densities=leaf_node_density
-    #         )
+            result = p2p(
+                kernel_function=self.kernel_function,
+                targets=target,
+                sources=leaf_surface,
+                source_densities=leaf_density
+            )
 
-    #         self.result_data[target_index].density = result.density
+            self.result_data[target_index].density = result.density
 
     # def compute_near_field(self, leaf_node_index):
     #     """
