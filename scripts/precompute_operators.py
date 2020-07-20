@@ -153,8 +153,8 @@ def main(
 
             pc2ce = gram_matrix(
                 kernel_function,
-                child_upward_equivalent_surface,
                 parent_upward_check_surface,
+                child_upward_equivalent_surface,
             )
 
             # Compute M2M operator for this octant

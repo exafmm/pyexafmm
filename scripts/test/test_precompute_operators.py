@@ -46,6 +46,7 @@ def octree():
 
     return Octree(sources, targets, 5, source_densities)
 
+
 @pytest.fixture
 def m2m():
     return data.load_hdf5_to_array('m2m', 'm2m', OPERATOR_DIRPATH)
@@ -106,7 +107,7 @@ def test_m2m(npoints, octree, m2m):
 def test_l2l(npoints, octree, l2l):
 
     parent_key = 0
-    child_key = 1
+    child_key = 2
 
     x0 = octree.center
     r0 = octree.radius
@@ -119,7 +120,9 @@ def test_l2l(npoints, octree, l2l):
 
     parent_equivalent_density = np.ones(shape=(npoints))
 
-    child_equivalent_density = np.matmul(l2l[0], parent_equivalent_density)
+    operator_idx = (child_key % 8) -1
+
+    child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
 
     child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 2.95)
     parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 2.95)

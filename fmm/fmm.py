@@ -31,10 +31,10 @@ class Fmm:
         else:
             config_filepath = PARENT / "config.json"
 
-        data_dirpath = PARENT / "data"
 
         self.config = load_json(config_filepath)
 
+        data_dirpath = PARENT / self.config["data_dirname"]
         operator_dirpath = PARENT/ self.config["operator_dirname"]
         source_filename = self.config['source_filename']
         target_filename = self.config['target_filename']
@@ -102,7 +102,7 @@ class Fmm:
         """Downward pass loop."""
 
         # Pre-order traversal of octree
-        for level in range(1, 1 + self.octree.maximum_level):
+        for level in range(2, 1 + self.octree.maximum_level):
 
             for key in self.octree.non_empty_target_nodes_by_level[level]:
                 index = self.octree.target_node_to_index[key]
@@ -243,7 +243,7 @@ class Fmm:
                     self.l2l[operator_idx], parent_equivalent_density
                 )
 
-                self.target_data[child].expansion = child_equivalent_density
+                self.target_data[child].expansion += child_equivalent_density
 
     def local_to_particle(self, leaf_index):
         """
