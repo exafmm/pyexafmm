@@ -122,7 +122,7 @@ class Fmm:
         # at leaf node, compute near field.
         for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
             self.local_to_particle(leaf_node_index)
-        #     self.compute_near_field(leaf_node_index)
+            self.compute_near_field(leaf_node_index)
 
     def particle_to_multipole(self, leaf_node_index):
         """Compute particle to multipole interactions in leaf."""
@@ -288,74 +288,76 @@ class Fmm:
 
             self.result_data[target_index].density = result.density
 
-    # def compute_near_field(self, leaf_node_index):
-    #     """
-    #     Compute near field influence from neighbouring box's local expansions.
-    #     """
+    def compute_near_field(self, leaf_node_index):
+        """
+        Compute near field influence from neighbouring box's local expansions.
+        """
 
-    #     target_indices = self.octree.targets_by_leafs[
-    #         self.octree.target_index_ptr[leaf_node_index]
-    #         : self.octree.target_index_ptr[leaf_node_index + 1]
-    #     ]
+        target_indices = self.octree.targets_by_leafs[
+            self.octree.target_index_ptr[leaf_node_index]
+            : self.octree.target_index_ptr[leaf_node_index + 1]
+        ]
 
-    #     leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
+        leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
 
-    #     for neighbor_key in self.octree.target_neighbors[
-    #             self.octree.target_node_to_index[leaf_node_key]
-    #             ]:
-    #         if neighbor_key != -1:
+        for neighbor_key in self.octree.target_neighbors[
+                self.octree.target_node_to_index[leaf_node_key]
+                ]:
+            if neighbor_key != -1:
 
-    #             neighbor_index = self.octree.source_node_to_index[neighbor_key]
+                neighbor_index = self.octree.source_node_to_index[neighbor_key]
 
-    #             neighbor_source_indices = self.octree.sources_by_leafs[
-    #                 self.octree.source_index_ptr[neighbor_index]:
-    #                 self.octree.source_index_ptr[neighbor_index + 1]
-    #             ]
+                neighbor_source_indices = self.octree.sources_by_leafs[
+                    self.octree.source_index_ptr[neighbor_index]:
+                    self.octree.source_index_ptr[neighbor_index + 1]
+                ]
 
-    #             neighbor_sources = self.octree.sources[neighbor_source_indices]
+                neighbor_sources = self.octree.sources[neighbor_source_indices]
+                neighbor_source_densities = self.octree.source_densities[neighbor_source_indices]
 
-    #             for target_index in target_indices:
+                for target_index in target_indices:
 
-    #                 # Updating indices
-    #                 self.result_data[target_index].indices.update(
-    #                     self.source_data[neighbor_key].indices
-    #                 )
+                    # Updating indices
+                    self.result_data[target_index].indices.update(
+                        self.source_data[neighbor_key].indices
+                    )
 
-    #                 target = self.octree.targets[target_index].reshape(1, 3)
+                    target = self.octree.targets[target_index].reshape(1, 3)
 
-    #                 result = p2p(
-    #                     kernel_function=self.kernel_function,
-    #                     targets=target,
-    #                     sources=neighbor_sources,
-    #                     source_densities=np.ones(len(neighbor_sources))
-    #                 )
+                    result = p2p(
+                        kernel_function=self.kernel_function,
+                        targets=target,
+                        sources=neighbor_sources,
+                        source_densities=neighbor_source_densities
+                    )
 
-    #                 self.result_data[target_index].density += result.density
+                    self.result_data[target_index].density += result.density
 
-    #     if self.octree.source_node_to_index[leaf_node_key] != -1:
+        if self.octree.source_node_to_index[leaf_node_key] != -1:
 
-    #         leaf_index = self.octree.source_node_to_index[leaf_node_key]
+            leaf_index = self.octree.source_node_to_index[leaf_node_key]
 
-    #         leaf_source_indices = self.octree.sources_by_leafs[
-    #             self.octree.source_index_ptr[leaf_index]:
-    #             self.octree.source_index_ptr[leaf_index + 1]
-    #         ]
+            leaf_source_indices = self.octree.sources_by_leafs[
+                self.octree.source_index_ptr[leaf_index]:
+                self.octree.source_index_ptr[leaf_index + 1]
+            ]
 
-    #         leaf_sources = self.octree.sources[leaf_source_indices]
+            leaf_sources = self.octree.sources[leaf_source_indices]
+            leaf_source_densities = self.octree.source_densities[leaf_source_indices]
 
-    #         for target_index in target_indices:
-    #             target = self.octree.targets[target_index].reshape(1, 3)
+            for target_index in target_indices:
+                target = self.octree.targets[target_index].reshape(1, 3)
 
-    #             result = p2p(
-    #                 kernel_function=self.kernel_function,
-    #                 targets=target,
-    #                 sources=leaf_sources,
-    #                 source_densities=np.ones(len(leaf_sources))
-    #             )
+                result = p2p(
+                    kernel_function=self.kernel_function,
+                    targets=target,
+                    sources=leaf_sources,
+                    source_densities=leaf_source_densities
+                )
 
-    #             self.result_data[target_index].density += result.density
+                self.result_data[target_index].density += result.density
 
-    #             # Updating indices
-    #             self.result_data[target_index].indices.update(
-    #                 self.source_data[leaf_node_key].indices)
+                # Updating indices
+                self.result_data[target_index].indices.update(
+                    self.source_data[leaf_node_key].indices)
 
