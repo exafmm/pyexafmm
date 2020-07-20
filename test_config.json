@@ -1,0 +1,13 @@
+{
+    "order": 3,
+    "operator_dirname": "precomputed_operators_order_3",
+    "surface_filename": "surface",
+    "kernel": "laplace",
+    "alpha_inner": 1.05,
+    "alpha_outer": 2.95,
+    "data_dirname": "data",
+    "source_filename": "random_sources",
+    "target_filename": "random_targets",
+    "source_densities_filename": "source_densities",
+    "octree_max_level": 3
+}

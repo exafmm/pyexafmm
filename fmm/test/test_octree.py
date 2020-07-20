@@ -16,11 +16,11 @@ def octree():
     """Fill up an octree."""
 
     rand = np.random.RandomState(0)
-
+    source_densities = np.ones(NPOINTS)
     sources = rand.rand(NPOINTS, 3)
     targets = rand.rand(NPOINTS, 3)
 
-    return Octree(sources, targets, MAXIMUM_LEVEL)
+    return Octree(sources, targets, MAXIMUM_LEVEL, source_densities)
 
 
 def test_source_leaf_assignment(octree):

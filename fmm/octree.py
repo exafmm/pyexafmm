@@ -8,7 +8,7 @@ import fmm.hilbert as hilbert
 class Octree:
     """Data structure for handling Octrees."""
 
-    def __init__(self, sources, targets, maximum_level):
+    def __init__(self, sources, targets, maximum_level, source_densities):
         """
         Initialize an Octree.
 
@@ -28,6 +28,9 @@ class Octree:
 
         # The actual targets
         self._targets = targets
+
+        # Densities at sources
+        self._source_densities = source_densities
 
         # Center of the box and radius of the box
         self._center, self._radius = compute_bounds(sources, targets)
@@ -132,6 +135,10 @@ class Octree:
     def targets(self):
         """Return the targets."""
         return self._targets
+
+    @property
+    def source_densities(self):
+        return self._source_densities
 
     @property
     def target_neighbors(self):
@@ -291,28 +298,19 @@ class Octree:
 
         # Enumerate non empty leaf nodes with a value from range(nleafs)
         node_map[leaf_nodes] = range(nleafs)
-        # print("node map 1", node_map)
-        # print("leaf nodes ", leaf_nodes)
 
         count = nleafs
-        # print("initial count", count)
         for node in leaf_nodes:
-            # print('node', node)
             parent = node
             while parent != 0:
                 parent = hilbert.get_parent(parent)
-                # print('parent', parent)
                 if node_map[parent] == -1:
                     node_map[parent] = count
                     count += 1
-                    # print('count', count)
 
-        # print("node map 2", node_map, len(node_map))
 
         # Returns indices of node_map not equal to -1
         list_of_nodes = np.flatnonzero(node_map != -1)
-
-        # print("list of nodes", list_of_nodes)
 
         # node_map[list_of_nodes] = non-empty node values (count)
         # indices sorted by counts
@@ -400,6 +398,7 @@ def _numba_compute_interaction_list(
     nnodes = len(target_nodes)
 
     interaction_list = -np.ones((nnodes, 27, 8), dtype=np.int64)
+
     for node_index, node in enumerate(target_nodes):
         level = hilbert.get_level(node)
         if level < 2:
