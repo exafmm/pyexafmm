@@ -3,10 +3,8 @@ Operator helper methods.
 """
 import numpy as np
 
-from fmm.density import Charge, Potential
+from fmm.density import Potential
 import fmm.rotation_matrices as rotations
-
-import utils.data as data
 
 
 def compute_surface(order):
@@ -125,8 +123,25 @@ def gram_matrix(kernel, sources, targets):
 
 
 def compute_check_to_equivalent_inverse(
-    kernel_function, upward_check_surface, upward_equivalent_surface):
+        kernel_function, upward_check_surface, upward_equivalent_surface
+        ):
+    """
+    Compute the inverse of the upward check-to-equivalent gram matrix, and the
+        same for it's transpose - which amounts to the inverse of the downward
+        check-to-equivalent gram matrix.
 
+    Parameters:
+    -----------
+    kernel_function : function
+    upward_check_surface : np.array(shape=(n, 3))
+    upward_equivalent_surface : np.array(shape=(n, 3))
+
+    Returns:
+    --------
+    tuple
+        Tuple of upward check-to-equivalent inverse stored as two compoennts,
+        and downard check-to-equivalent inverse stored as two components.
+    """
     # Compute Gram Matrix of upward check to upward equivalent surfaces
     upward_check_to_equivalent = gram_matrix(
         kernel_function, upward_check_surface, upward_equivalent_surface)
