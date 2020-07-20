@@ -20,6 +20,9 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
+
+
+
 def main(
         operator_dirname,
         surface_filename,
@@ -154,7 +157,6 @@ def main(
                 parent_upward_check_surface,
             )
 
-
             # Compute M2M operator for this octant
             tmp = np.matmul(uc2e_u, pc2ce)
             m2m.append(np.matmul(uc2e_v, tmp))
@@ -196,11 +198,11 @@ def main(
         # of the source node from the target in units of box width, and the key
         # of the source node.
         sources_relative_to_targets = np.zeros(shape=(189, 5))
+        # sources_relative_to_targets = []
 
         for source_idx, source_key in enumerate(interaction_list):
 
             source_4d_idx = fmm.hilbert.get_4d_index_from_key(source_key)
-
             source_relative_to_target = source_4d_idx[:3] - center_4d_index[:3]
             magnitude = np.linalg.norm(source_relative_to_target)
 

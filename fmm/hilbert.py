@@ -222,7 +222,7 @@ def compute_interaction_list(key):
     for parent_neighbor in parent_neighbors:
         children = get_children(parent_neighbor)
         for child in children:
-            if child not in child_neighbors:
+            if child not in child_neighbors and child != key:
                 interaction_list.append(child)
 
     return interaction_list

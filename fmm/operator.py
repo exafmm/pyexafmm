@@ -183,7 +183,78 @@ def p2p(kernel_function, targets, sources, source_densities):
     return Potential(targets, target_densities)
 
 
-def compute_m2l_operator_index(sources_relative_to_targets, source_4d_index, target_4d_index):
+def compute_equivalent_orientations(vector):
+
+    x_rot = np.array([
+        [1, 0, 0],
+        [0, 0, -1],
+        [0, 1, 0]
+    ])
+
+    x_ref = np.array([
+        [-1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+    ])
+
+    y_rot = np.array([
+        [0, 0, 1],
+        [0, 1, 0],
+        [-1, 0, 0]
+    ])
+
+    y_ref = np.array([
+        [1, 0, 0],
+        [0, -1, 0],
+        [0, 0, 1]
+    ])
+
+    z_rot = np.array([
+        [0, -1, 0],
+        [1, 0, 0],
+        [0, 0, 1]
+    ])
+
+    z_ref = np.array([
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, -1]
+    ])
+
+    orientations = np.zeros(shape=(48, 3))
+
+    idx = 0
+
+    tmp = vector
+    for _ in range(4):
+        tmp = np.matmul(x_rot, tmp)
+        orientations[idx] = tmp
+        idx += 1
+
+    for _ in range(4):
+        tmp = np.matmul(y_rot, tmp)
+        orientations[idx] = tmp
+        idx += 1
+
+    for _ in range(4):
+        tmp = np.matmul(z_rot, tmp)
+        orientations[idx] = tmp
+        idx += 1
+
+    for i in range(12):
+        orientations[idx] = np.matmul(x_ref, orientations[i])
+        orientations[idx+1] = np.matmul(y_ref, orientations[i])
+        orientations[idx+2] = np.matmul(z_ref, orientations[i])
+        idx += 3
+
+    orientations = np.unique(orientations, axis=0)
+
+    return orientations
+
+
+def compute_m2l_operator_index(
+    sources_relative_to_targets, source_4d_index, target_4d_index
+    ):
     """
     Return the index of the m2l operator for a given source and target box.
 
@@ -203,8 +274,16 @@ def compute_m2l_operator_index(sources_relative_to_targets, source_4d_index, tar
     """
     relative_4d_index = source_4d_index - target_4d_index
 
-    operator_index = np.where(
-        np.all(sources_relative_to_targets[:, :3] == relative_4d_index[:3], axis=1)
-    )
+    equivalent_orientations = \
+        compute_equivalent_orientations(relative_4d_index[:3])
 
-    return operator_index
+    # Search for the first equivalent orientation already computed
+    for orientation in equivalent_orientations:
+        operator_index = np.where(
+            np.all(sources_relative_to_targets[:, :3] == orientation, axis=1)
+        )
+
+        if operator_index[0].size != 0:
+            break
+
+    return operator_index[0][0]

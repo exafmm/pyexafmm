@@ -7,7 +7,7 @@ import numpy as np
 import fmm.hilbert as hilbert
 from fmm.density import Potential
 from fmm.node import Node
-from fmm.operator import p2p, scale_surface
+from fmm.operator import p2p, scale_surface, compute_m2l_operator_index
 from fmm.kernel import KERNELS
 from fmm.octree import Octree
 
@@ -53,6 +53,10 @@ class Fmm:
         self.m2m = load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
         self.l2l = load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
         self.m2l = load_hdf5_to_array('m2l', 'm2l', operator_dirpath)
+        self.sources_relative_to_targets = load_hdf5_to_array(
+            'sources_relative_to_targets', 'sources_relative_to_targets',
+            operator_dirpath
+        )
 
         # Load configuration properties
         self.maximum_level = self.config['octree_max_level']
@@ -94,25 +98,25 @@ class Fmm:
             for key in self.octree.non_empty_source_nodes_by_level[level]:
                 self.multipole_to_multipole(key)
 
-    # def downward_pass(self):
-    #     """Downward pass loop."""
+    def downward_pass(self):
+        """Downward pass loop."""
 
-    #     # Pre-order traversal of octree
-    #     for level in range(1, 1 + self.octree.maximum_level):
+        # Pre-order traversal of octree
+        for level in range(1, 1 + self.octree.maximum_level):
 
-    #         for key in self.octree.non_empty_target_nodes_by_level[level]:
-    #             index = self.octree.target_node_to_index[key]
+            for key in self.octree.non_empty_target_nodes_by_level[level]:
+                index = self.octree.target_node_to_index[key]
 
-    #             # Translating mutlipole expansion in far field to a local
-    #             # expansion at currently examined node.
-    #             for neighbor_list in self.octree.interaction_list[index]:
-    #                 for child in neighbor_list:
-    #                     if child != -1:
-    #                         self.multipole_to_local(child, key)
+                # Translating mutlipole expansion in far field to a local
+                # expansion at currently examined node.
+                for neighbor_list in self.octree.interaction_list[index]:
+                    for child in neighbor_list:
+                        if child != -1:
+                            self.multipole_to_local(child, key)
 
-    #             # Translate local expansion to the node's children
-    #             if level < self.octree.maximum_level:
-    #                 self.local_to_local(key)
+                # Translate local expansion to the node's children
+                if level < self.octree.maximum_level:
+                    self.local_to_local(key)
 
         # Treat local expansion as charge density, and evaluate at each particle
         # at leaf node, compute near field.
@@ -151,7 +155,7 @@ class Fmm:
             radius=self.octree.radius,
             level=self.octree.maximum_level,
             center=leaf_center,
-            alpha=2.95
+            alpha=self.config['alpha_outer']
         )
 
         scale = (1/2)**self.octree.maximum_level
@@ -199,68 +203,48 @@ class Fmm:
         expansions about the target.
         """
 
-        x0 = self.octree.center
-        r0 = self.octree.radius
-
         # Updating indices
         self.target_data[target_key].indices.update(
             self.source_data[source_key].indices
         )
 
-        source_level = hilbert.get_level(source_key)
-        source_center = hilbert.get_center_from_key(source_key, x0, r0)
-
-        target_level = hilbert.get_level(target_key)
-        target_center = hilbert.get_center_from_key(target_key, x0, r0)
-
         source_equivalent_density = self.source_data[source_key].expansion
 
-        # result = m2l(
-        #     kernel_function=self.kernel_function,
-        #     order=self.order,
-        #     radius=self.octree.radius,
-        #     source_center=source_center,
-        #     source_level=source_level,
-        #     target_center=target_center,
-        #     target_level=target_level,
-        #     source_equivalent_density=source_equivalent_density
-        # )
+        # Compute 4D indice in order to lookup right (relative) m2l operator
+        source_4d_idx = hilbert.get_4d_index_from_key(source_key)
+        target_4d_idx = hilbert.get_4d_index_from_key(target_key)
 
-        # self.target_data[target_key].expansion += result.density
+        operator_idx = compute_m2l_operator_index(
+            self.sources_relative_to_targets, source_4d_idx, target_4d_idx
+            )
+
+        operator = self.m2l[operator_idx]
+
+        target_equivalent_density = np.matmul(operator, source_equivalent_density)
+        self.target_data[target_key].expansion += target_equivalent_density
+
 
     def local_to_local(self, key):
         """Translate local expansion of a node to it's children."""
 
-        x0 = self.octree.center
-        r0 = self.octree.radius
-
-        parent_center = hilbert.get_center_from_key(key, x0, r0)
-        parent_level = hilbert.get_level(key)
         parent_equivalent_density = self.target_data[key].expansion
 
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
 
-                child_center = hilbert.get_center_from_key(child, x0, r0)
-                child_level = hilbert.get_level(child)
+                # Compute operator index
+                operator_idx = (child % 8) - 1
 
                 # Updating indices
                 self.target_data[child].indices.update(
                     self.target_data[key].indices
                 )
 
-                # result = l2l(
-                #     kernel_function=self.kernel_function,
-                #     order=self.order,
-                #     radius=r0,
-                #     parent_center=parent_center,
-                #     parent_level=parent_level,
-                #     child_center=child_center,
-                #     child_level=child_level,
-                #     parent_equivalent_density=parent_equivalent_density
-                # )
+                child_equivalent_density = np.matmul(
+                    self.l2l[operator_idx], parent_equivalent_density
+                )
 
-                # self.target_data[child].expansion = result.density
+                self.target_data[child].expansion = child_equivalent_density
 
     # def local_to_particle(self, leaf_node_index):
     #     """
@@ -377,5 +361,4 @@ class Fmm:
     #             # Updating indices
     #             self.result_data[target_index].indices.update(
     #                 self.source_data[leaf_node_key].indices)
-
 
