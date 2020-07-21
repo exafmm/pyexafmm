@@ -22,7 +22,7 @@ def test_upward_pass():
         fmm.kernel_function,
         distant_point,
         root_equivalent_surface,
-        fmm.source_densities
+        fmm.source_data[0].expansion
     )
 
     direct_particles = p2p(
@@ -32,7 +32,7 @@ def test_upward_pass():
         fmm.source_densities
     )
 
-    assert np.isclose(direct_fmm.density, direct_particles.density, rtol=0.1)
+    assert np.isclose(direct_fmm.density, direct_particles.density, rtol=0.01)
 
 
 def test_downward_pass():
