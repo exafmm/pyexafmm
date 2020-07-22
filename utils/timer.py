@@ -1,3 +1,9 @@
+"""
+Timer class
+"""
+import time
+
+
 class Timer:
     """Context manager to measure times."""
 
