@@ -15,10 +15,11 @@ import utils.data as data
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
+
 def main(**config):
 
     data_dirpath = PARENT / f"{config['data_dirname']}/"
-    npoints = int(config['npoints'])
+    npoints = config['npoints']
 
     if os.path.isdir(data_dirpath):
         shutil.rmtree(data_dirpath)
@@ -42,6 +43,6 @@ if __name__ == "__main__":
         config_filepath = sys.argv[1]
         npoints = sys.argv[2]
         config = data.load_json(config_filepath)
-        config['npoints'] = npoints
+        config['npoints'] = int(npoints)
         main(**config)
 

@@ -57,7 +57,7 @@ def compute_operators():
 )
 @click.argument('npoints')
 def generate_test_data(npoints):
-    click.echo(f'Generating {npoints} Random sources & targets')
+    click.echo(f'Generating {npoints} random sources & targets')
     subprocess.run([
         'python',
         HERE.parent/ 'scripts/generate_test_data.py',
