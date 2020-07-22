@@ -48,3 +48,4 @@ ci [OPTIONS] COMMAND [ARGS]
 | `test`	| Run test suite	|
 | `lint`	| Run project linter 	|
 | `compute-operators` | Run operator pre-computations |
+|`generate-test-data [npoints]` | Generate `npoints` random sources & targets|
