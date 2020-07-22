@@ -243,7 +243,7 @@ class Fmm:
                     self.l2l[operator_idx], parent_equivalent_density
                 )
 
-                self.target_data[child].expansion += child_equivalent_density
+                self.target_data[child].expansion = child_equivalent_density
 
     def local_to_particle(self, leaf_index):
         """

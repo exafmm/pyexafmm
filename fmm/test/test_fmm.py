@@ -8,31 +8,31 @@ from fmm.fmm import Fmm
 from fmm.operator import scale_surface, p2p
 
 
-def test_upward_pass():
-    fmm = Fmm(config_filename='config.json')
-    fmm.upward_pass()
+# def test_upward_pass():
+#     fmm = Fmm(config_filename='config.json')
+#     fmm.upward_pass()
 
-    root_equivalent_surface = scale_surface(
-        fmm.surface, fmm.octree.radius, 0, fmm.octree.center, 1.05
-    )
+#     root_equivalent_surface = scale_surface(
+#         fmm.surface, fmm.octree.radius, 0, fmm.octree.center, 1.05
+#     )
 
-    distant_point = np.array([[1e3, 0, 0]])
+#     distant_point = np.array([[1e3, 0, 0]])
 
-    direct_fmm = p2p(
-        fmm.kernel_function,
-        distant_point,
-        root_equivalent_surface,
-        fmm.source_data[0].expansion
-    )
+#     direct_fmm = p2p(
+#         fmm.kernel_function,
+#         distant_point,
+#         root_equivalent_surface,
+#         fmm.source_data[0].expansion
+#     )
 
-    direct_particles = p2p(
-        fmm.kernel_function,
-        distant_point,
-        fmm.sources,
-        fmm.source_densities
-    )
+#     direct_particles = p2p(
+#         fmm.kernel_function,
+#         distant_point,
+#         fmm.sources,
+#         fmm.source_densities
+#     )
 
-    assert np.isclose(direct_fmm.density, direct_particles.density, rtol=0.01)
+#     assert np.isclose(direct_fmm.density, direct_particles.density, rtol=0.01)
 
 
 def test_downward_pass():
@@ -45,10 +45,16 @@ def test_downward_pass():
     fmm_results = np.array([res.density[0] for res in fmm.result_data])
 
     direct = p2p(
-        fmm.kernel_function,
-        fmm.targets,
-        fmm.sources,
-        fmm.source_densities
-    )
+        kernel_function=fmm.kernel_function,
+        targets=fmm.targets,
+        sources=fmm.sources,
+        source_densities=fmm.source_densities
+    ).density
 
+    error = 100*abs(fmm_results - direct)/direct
+    print(f'mean percentage error {sum(error)/len(fmm_results)}')
+    print()
+    print("first 10 direct results", direct[:10])
+    print("first 10 fmm results", fmm_results[:10])
 
+    assert False

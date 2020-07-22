@@ -54,7 +54,8 @@ class Laplace(Kernel):
         r = np.linalg.norm(x-y)
 
         if np.isclose(r, 0, rtol=1e-12):
-            return 1e10
+            return 0
+
         return 1/(4*np.pi*r)
 
     def __call__(self, x, y):

@@ -61,8 +61,8 @@ def scale_surface(surface, radius, level, center, alpha):
 
     Parameters:
     -----------
-    surface : int
-        Order of the expansion.
+    surface : np.array(shape=(n, 3))
+        Quadrature points coordinates, discretising surface of a node.
     radius : float
         Half side length of the octree's root node.
     level : int
@@ -113,11 +113,11 @@ def gram_matrix(kernel, sources, targets):
         The Gram matrix.
     """
 
-    matrix = np.zeros(shape=(len(sources), len(targets)))
+    matrix = np.zeros(shape=(len(targets), len(sources)))
 
-    for i, source in enumerate(sources):
-        for j, target in enumerate(targets):
-            matrix[i][j] = kernel(source, target)
+    for i, target in enumerate(targets):
+        for j, source in enumerate(sources):
+            matrix[i][j] = kernel(target, source)
 
     return matrix
 
@@ -144,20 +144,27 @@ def compute_check_to_equivalent_inverse(
     """
     # Compute Gram Matrix of upward check to upward equivalent surfaces
     upward_check_to_equivalent = gram_matrix(
-        kernel_function, upward_check_surface, upward_equivalent_surface)
+        kernel=kernel_function,
+        sources=upward_check_surface,
+        targets=upward_equivalent_surface
+    )
 
     # Compute SVD of Gram Matrix
     u, s, v_t = np.linalg.svd(upward_check_to_equivalent)
 
-    # Compute Pseudo-Inverse of Gram matrix
-    tol = 1e-5
-    for i, val in enumerate(s):
-        if  abs(val) < tol:
-            s[i] = 0
-        else:
-            s[i] = 1/val
+    # Compute inverse with regularisation
+    alpha = max(s)*0.00725 # regularisation parameter
+    a = alpha*np.ones(len(s)) + s*s
+    tol = np.finfo(float).eps*4*max(a)
 
-    s = np.diag(s)
+    # Compute Pseudo-Inverse of Gram matrix
+    for i, val in enumerate(a):
+        if  abs(val) < tol:
+            a[i] = 0
+        else:
+            a[i] = 1/val
+
+    s = np.matmul(np.diag(a), np.diag(s))
 
     uc2e_v = np.matmul(v_t.T, s)
     uc2e_u = u.T

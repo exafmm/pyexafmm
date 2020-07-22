@@ -39,8 +39,11 @@ def teardown_module(module):
 
 @pytest.fixture
 def octree():
-    sources = data.load_hdf5_to_array('sources', 'random_sources', '../../data')
-    targets = data.load_hdf5_to_array('targets', 'random_targets', '../../data')
+    sources = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
+    targets = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
+
+    print("HWERW", sources.shape)
+
     source_densities = data.load_hdf5_to_array(
         'source_densities', 'source_densities', '../../data')
 
@@ -101,7 +104,7 @@ def test_m2m(npoints, octree, m2m):
     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
 
 def test_l2l(npoints, octree, l2l):
@@ -132,7 +135,7 @@ def test_l2l(npoints, octree, l2l):
     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
 def test_m2l(
     npoints,
@@ -141,7 +144,7 @@ def test_m2l(
     sources_relative_to_targets,
     ):
 
-    source_level = target_level = 5
+    source_level = target_level = 3
     x0 = octree.center
     r0 = octree.radius
 
@@ -152,7 +155,7 @@ def test_m2l(
     interaction_list = fmm.hilbert.compute_interaction_list(source_key)
 
     # pick a target box in source's interaction list
-    target_key = interaction_list[3]
+    target_key = interaction_list[0]
     target_center = fmm.hilbert.get_center_from_key(target_key, x0, r0)
     target_4d_index = fmm.hilbert.get_4d_index_from_key(target_key)
 
@@ -163,8 +166,7 @@ def test_m2l(
     source_equivalent_density = np.ones(shape=(npoints))
     source_equivalent_surface = scale_surface(SURFACE, r0, source_level, source_center, 1.05)
 
-    operator = m2l[operator_index].reshape((npoints, npoints))
-    target_equivalent_density = np.matmul(operator, source_equivalent_density)
+    target_equivalent_density = np.matmul(m2l[operator_index], source_equivalent_density)
     target_equivalent_surface = scale_surface(SURFACE, r0, target_level, target_center, 2.95)
 
     local_point = np.array([list(target_center)])
