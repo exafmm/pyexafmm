@@ -4,11 +4,12 @@ import pytest
 import fmm.operator as operator
 from fmm.kernel import KERNELS
 
+ORDER = 3
 
 @pytest.fixture
 def surface():
     """Order 2 surface"""
-    return operator.compute_surface(order=2)
+    return operator.compute_surface(order=ORDER)
 
 
 @pytest.fixture
@@ -41,6 +42,15 @@ def upward_check_surface(surface):
 def upward_equivalent_surface(surface):
     return operator.scale_surface(
         surface, 1, 0, np.array([0, 0, 0]), 1.05
+    )
+
+
+@pytest.fixture
+def gram_matrix(upward_check_surface, upward_equivalent_surface):
+    return operator.gram_matrix(
+        kernel_function=KERNELS['laplace'](),
+        sources=upward_equivalent_surface,
+        targets=upward_check_surface
     )
 
 
@@ -94,7 +104,7 @@ def test_scale_surface(surface, radius, level, center, alpha):
 
     # Test that the original surface remains unchanged
     assert ~np.array_equal(surface, scaled_surface)
-    assert np.array_equal(surface, operator.compute_surface(2))
+    assert np.array_equal(surface, operator.compute_surface(ORDER))
 
 
 @pytest.mark.parametrize(
@@ -132,21 +142,70 @@ def test_gram_matrix(
         targets=upward_check_surface
     )
 
-    # Check for symmetry
-    assert np.all(K.T == K)
+    KT = operator.gram_matrix(
+        kernel_function=kernel_function,
+        sources=upward_check_surface,
+        targets=upward_equivalent_surface
+    )
+
+    # Check for symmetry when sources and targets surfaces swapped
+    print(K.T == KT)
 
 
-def test_compute_pseudo_inverse():
+@pytest.mark.parametrize(
+    "K, alpha",
+    [
+        # Diagonal matrix, no regularisation
+        (np.diag(np.ones(2)*10), 0),
+        # Random full rank matrix, no regularisation
+        (random()(3, 3), 0),
+        # Realistic gram matrix, with regularisation
+        (
+            operator.gram_matrix(
+                kernel_function=KERNELS['laplace'](),
+                sources=upward_equivalent_surface(surface()),
+                targets=upward_check_surface(surface())
+                ),
+            0
+        )
+    ]
+)
+def test_compute_pseudo_inverse(K, alpha):
 
-    # mock (diagonal!) gram matrix
-    mock_gram_matrix = np.diag(np.ones(2)*10)
-
-    av, au, bv, bu = operator.compute_pseudo_inverse(mock_gram_matrix)
-
+    # Compute pseudo inverse of matrix K
+    av, au, bv, bu = operator.compute_pseudo_inverse(K, alpha)
     K_inv = np.matmul(av, au)
-    K_inv_expected = np.linalg.inv(np.diag(np.ones(2)*10))
 
-    assert np.all(np.isclose(K_inv, K_inv_expected, rtol=0.001))
+    result = np.matmul(K, K_inv)
+    expected = np.diag(np.ones(len(K)))
+
+    print(result[0])
+    assert np.all(np.isclose(result, expected, rtol=0.001))
+
+
+def test_compute_pseudo_inverse_transpose():
+
+    K = operator.gram_matrix(
+            kernel_function=KERNELS['laplace'](),
+            sources=upward_equivalent_surface(surface()),
+            targets=upward_check_surface(surface())
+        )
+
+    KT = operator.gram_matrix(
+            kernel_function=KERNELS['laplace'](),
+            targets=upward_equivalent_surface(surface()),
+            sources=upward_check_surface(surface())
+        )
+
+    _, _, bv, bu = operator.compute_pseudo_inverse(K)
+
+    av, au, _, _ = operator.compute_pseudo_inverse(KT)
+
+    expected = np.matmul(bv, bu)
+    result = np.matmul(av, au)
+
+    assert np.all(np.isclose(result, expected, rtol=0.01))
+
 
 
 def test_p2p():
