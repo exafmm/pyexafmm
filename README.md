@@ -62,6 +62,7 @@ Make sure to configure the FMM simulation using the `configure.json` file.
     "source_densities_filename": "source_densities",
     "octree_max_level": 4
 }
+```
 
 The operators are calculated from an Octree that is data dependent.
 
@@ -79,4 +80,4 @@ ci [OPTIONS] COMMAND [ARGS]
 | `lint`	| Run project linter 	|
 | `compute-operators` | Run operator pre-computations |
 | `generate-test-data [npoints]` | Generate `npoints` random sources & targets|
-| `recompute_opeartors` | Clear cache of computed operators, and recalculate with current the config |
+| `recompute-opeartors` | Clear cache of computed operators, and recalculate with current the config |
