@@ -5,6 +5,8 @@ import fmm.operator as operator
 from fmm.kernel import KERNELS
 
 ORDER = 3
+NTARGETS = 4
+NSOURCES = 3
 
 @pytest.fixture
 def surface():
@@ -22,13 +24,13 @@ def random():
 @pytest.fixture
 def sources(random):
     """Some random sources"""
-    return random(3, 3)
+    return random(NSOURCES, 3)
 
 
 @pytest.fixture
 def targets(random):
     """Some random targets"""
-    return random(4, 3)
+    return random(NTARGETS, 3)
 
 
 @pytest.fixture
@@ -208,13 +210,27 @@ def test_compute_pseudo_inverse_transpose():
 
 
 
-def test_p2p():
-    pass
+@pytest.mark.parametrize(
+    "kernel_function",
+    [
+        KERNELS['laplace']()
+    ]
+)
+def test_p2p(kernel_function, sources, targets):
 
+    result = operator.p2p(
+        kernel_function=kernel_function,
+        targets=targets,
+        sources=sources,
+        source_densities=np.ones(len(sources))
+    )
 
-def test_compute_equivalent_orientations():
-    pass
+    potential_density = result.density
 
+    # Check a given target
+    target_idx = 0
+    expected = 0
+    for i, source in enumerate(sources):
+        expected += kernel_function(source, targets[target_idx])
 
-def test_compute_m2l_operator_index():
-    pass
+    assert expected == potential_density[target_idx]
