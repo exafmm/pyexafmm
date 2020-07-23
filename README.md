@@ -36,6 +36,36 @@ python setup.py install
 conda develop .
 ```
 
+## Configure
+
+After installation, use provided scripts to precompute and cache FMM operators,
+
+e.g.
+
+```bash
+ci precompute-operators
+```
+
+Make sure to configure the FMM simulation using the `configure.json` file.
+
+```json
+{
+    "order": 3,
+    "operator_dirname": "precomputed_operators_order_3",
+    "surface_filename": "surface",
+    "kernel": "laplace",
+    "alpha_inner": 1.05,
+    "alpha_outer": 2.95,
+    "data_dirname": "data",
+    "source_filename": "random_sources",
+    "target_filename": "random_targets",
+    "source_densities_filename": "source_densities",
+    "octree_max_level": 4
+}
+
+The operators are calculated from an Octree that is data dependent.
+
+
 ## CLI
 
 ```bash
@@ -48,3 +78,5 @@ ci [OPTIONS] COMMAND [ARGS]
 | `test`	| Run test suite	|
 | `lint`	| Run project linter 	|
 | `compute-operators` | Run operator pre-computations |
+| `generate-test-data [npoints]` | Generate `npoints` random sources & targets|
+| `recompute_opeartors` | Clear cache of computed operators, and recalculate with current the config |

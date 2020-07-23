@@ -20,9 +20,6 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
-
-
-
 def main(
         operator_dirname,
         surface_filename,
@@ -36,17 +33,20 @@ def main(
         source_densities_filename,
         octree_max_level
         ):
+    """
+    Main script, configure using config.json file in module root.
+    """
 
     data_dirpath = PARENT / f"{data_dirname}/"
     operator_dirpath = PARENT / f"{operator_dirname}/"
 
-    # Step 0: onstruct Octree and load Python config objs
+    # Step 0: Construct Octree and load Python config objs
     print("source filename", data_dirpath)
 
-    sources = data.load_hdf5_to_array('sources', source_filename, data_dirpath)
-    targets = data.load_hdf5_to_array('targets', target_filename, data_dirpath)
+    sources = data.load_hdf5_to_array(source_filename, source_filename, data_dirpath)
+    targets = data.load_hdf5_to_array(target_filename, target_filename, data_dirpath)
     source_densities = data.load_hdf5_to_array(
-        'source_densities', source_densities_filename, data_dirpath)
+        source_densities_filename, source_densities_filename, data_dirpath)
     octree = Octree(sources, targets, octree_max_level, source_densities)
 
     # Load required Python objects
@@ -104,7 +104,9 @@ def main(
         )
 
         uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent_inverse(
-            kernel_function, upward_check_surface, upward_equivalent_surface
+            kernel_function=kernel_function,
+            upward_check_surface=upward_check_surface,
+            upward_equivalent_surface=upward_equivalent_surface
         )
 
         # Save matrices
@@ -133,7 +135,7 @@ def main(
         ]
 
         parent_upward_check_surface = scale_surface(
-                surface, parent_radius, parent_level, parent_center, alpha_outer
+            surface, octree.radius, parent_level, octree.center, alpha_outer
             )
 
         m2m = []
@@ -148,13 +150,13 @@ def main(
             print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
 
             child_upward_equivalent_surface = scale_surface(
-                surface, parent_radius, child_level, child_center, alpha_inner
+                surface, octree.radius, child_level, child_center, alpha_inner
             )
 
             pc2ce = gram_matrix(
-                kernel_function,
-                parent_upward_check_surface,
-                child_upward_equivalent_surface,
+                kernel_function=kernel_function,
+                sources=parent_upward_check_surface,
+                targets=child_upward_equivalent_surface,
             )
 
             # Compute M2M operator for this octant
@@ -162,8 +164,8 @@ def main(
             m2m.append(np.matmul(uc2e_v, tmp))
 
             # Compute L2L operator for this octant
-            pc2ce = pc2ce.T
-            tmp = np.matmul(pc2ce, scale*dc2e_v)
+            cc2pe = pc2ce.T
+            tmp = np.matmul(cc2pe, scale*dc2e_v)
             l2l.append(np.matmul(tmp, dc2e_u))
 
         # Save m2m & l2l operators, index is equivalent to their Hilbert key
@@ -198,7 +200,6 @@ def main(
         # of the source node from the target in units of box width, and the key
         # of the source node.
         sources_relative_to_targets = np.zeros(shape=(189, 5))
-        # sources_relative_to_targets = []
 
         for source_idx, source_key in enumerate(interaction_list):
 
@@ -232,9 +233,9 @@ def main(
             scale = (1/2)**(target_level)
 
             se2tc = gram_matrix(
-                kernel_function,
-                source_upward_equivalent_surface,
-                target_downward_check_surface
+                kernel_function=kernel_function,
+                sources=target_downward_check_surface,
+                targets=source_upward_equivalent_surface,
             )
 
             tmp = np.matmul(dc2e_u, se2tc)

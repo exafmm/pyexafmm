@@ -42,8 +42,8 @@ class Fmm:
 
         # Load sources, targets and source densities
         self.surface = load_hdf5_to_array('surface', 'surface', operator_dirpath)
-        self.sources = load_hdf5_to_array('sources', source_filename, data_dirpath)
-        self.targets = load_hdf5_to_array('targets', target_filename, data_dirpath)
+        self.sources = load_hdf5_to_array(source_filename, source_filename, data_dirpath)
+        self.targets = load_hdf5_to_array(target_filename, target_filename, data_dirpath)
         self.source_densities = load_hdf5_to_array(
             'source_densities', source_densities_filename, data_dirpath)
 
@@ -243,7 +243,7 @@ class Fmm:
                     self.l2l[operator_idx], parent_equivalent_density
                 )
 
-                self.target_data[child].expansion += child_equivalent_density
+                self.target_data[child].expansion = child_equivalent_density
 
     def local_to_particle(self, leaf_index):
         """
