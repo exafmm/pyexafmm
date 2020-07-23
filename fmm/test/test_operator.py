@@ -1,22 +1,166 @@
+import numpy as np
 import pytest
 
 import fmm.operator as operator
+from fmm.kernel import KERNELS
 
 
-def test_compute_surface():
-    pass
+@pytest.fixture
+def surface():
+    """Order 2 surface"""
+    return operator.compute_surface(order=2)
 
 
-def test_scale_surface():
-    pass
+@pytest.fixture
+def random():
+    """Random float generator"""
+    np.random.seed(0)
+    return np.random.rand
 
 
-def test_gram_matrix():
-    pass
+@pytest.fixture
+def sources(random):
+    """Some random sources"""
+    return random(3, 3)
 
 
-def test_compute_check_to_equivalent_inverse():
-    pass
+@pytest.fixture
+def targets(random):
+    """Some random targets"""
+    return random(4, 3)
+
+
+@pytest.fixture
+def upward_check_surface(surface):
+    return operator.scale_surface(
+        surface, 1, 0, np.array([0, 0, 0]), 2.95
+    )
+
+
+@pytest.fixture
+def upward_equivalent_surface(surface):
+    return operator.scale_surface(
+        surface, 1, 0, np.array([0, 0, 0]), 1.05
+    )
+
+
+@pytest.mark.parametrize(
+    "order",
+    [
+        (2),
+    ]
+)
+def test_compute_surface(order):
+    """Test surface computation"""
+    surface = operator.compute_surface(order)
+
+    # Test that surface centered at origin
+    assert np.array_equal(surface.mean(axis=0), np.array([0, 0, 0]))
+
+    # Test surface has expected dimension
+    n_coeffs = 6*(order-1)**2 + 2
+    assert surface.shape == (n_coeffs, 3)
+
+
+@pytest.mark.parametrize(
+    "radius, level, center, alpha",
+    [
+        (1, 0, np.array([0.5, 0.5, 0.5]), 2),
+        (1, 1, np.array([0.5, 0.5, 0.5]), 2)
+    ]
+)
+def test_scale_surface(surface, radius, level, center, alpha):
+    """Test shifting/scaling surface"""
+
+    scaled_surface = operator.scale_surface(
+        surface=surface,
+        radius=radius,
+        level=level,
+        center=center,
+        alpha=alpha
+    )
+
+    # Test that the center has been shifted as expected
+    assert np.array_equal(scaled_surface.mean(axis=0), center)
+
+    # Test that the scaling of the radius is as expected
+    for i in range(3):
+
+        expected_diameter = 2*alpha*radius*(0.5)**level
+        assert(
+            (max(scaled_surface[:, i]) - min(scaled_surface[:, i]))
+            == expected_diameter
+            )
+
+    # Test that the original surface remains unchanged
+    assert ~np.array_equal(surface, scaled_surface)
+    assert np.array_equal(surface, operator.compute_surface(2))
+
+
+@pytest.mark.parametrize(
+    "kernel_function",
+    [
+        (KERNELS['identity']()),
+        (KERNELS['laplace']())
+    ]
+)
+def test_gram_matrix(
+        kernel_function,
+        sources,
+        targets,
+        upward_equivalent_surface,
+        upward_check_surface
+    ):
+
+    # Test for gram matrix between source and target points
+    K = operator.gram_matrix(
+        kernel_function=kernel_function,
+        sources=sources,
+        targets=targets
+        )
+
+    # Check that the gram matrix is the expected dimension
+    assert K.shape == (len(targets), len(sources))
+
+    # Check that entries are as expected (0th target, 1st source)
+    assert K[0][1] == kernel_function(targets[0], sources[1])
+
+    # Test for gram matrix between upward equivalent and check surfaces
+    K = operator.gram_matrix(
+        kernel_function=kernel_function,
+        sources=upward_equivalent_surface,
+        targets=upward_check_surface
+    )
+
+    # Check for symmetry
+    assert np.all(K.T == K)
+
+
+@pytest.mark.parametrize(
+    "kernel_function",
+    [
+        KERNELS['identity'](),
+    ]
+)
+def test_compute_check_to_equivalent_inverse(
+    kernel_function,
+    upward_check_surface,
+    upward_equivalent_surface,
+    monkeypatch
+    ):
+
+    # Monkey patch the gram_matrix function
+    def mock_gram_matrix(*args, **kwargs):
+        return np.diag(np.ones(2)*10)
+
+    monkeypatch.setattr(operator, "gram_matrix", mock_gram_matrix)
+
+    uc2e_v, uc2e_u, dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
+        kernel_function, upward_check_surface, upward_equivalent_surface
+    )
+
+    expected = np.linalg.inv(np.diag(np.ones(2)*10))
+    assert np.all(np.isclose(expected, np.matmul(uc2e_v, uc2e_u), rtol=0.01))
 
 
 def test_p2p():

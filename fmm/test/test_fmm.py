@@ -34,6 +34,9 @@ def test_upward_pass():
 
     assert np.isclose(direct_fmm.density, direct_particles.density, rtol=0.05)
 
+    print(direct_fmm.density, direct_particles.density)
+    assert False
+
 
 # def test_downward_pass():
 

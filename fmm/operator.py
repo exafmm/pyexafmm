@@ -56,21 +56,21 @@ def compute_surface(order):
 
 def scale_surface(surface, radius, level, center, alpha):
     """
-    Compute vectors to correspond to quadrature points on surface of a specified
-        node.
+    Shift and scale a given surface to a new center, and radius relative to the
+        original surface.
 
     Parameters:
     -----------
     surface : np.array(shape=(n, 3))
-        Quadrature points coordinates, discretising surface of a node.
+        Original node surface, being shifted/scaled.
     radius : float
-        Half side length of the octree's root node.
+        Half side length of the Octree's root node that this surface lives in.
     level : int
-        (Octree) level of node.
+        Octree level of the shifted node.
     center : coordinate
-        Coordinates of the centre of the node.
+        Coordinates of the centre of the shifted node.
     alpha : float
-        Ratio between side length of surface node and original node.
+        Ratio between side length of shifted/scaled node and original node.
 
     Returns:
     --------
@@ -93,14 +93,14 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
-def gram_matrix(kernel, sources, targets):
+def gram_matrix(kernel_function, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
         interactions of sources/targets under the action of the kernel function.
 
     Parameters:
     -----------
-    kernel : function
+    kernel_function : function
         Kernel function
     sources : np.array(shape=(n, 3))
         The n source locations on a surface.
@@ -115,9 +115,9 @@ def gram_matrix(kernel, sources, targets):
 
     matrix = np.zeros(shape=(len(targets), len(sources)))
 
-    for i, target in enumerate(targets):
-        for j, source in enumerate(sources):
-            matrix[i][j] = kernel(target, source)
+    for row_idx, target in enumerate(targets):
+        for col_idx, source in enumerate(sources):
+            matrix[row_idx][col_idx] = kernel_function(target, source)
 
     return matrix
 
@@ -144,9 +144,9 @@ def compute_check_to_equivalent_inverse(
     """
     # Compute Gram Matrix of upward check to upward equivalent surfaces
     upward_check_to_equivalent = gram_matrix(
-        kernel=kernel_function,
-        sources=upward_check_surface,
-        targets=upward_equivalent_surface
+        kernel_function=kernel_function,
+        sources=upward_equivalent_surface,
+        targets=upward_check_surface
     )
 
     # Compute SVD of Gram Matrix
@@ -155,6 +155,7 @@ def compute_check_to_equivalent_inverse(
     # Compute inverse with regularisation
     alpha = max(s)*0.00725 # regularisation parameter
     a = alpha*np.ones(len(s)) + s*s
+
     tol = np.finfo(float).eps*4*max(a)
 
     # Compute Pseudo-Inverse of Gram matrix
