@@ -46,7 +46,7 @@ e.g.
 ci precompute-operators
 ```
 
-Make sure to configure the FMM simulation using the `configure.json` file.
+Make sure to configure the FMM simulation using the `config.json` file.
 
 ```json
 {
@@ -80,4 +80,4 @@ ci [OPTIONS] COMMAND [ARGS]
 | `lint`	| Run project linter 	|
 | `compute-operators` | Run operator pre-computations |
 | `generate-test-data [npoints]` | Generate `npoints` random sources & targets|
-| `recompute-opeartors` | Clear cache of computed operators, and recalculate with current the config |
+| `recompute-operators` | Clear cache of computed operators, and recalculate with current the config |
