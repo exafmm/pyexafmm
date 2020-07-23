@@ -136,31 +136,17 @@ def test_gram_matrix(
     assert np.all(K.T == K)
 
 
-@pytest.mark.parametrize(
-    "kernel_function",
-    [
-        KERNELS['identity'](),
-    ]
-)
-def test_compute_check_to_equivalent_inverse(
-    kernel_function,
-    upward_check_surface,
-    upward_equivalent_surface,
-    monkeypatch
-    ):
+def test_compute_pseudo_inverse():
 
-    # Monkey patch the gram_matrix function
-    def mock_gram_matrix(*args, **kwargs):
-        return np.diag(np.ones(2)*10)
+    # mock (diagonal!) gram matrix
+    mock_gram_matrix = np.diag(np.ones(2)*10)
 
-    monkeypatch.setattr(operator, "gram_matrix", mock_gram_matrix)
+    av, au, bv, bu = operator.compute_pseudo_inverse(mock_gram_matrix)
 
-    uc2e_v, uc2e_u, dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function, upward_check_surface, upward_equivalent_surface
-    )
+    K_inv = np.matmul(av, au)
+    K_inv_expected = np.linalg.inv(np.diag(np.ones(2)*10))
 
-    expected = np.linalg.inv(np.diag(np.ones(2)*10))
-    assert np.all(np.isclose(expected, np.matmul(uc2e_v, uc2e_u), rtol=0.01))
+    assert np.all(np.isclose(K_inv, K_inv_expected, rtol=0.001))
 
 
 def test_p2p():

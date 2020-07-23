@@ -122,6 +122,50 @@ def gram_matrix(kernel_function, sources, targets):
     return matrix
 
 
+def compute_pseudo_inverse(matrix):
+    """
+    Compute pseudo-inverse using SVD of a given matrix. Based on the backward-
+        stable pseudo-inverse introduced by Malhotra et al. 2018.
+
+    Parameters:
+    ----------
+    matrix: np.array(shape=any)
+
+    Returns:
+    --------
+    (np.array, np.array, np.array, np.array)
+        Tuple, where first two elements multiply together to form the inverse
+        of the matrix, and the second two elements multiply together to form the
+        inverse of the matrix's transpose.
+    """
+    # Compute SVD
+    u, s, v_t = np.linalg.svd(matrix)
+
+    # Compute inverse of diagonal matrix with regularisation, hand tuned.
+    alpha = max(s)*0.00725
+    a = alpha*np.ones(len(s)) + s*s
+
+    tol = np.finfo(float).eps*4*max(a)
+
+    for i, val in enumerate(a):
+        if  abs(val) < tol:
+            a[i] = 0
+        else:
+            a[i] = 1/val
+
+    s = np.matmul(np.diag(a), np.diag(s))
+
+    # Compnents of the inverse of the matrix
+    av = np.matmul(v_t.T, s)
+    au = u.T
+
+    # Components of the inverse of the matrix transpose
+    bv = np.matmul(u, s)
+    bu = v_t
+
+    return (av, au, bv, bu)
+
+
 def compute_check_to_equivalent_inverse(
         kernel_function, upward_check_surface, upward_equivalent_surface
         ):
@@ -143,35 +187,14 @@ def compute_check_to_equivalent_inverse(
         and downard check-to-equivalent inverse stored as two components.
     """
     # Compute Gram Matrix of upward check to upward equivalent surfaces
-    upward_check_to_equivalent = gram_matrix(
+    c2e = gram_matrix(
         kernel_function=kernel_function,
         sources=upward_equivalent_surface,
         targets=upward_check_surface
     )
 
     # Compute SVD of Gram Matrix
-    u, s, v_t = np.linalg.svd(upward_check_to_equivalent)
-
-    # Compute inverse with regularisation
-    alpha = max(s)*0.00725 # regularisation parameter
-    a = alpha*np.ones(len(s)) + s*s
-
-    tol = np.finfo(float).eps*4*max(a)
-
-    # Compute Pseudo-Inverse of Gram matrix
-    for i, val in enumerate(a):
-        if  abs(val) < tol:
-            a[i] = 0
-        else:
-            a[i] = 1/val
-
-    s = np.matmul(np.diag(a), np.diag(s))
-
-    uc2e_v = np.matmul(v_t.T, s)
-    uc2e_u = u.T
-
-    dc2e_v = np.matmul(u, s)
-    dc2e_u = v_t
+    uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e)
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 
