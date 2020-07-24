@@ -24,6 +24,7 @@ SURFACE = compute_surface(ORDER)
 KERNEL_FUNCTION = Laplace()
 
 OPERATOR_DIRPATH = HERE.parent.parent / f'precomputed_operators_order_{ORDER}'
+DATA_DIRPATH = HERE.parent.parent / CONFIG['data_dirname']
 
 
 def setup_module(module):
@@ -39,11 +40,11 @@ def teardown_module(module):
 
 @pytest.fixture
 def octree():
-    sources = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
-    targets = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
+    sources = data.load_hdf5_to_array('random_sources', 'random_sources', DATA_DIRPATH)
+    targets = data.load_hdf5_to_array('random_sources', 'random_sources', DATA_DIRPATH)
 
     source_densities = data.load_hdf5_to_array(
-        'source_densities', 'source_densities', '../../data')
+        'source_densities', 'source_densities', DATA_DIRPATH)
 
     return Octree(sources, targets, 5, source_densities)
 
