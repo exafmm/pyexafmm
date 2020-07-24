@@ -28,7 +28,6 @@ SCRIPT_DIRPATH = HERE.parent.parent / 'scripts'
 KERNEL_FUNCTION = kernel.KERNELS['laplace']()
 
 
-
 def setup_module(module):
     os.chdir(HERE.parent)
     subprocess.run(['python', SCRIPT_DIRPATH / 'precompute_operators.py', CONFIG_FILEPATH])
@@ -137,4 +136,61 @@ def test_upward_pass(fmm):
             assert np.isclose(child_potential, parent_potential, rtol=0.01)
 
         current_level -= 1
+
+    # Test source to mulitpole at leaf level
+    leaf_nodes = {
+        key: node for key, node in fmm.source_data.items()
+        if hilbert.get_level(key) == leaf_level
+    }
+
+    for key, node in leaf_nodes.items():
+
+        leaf_center = hilbert.get_center_from_key(
+            key, fmm.octree.center, fmm.octree.radius
+        )
+
+        leaf_index = fmm.octree.source_node_to_index[key]
+
+        leaf_source_indices = fmm.octree.sources_by_leafs[
+                fmm.octree.source_index_ptr[leaf_index]:
+                fmm.octree.source_index_ptr[leaf_index + 1]
+            ]
+
+        leaf_sources = fmm.octree.sources[leaf_source_indices]
+        leaf_source_densities = fmm.octree.source_densities[leaf_source_indices]
+
+        leaf_equivalent_surface = operator.scale_surface(
+            surface=surface,
+            radius=fmm.octree.radius,
+            level=leaf_level,
+            center=leaf_center,
+            alpha=1.05
+        )
+
+        # Directly compute potential from sources
+        source_result = 0
+        for source in leaf_sources:
+            source_result += operator.p2p(
+                kernel_function=KERNEL_FUNCTION,
+                targets=distant_point,
+                sources=source.reshape(1, 3),
+                source_densities=leaf_source_densities
+            ).density
+
+        # Compare with result from leaf multipole expansion
+        leaf_result = operator.p2p(
+            kernel_function=KERNEL_FUNCTION,
+            targets=distant_point,
+            sources=leaf_equivalent_surface,
+            source_densities=node.expansion
+        ).density
+
+        assert np.isclose(leaf_result, source_result, rtol=0.01)
+
+
+# def test_downward_pass(fmm):
+#     fmm.upward_pass()
+#     fmm.downward_pass()
+
+#     print(fmm.result_data)
 
