@@ -63,26 +63,3 @@ def test_upward_pass(fmm):
     )
 
     assert np.isclose(direct_fmm.density, direct_particles.density, rtol=0.01)
-
-
-# def test_downward_pass(fmm):
-
-#     fmm.upward_pass()
-#     fmm.downward_pass()
-
-#     fmm_results = np.array([res.density[0] for res in fmm.result_data])
-
-#     direct = p2p(
-#         kernel_function=fmm.kernel_function,
-#         targets=fmm.targets,
-#         sources=fmm.sources,
-#         source_densities=fmm.source_densities
-#     ).density
-
-#     error = 100*abs(fmm_results - direct)/direct
-#     print(f'mean percentage error {sum(error)/len(fmm_results)}')
-#     print()
-#     print("first 10 direct results", direct[:10])
-#     print("first 10 fmm results", fmm_results[:10])
-
-#     assert False
