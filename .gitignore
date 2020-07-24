@@ -110,11 +110,14 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-#PyCharm
+# PyCharm
 .idea/
 
-#Pytest
+# Pytest
 .pytest_cache
 
-#VS Code
+# VS Code
 .vscode/
+
+# MacOS
+.DS_Store

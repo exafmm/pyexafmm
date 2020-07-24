@@ -106,7 +106,8 @@ def main(
         uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent_inverse(
             kernel_function=kernel_function,
             upward_check_surface=upward_check_surface,
-            upward_equivalent_surface=upward_equivalent_surface
+            upward_equivalent_surface=upward_equivalent_surface,
+            alpha=0
         )
 
         # Save matrices
@@ -155,8 +156,8 @@ def main(
 
             pc2ce = gram_matrix(
                 kernel_function=kernel_function,
-                sources=parent_upward_check_surface,
-                targets=child_upward_equivalent_surface,
+                targets=parent_upward_check_surface,
+                sources=child_upward_equivalent_surface,
             )
 
             # Compute M2M operator for this octant
@@ -203,8 +204,8 @@ def main(
 
         for source_idx, source_key in enumerate(interaction_list):
 
-            source_4d_idx = fmm.hilbert.get_4d_index_from_key(source_key)
-            source_relative_to_target = source_4d_idx[:3] - center_4d_index[:3]
+            source_4d_index = fmm.hilbert.get_4d_index_from_key(source_key)
+            source_relative_to_target = source_4d_index[:3] - center_4d_index[:3]
             magnitude = np.linalg.norm(source_relative_to_target)
 
             sources_relative_to_targets[source_idx][:3] = source_relative_to_target
@@ -216,26 +217,33 @@ def main(
         for idx, source_to_target_vec in enumerate(sources_relative_to_targets):
             print(f'Computed ({idx+1}/{loading}) M2L operators')
 
-            source_key = int(source_to_target_vec[-1])
+            source_key = int(source_to_target_vec[4])
             source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
-            source_level = target_level
             source_upward_equivalent_surface = scale_surface(
-                surface, r0, source_level, source_center, alpha_inner
+                    surface=surface,
+                    radius=r0,
+                    level=source_level,
+                    center=source_center,
+                    alpha=alpha_inner
                 )
 
             target_center = fmm.hilbert.get_center_from_key(center_key, x0, r0)
 
             # Compute target check surface
             target_downward_check_surface = scale_surface(
-                surface, r0, target_level, target_center, alpha_inner
+                    surface=surface,
+                    radius=r0,
+                    level=target_level,
+                    center=target_center,
+                    alpha=alpha_inner
             )
 
             scale = (1/2)**(target_level)
 
             se2tc = gram_matrix(
                 kernel_function=kernel_function,
-                sources=target_downward_check_surface,
-                targets=source_upward_equivalent_surface,
+                sources=source_upward_equivalent_surface,
+                targets=target_downward_check_surface,
             )
 
             tmp = np.matmul(dc2e_u, se2tc)

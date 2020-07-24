@@ -174,7 +174,10 @@ def compute_pseudo_inverse(matrix, alpha=None):
 
 
 def compute_check_to_equivalent_inverse(
-        kernel_function, upward_check_surface, upward_equivalent_surface
+        kernel_function,
+        upward_check_surface,
+        upward_equivalent_surface,
+        alpha=None
         ):
     """
     Compute the inverse of the upward check-to-equivalent gram matrix, and the
@@ -186,6 +189,8 @@ def compute_check_to_equivalent_inverse(
     kernel_function : function
     upward_check_surface : np.array(shape=(n, 3))
     upward_equivalent_surface : np.array(shape=(n, 3))
+    alpha : float [optional]
+        Regularisation parameter
 
     Returns:
     --------
@@ -201,7 +206,11 @@ def compute_check_to_equivalent_inverse(
     )
 
     # Compute SVD of Gram Matrix
-    uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e)
+
+    if alpha is None:
+        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e)
+    else:
+        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e, alpha)
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 

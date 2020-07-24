@@ -42,8 +42,6 @@ def octree():
     sources = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
     targets = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
 
-    print("HWERW", sources.shape)
-
     source_densities = data.load_hdf5_to_array(
         'source_densities', 'source_densities', '../../data')
 
@@ -81,7 +79,7 @@ def npoints():
 def test_m2m(npoints, octree, m2m):
 
     parent_key = 0
-    child_key = 1
+    child_key = fmm.hilbert.get_children(parent_key)[0]
 
     x0 = octree.center
     r0 = octree.radius
@@ -104,13 +102,13 @@ def test_m2m(npoints, octree, m2m):
     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.01)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
 
 def test_l2l(npoints, octree, l2l):
 
     parent_key = 0
-    child_key = 2
+    child_key = fmm.hilbert.get_children(parent_key)[0]
 
     x0 = octree.center
     r0 = octree.radius
@@ -135,7 +133,8 @@ def test_l2l(npoints, octree, l2l):
     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.01)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
+
 
 def test_m2l(
     npoints,
@@ -181,8 +180,8 @@ def test_m2l(
     source_direct = p2p(
         kernel_function=KERNEL_FUNCTION,
         targets=local_point,
-        source_densities=source_equivalent_density,
-        sources=source_equivalent_surface
+        sources=source_equivalent_surface,
+        source_densities=source_equivalent_density
     )
 
     assert np.isclose(target_direct.density, source_direct.density, rtol=0.01)
