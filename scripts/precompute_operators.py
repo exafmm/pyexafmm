@@ -215,7 +215,7 @@ def main(
         loading = f'{len(sources_relative_to_targets)}'
 
         for idx, source_to_target_vec in enumerate(sources_relative_to_targets):
-            # print(f'Computed ({idx+1}/{loading}) M2L operators')
+            print(f'Computed ({idx+1}/{loading}) M2L operators')
 
             source_key = int(source_to_target_vec[4])
             source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)

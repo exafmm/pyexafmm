@@ -76,64 +76,64 @@ def npoints():
     return 6*(ORDER-1)**2 + 2
 
 
-# def test_m2m(npoints, octree, m2m):
+def test_m2m(npoints, octree, m2m):
 
-#     parent_key = 0
-#     child_key = fmm.hilbert.get_children(parent_key)[0]
+    parent_key = 0
+    child_key = fmm.hilbert.get_children(parent_key)[0]
 
-#     x0 = octree.center
-#     r0 = octree.radius
+    x0 = octree.center
+    r0 = octree.radius
 
-#     parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
-#     child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
+    parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
+    child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
 
-#     parent_level = fmm.hilbert.get_level(parent_key)
-#     child_level = fmm.hilbert.get_level(child_key)
+    parent_level = fmm.hilbert.get_level(parent_key)
+    child_level = fmm.hilbert.get_level(child_key)
 
-#     child_equivalent_density = np.ones(shape=(npoints))
+    child_equivalent_density = np.ones(shape=(npoints))
 
-#     parent_equivalent_density = np.matmul(m2m[0], child_equivalent_density)
+    parent_equivalent_density = np.matmul(m2m[0], child_equivalent_density)
 
-#     distant_point = np.array([[1e3, 0, 0]])
+    distant_point = np.array([[1e3, 0, 0]])
 
-#     child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 1.05)
-#     parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 1.05)
+    child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 1.05)
+    parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 1.05)
 
-#     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
-#     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
+    parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
+    child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
 
-#     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
 
-# def test_l2l(npoints, octree, l2l):
+def test_l2l(npoints, octree, l2l):
 
-#     parent_key = 0
-#     child_key = fmm.hilbert.get_children(parent_key)[0]
+    parent_key = 0
+    child_key = fmm.hilbert.get_children(parent_key)[0]
 
-#     x0 = octree.center
-#     r0 = octree.radius
+    x0 = octree.center
+    r0 = octree.radius
 
-#     parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
-#     child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
+    parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
+    child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
 
-#     parent_level = fmm.hilbert.get_level(parent_key)
-#     child_level = fmm.hilbert.get_level(child_key)
+    parent_level = fmm.hilbert.get_level(parent_key)
+    child_level = fmm.hilbert.get_level(child_key)
 
-#     parent_equivalent_density = np.ones(shape=(npoints))
+    parent_equivalent_density = np.ones(shape=(npoints))
 
-#     operator_idx = (child_key % 8) -1
+    operator_idx = (child_key % 8) -1
 
-#     child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
+    child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
 
-#     child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 2.95)
-#     parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 2.95)
+    child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 2.95)
+    parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 2.95)
 
-#     local_point = np.array([list(child_center)])
+    local_point = np.array([list(child_center)])
 
-#     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
-#     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
+    parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
+    child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-#     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
 
 def test_m2l(
@@ -185,6 +185,3 @@ def test_m2l(
     )
 
     assert np.isclose(target_direct.density, source_direct.density, rtol=0.01)
-
-    print(target_direct.density, source_direct.density)
-    assert False
