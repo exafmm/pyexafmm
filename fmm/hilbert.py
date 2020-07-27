@@ -25,6 +25,7 @@ def get_level(key):
         offset += 1 << 3 * level
     return level
 
+
 @numba.njit(cache=True)
 def get_levels_for_array(indices):
     """Get levels for array of indices ."""
@@ -182,6 +183,9 @@ def compute_neighbors(key):
         List of neighbors.
     """
     vec = get_4d_index_from_key(key)
+
+    max_coord = 2**get_level(key)
+
     count = -1
     offset = np.zeros(4, dtype=np.int64)
 
@@ -192,11 +196,24 @@ def compute_neighbors(key):
             for k in range(-1, 2):
                 count += 1
                 offset[:3] = i, j, k
-                neighbor_vec = vec + offset
-                neighbor_key = get_key(neighbor_vec)
-                neighbors.append(neighbor_key)
 
-    return neighbors
+                neighbor_vec = vec + offset
+
+                # Ignore displacements that give index values outside of domain
+                # at this level
+                if np.any(neighbor_vec < 0) or np.any(neighbor_vec >= max_coord):
+                    pass
+
+                # Otherwise, compute the key
+                else:
+                    neighbor_key = get_key(neighbor_vec)
+                    neighbors.append(neighbor_key)
+
+    # Remove the key itself from the list of neighbors
+    neighbors = set(neighbors)
+    neighbors.remove(key)
+
+    return list(neighbors)
 
 
 def compute_interaction_list(key):
@@ -223,10 +240,11 @@ def compute_interaction_list(key):
     child_neighbors = compute_neighbors(key)
 
     interaction_list = []
+
     for parent_neighbor in parent_neighbors:
         children = get_children(parent_neighbor)
         for child in children:
             if child not in child_neighbors and child != key:
                 interaction_list.append(child)
 
-    return interaction_list
+    return list(set(interaction_list))

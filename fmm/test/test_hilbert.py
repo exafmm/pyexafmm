@@ -57,3 +57,57 @@ def test_get_center_from_4d_index(index, center):
         hilbert.get_center_from_4d_index(index, center, r0),
         x0
     )
+
+
+# @pytest.mark.parametrize(
+#     "key",
+#     [
+#         65
+#     ]
+# )
+# def test_compute_neighbors(key):
+
+#     neighbors = hilbert.compute_neighbors(key)
+#     interaction_list = hilbert.compute_interaction_list(key)
+
+#     # assert len(neighbors) == 26
+
+#     neighbor_coords = np.array([
+#         hilbert.get_4d_index_from_key(k)[:3]
+#         for k in neighbors
+#     ])
+
+#     int_list_coords = np.array([
+#         hilbert.get_4d_index_from_key(k)[:3]
+#         for k in interaction_list
+#     ])
+
+#     node_coords = hilbert.get_4d_index_from_key(key)[:3]
+
+#     import matplotlib.pyplot as plt
+#     from mpl_toolkits.mplot3d import Axes3D
+
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
+#     ax.scatter(neighbor_coords[:, 0],neighbor_coords[:, 1],neighbor_coords[:, 2])
+#     ax.scatter(node_coords[0],node_coords[1],node_coords[2], color='red')
+#     ax.scatter(int_list_coords[:, 0],int_list_coords[:, 1],int_list_coords[:, 2], color='green')
+
+#     plt.show()
+
+#     assert False
+
+
+# @pytest.mark.parametrize(
+#     "key",
+#     [
+#         9,
+#     ]
+# )
+# def test_compute_interaction_list(key):
+
+#     interaction_list = hilbert.compute_interaction_list(key)
+
+#     print(interaction_list, len(interaction_list))
+
+#     assert False

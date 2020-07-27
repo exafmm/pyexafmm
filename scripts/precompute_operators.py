@@ -175,18 +175,25 @@ def main(
         data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
 
     # Compute M2L operators
-    m2l_dirpath = operator_dirpath / 'm2l'
-    if data.directory_exists(m2l_dirpath):
-        print(f"Already Computed M2L Operators of Order {order}")
 
-    else:
+    # Create sub-directory to store m2l computations
+    m2l_dirpath = operator_dirpath
+    current_level = 2
 
-        # Create sub-directory to store m2l computations
-        os.mkdir(m2l_dirpath)
+    already_computed = False
 
-        current_level = 2
+    while current_level <= octree_max_level:
 
-        while current_level <= octree_max_level:
+        m2l_filename = f'm2l_level_{current_level}'
+        index_to_key_filename = f'index_to_key_level_{current_level}'
+
+        if data.file_in_directory(m2l_filename, operator_dirpath, ext='pkl'):
+            already_computed = True
+
+        if already_computed:
+            print(f"Already Computed M2L operators for level {current_level}")
+
+        else:
 
             print(f"Computing M2L Operators for Level {current_level}")
 
@@ -201,7 +208,7 @@ def main(
                 [] for leaf in range(len(leaves))
             ]
 
-            key_to_index = [
+            index_to_key = [
                 None for leaf in range(len(leaves))
             ]
 
@@ -227,11 +234,7 @@ def main(
                 )
 
                 # Create index mapping for looking up the m2l operator
-                index_mapping = -1 * np.ones(len(interaction_list), dtype=np.int64)
-                for idx, source in enumerate(interaction_list):
-                    index_mapping[source] = idx
-
-                key_to_index[target_idx] = index_mapping
+                index_to_key[target_idx] = interaction_list
 
                 for source in interaction_list:
 
@@ -264,14 +267,17 @@ def main(
                     m2l[target_idx].append(m2l_matrix)
 
             m2l = np.array(m2l)
-            key_to_index = np.array(key_to_index)
-            data.save_array_to_hdf5(m2l_dirpath, f'm2l_level_{current_level}', m2l)
-            data.save_array_to_hdf5(m2l_dirpath, f'key_to_index_level_{current_level}', key_to_index)
+            print("Saving M2L matrices")
+            data.save_pickle(
+                m2l, f'm2l_level_{current_level}', m2l_dirpath
+            )
 
-            current_level += 1
+            data.save_pickle(
+                index_to_key, f'index_to_key_level_{current_level}', m2l_dirpath
+            )
 
-
-        print("Computed all M2L matrices")
+        current_level += 1
+        already_computed = False
 
 
 if __name__ == "__main__":

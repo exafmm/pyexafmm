@@ -1,9 +1,9 @@
 """
 Data manipulation and i/o utils.
 """
-
 import json
 import pathlib
+import pickle
 
 import h5py
 
@@ -28,6 +28,26 @@ def save_array_to_hdf5(directory, filename, array):
 
     with h5py.File(filepath, 'a') as f:
         f.create_dataset(f"{filename}", data=array)
+
+
+def save_pickle(obj, filename, directory):
+
+    dirpath = pathlib.Path(directory)
+    filepath = dirpath / f'{filename}.pkl'
+
+    with open(filepath, 'wb') as f:
+        pickle.dump(obj, f)
+
+
+def load_pickle(filename, directory):
+
+    dirpath = pathlib.Path(directory)
+    filepath = dirpath / f'{filename}.pkl'
+
+    with open(filepath, 'rb') as f:
+        obj = pickle.load(f)
+
+    return obj
 
 
 def load_hdf5(filename, directory):
@@ -89,7 +109,7 @@ def load_json(filepath):
     return obj
 
 
-def file_in_directory(filename, directory):
+def file_in_directory(filename, directory, ext='hdf5'):
     """
     Check if a file with a given name already exists in a given directory.
 
@@ -102,7 +122,7 @@ def file_in_directory(filename, directory):
     --------
     bool
     """
-    dirpath = pathlib.Path(directory).glob('*.hdf5')
+    dirpath = pathlib.Path(directory).glob(f'*.{ext}')
 
     files = [f for f in dirpath if f.is_file()]
 

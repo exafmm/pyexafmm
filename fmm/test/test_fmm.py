@@ -28,15 +28,15 @@ SCRIPT_DIRPATH = HERE.parent.parent / 'scripts'
 KERNEL_FUNCTION = kernel.KERNELS['laplace']()
 
 
-def setup_module(module):
-    os.chdir(HERE.parent)
-    subprocess.run(['python', SCRIPT_DIRPATH / 'precompute_operators.py', CONFIG_FILEPATH])
-    os.chdir('test')
+# def setup_module(module):
+#     os.chdir(HERE.parent)
+#     subprocess.run(['python', SCRIPT_DIRPATH / 'precompute_operators.py', CONFIG_FILEPATH])
+#     os.chdir('test')
 
 
-def teardown_module(module):
-    os.chdir(HERE.parent.parent)
-    subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
+# def teardown_module(module):
+#     os.chdir(HERE.parent.parent)
+#     subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
 
 
 @pytest.fixture
@@ -208,8 +208,9 @@ def test_downward_pass(fmm):
 
     # Post-order tree traversal, checking local expansion of parent against that
     # of their children
-    current_level = 4
-    while current_level < fmm.maximum_level:
+    current_level = 3
+
+    while current_level <= fmm.maximum_level:
         parent_keys = [
             hilbert.get_parent(key) for key, node in fmm.source_data.items()
             if hilbert.get_level(key) == current_level
@@ -271,3 +272,27 @@ def test_downward_pass(fmm):
 
         current_level += 1
 
+
+# def test_fmm(fmm):
+#     fmm.upward_pass()
+#     fmm.downward_pass()
+
+#     fmm_results = np.array([
+#         res.density[0] for res in fmm.result_data
+#     ])
+
+#     direct = operator.p2p(
+#         kernel_function=KERNEL_FUNCTION,
+#         targets=fmm.octree.targets,
+#         sources=fmm.octree.sources,
+#         source_densities=fmm.octree.source_densities
+#     ).density
+
+#     error = fmm_results - direct
+
+#     percentage_error = 100*abs(error)/direct
+
+#     # print("average percentage error", sum(percentage_error)/len(error))
+#     print(fmm_results[:10])
+#     print(direct[:10])
+#     assert False
