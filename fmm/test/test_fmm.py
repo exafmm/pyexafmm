@@ -208,7 +208,7 @@ def test_downward_pass(fmm):
 
     # Post-order tree traversal, checking local expansion of parent against that
     # of their children
-    current_level = 3
+    current_level = 4
     while current_level < fmm.maximum_level:
         parent_keys = [
             hilbert.get_parent(key) for key, node in fmm.source_data.items()
@@ -268,7 +268,6 @@ def test_downward_pass(fmm):
                     ).density
 
                     assert np.isclose(child_potential, parent_potential, rtol=0.01)
-
 
         current_level += 1
 

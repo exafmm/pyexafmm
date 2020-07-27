@@ -110,3 +110,12 @@ def file_in_directory(filename, directory):
         if filename in file_.name:
             return True
     return False
+
+
+def directory_exists(dirpath):
+
+    dirpath = pathlib.Path(dirpath)
+
+    if dirpath.is_dir():
+        return True
+    return False

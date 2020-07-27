@@ -313,12 +313,16 @@ def compute_m2l_operator_index(
         compute_equivalent_orientations(relative_4d_index[:3])
 
     # Search for the first equivalent orientation already computed
+    found = False
     for orientation in equivalent_orientations:
         operator_index = np.where(
             np.all(sources_relative_to_targets[:, :3] == orientation, axis=1)
         )
 
         if operator_index[0].size != 0:
+            found = True
+
+        if found:
             break
 
     return operator_index[0][0]

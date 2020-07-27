@@ -9,10 +9,8 @@ import numpy as np
 
 from fmm.kernel import KERNELS
 from fmm.octree import Octree
-from fmm.operator import (
-    compute_surface, gram_matrix, scale_surface, compute_check_to_equivalent_inverse
-    )
-import fmm.hilbert
+import fmm.operator as operator
+import fmm.hilbert as hilbert
 
 import utils.data as data
 
@@ -61,7 +59,7 @@ def main(
 
     else:
         print(f"Computing Surface of Order {order}")
-        surface = compute_surface(order)
+        surface = operator.compute_surface(order)
         print("Saving Surface to HDF5")
         data.save_array_to_hdf5(operator_dirpath, f'{surface_filename}', surface)
 
@@ -87,7 +85,7 @@ def main(
         # These are computed in a decomposed from the SVD of the Gram matrix
         # of these two surfaces
 
-        upward_equivalent_surface = scale_surface(
+        upward_equivalent_surface = operator.scale_surface(
             surface=surface,
             radius=octree.radius,
             level=0,
@@ -95,7 +93,7 @@ def main(
             alpha=alpha_inner
         )
 
-        upward_check_surface = scale_surface(
+        upward_check_surface = operator.scale_surface(
             surface=surface,
             radius=octree.radius,
             level=0,
@@ -103,7 +101,7 @@ def main(
             alpha=alpha_outer
         )
 
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_check_to_equivalent_inverse(
+        uc2e_v, uc2e_u, dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
             kernel_function=kernel_function,
             upward_check_surface=upward_check_surface,
             upward_equivalent_surface=upward_equivalent_surface,
@@ -131,11 +129,11 @@ def main(
         child_level = 1
 
         child_centers = [
-            fmm.hilbert.get_center_from_key(child, parent_center, parent_radius)
-            for child in fmm.hilbert.get_children(0)
+            hilbert.get_center_from_key(child, parent_center, parent_radius)
+            for child in hilbert.get_children(0)
         ]
 
-        parent_upward_check_surface = scale_surface(
+        parent_upward_check_surface = operator.scale_surface(
             surface, octree.radius, parent_level, octree.center, alpha_outer
             )
 
@@ -150,11 +148,11 @@ def main(
         for child_idx, child_center in enumerate(child_centers):
             print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
 
-            child_upward_equivalent_surface = scale_surface(
+            child_upward_equivalent_surface = operator.scale_surface(
                 surface, octree.radius, child_level, child_center, alpha_inner
             )
 
-            pc2ce = gram_matrix(
+            pc2ce = operator.gram_matrix(
                 kernel_function=kernel_function,
                 targets=parent_upward_check_surface,
                 sources=child_upward_equivalent_surface,
@@ -177,90 +175,103 @@ def main(
         data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
 
     # Compute M2L operators
-    if data.file_in_directory('m2l', operator_dirpath):
+    m2l_dirpath = operator_dirpath / 'm2l'
+    if data.directory_exists(m2l_dirpath):
         print(f"Already Computed M2L Operators of Order {order}")
 
     else:
-        print(f"Computing M2L Operators of Order {order}")
-        m2l = []
-        # Consider central cube at level 3, with a dense interaction list.
-        # This will be used to calculate all the m2l operators for a given
-        # Octree.
 
-        x0 = octree.center
-        r0 = octree.radius
-        target_level = source_level = 3
+        # Create sub-directory to store m2l computations
+        os.mkdir(m2l_dirpath)
 
-        center_key = fmm.hilbert.get_key_from_point(x0, target_level, x0, r0)
-        center_4d_index = fmm.hilbert.get_4d_index_from_key(center_key)
+        current_level = 2
 
-        # Compute interaction list for the central node
-        interaction_list = fmm.hilbert.compute_interaction_list(center_key)
+        while current_level <= octree_max_level:
 
-        # Data structure to hold relative vector of sources 2 target, distance
-        # of the source node from the target in units of box width, and the key
-        # of the source node.
-        sources_relative_to_targets = np.zeros(shape=(189, 5))
+            print(f"Computing M2L Operators for Level {current_level}")
 
-        for source_idx, source_key in enumerate(interaction_list):
+            leaves = np.arange(
+                hilbert.level_offset(current_level),
+                hilbert.level_offset(current_level+1)
+                )
 
-            source_4d_index = fmm.hilbert.get_4d_index_from_key(source_key)
-            source_relative_to_target = source_4d_index[:3] - center_4d_index[:3]
-            magnitude = np.linalg.norm(source_relative_to_target)
+            loading = 0
 
-            sources_relative_to_targets[source_idx][:3] = source_relative_to_target
-            sources_relative_to_targets[source_idx][3] = magnitude
-            sources_relative_to_targets[source_idx][4] = source_key
+            m2l = [
+                [] for leaf in range(len(leaves))
+            ]
 
-        loading = f'{len(sources_relative_to_targets)}'
+            key_to_index = [
+                None for leaf in range(len(leaves))
+            ]
 
-        for idx, source_to_target_vec in enumerate(sources_relative_to_targets):
-            # print(f'Computed ({idx+1}/{loading}) M2L operators')
+            for target_idx, target in enumerate(leaves):
 
-            source_key = int(source_to_target_vec[4])
-            source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
-            source_upward_equivalent_surface = scale_surface(
+                print(f"Computed M2L operators for ({loading}/{len(leaves)}) leaves")
+                loading += 1
+
+                interaction_list = hilbert.compute_interaction_list(target)
+
+                target_center = hilbert.get_center_from_key(
+                    key=target,
+                    x0=octree.center,
+                    r0=octree.radius
+                )
+
+                target_check_surface = operator.scale_surface(
                     surface=surface,
-                    radius=r0,
-                    level=source_level,
-                    center=source_center,
+                    radius=octree.radius,
+                    level=current_level,
+                    center=target_center,
                     alpha=alpha_inner
                 )
 
-            target_center = fmm.hilbert.get_center_from_key(center_key, x0, r0)
+                # Create index mapping for looking up the m2l operator
+                index_mapping = -1 * np.ones(len(interaction_list), dtype=np.int64)
+                for idx, source in enumerate(interaction_list):
+                    index_mapping[source] = idx
 
-            # Compute target check surface
-            target_downward_check_surface = scale_surface(
-                    surface=surface,
-                    radius=r0,
-                    level=target_level,
-                    center=target_center,
-                    alpha=alpha_inner
-            )
+                key_to_index[target_idx] = index_mapping
 
-            scale = (1/2)**(target_level)
+                for source in interaction_list:
 
-            se2tc = gram_matrix(
-                kernel_function=kernel_function,
-                sources=source_upward_equivalent_surface,
-                targets=target_downward_check_surface,
-            )
+                    source_center = hilbert.get_center_from_key(
+                        key=source,
+                        x0=octree.center,
+                        r0=octree.radius
+                    )
 
-            tmp = np.matmul(dc2e_u, se2tc)
-            m2l.append(np.matmul(scale*dc2e_v, tmp))
+                    source_equivalent_surface = operator.scale_surface(
+                        surface=surface,
+                        radius=octree.radius,
+                        level=current_level,
+                        center=source_center,
+                        alpha=alpha_inner
+                    )
 
-        m2l = np.array(m2l)
-        print("Saving M2L Operators")
+                    se2tc = operator.gram_matrix(
+                        kernel_function=kernel_function,
+                        sources=source_equivalent_surface,
+                        targets=target_check_surface
+                    )
 
-        # Indexes in m2l array are related to the `sources_relative_to_targets`
-        # datastructure via corresponding index pointer.
-        data.save_array_to_hdf5(operator_dirpath, 'm2l', m2l)
+                    scale = (1/2)**(current_level)
 
-        data.save_array_to_hdf5(
-            operator_dirpath,
-            'sources_relative_to_targets',
-            sources_relative_to_targets
-        )
+                    tmp = np.matmul(dc2e_u, se2tc)
+
+                    m2l_matrix = np.matmul(scale*dc2e_v, se2tc)
+
+                    m2l[target_idx].append(m2l_matrix)
+
+            m2l = np.array(m2l)
+            key_to_index = np.array(key_to_index)
+            data.save_array_to_hdf5(m2l_dirpath, f'm2l_level_{current_level}', m2l)
+            data.save_array_to_hdf5(m2l_dirpath, f'key_to_index_level_{current_level}', key_to_index)
+
+            current_level += 1
+
+
+        print("Computed all M2L matrices")
 
 
 if __name__ == "__main__":
