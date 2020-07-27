@@ -59,7 +59,6 @@ def l2l():
     return data.load_hdf5_to_array('l2l', 'l2l', OPERATOR_DIRPATH)
 
 
-
 @pytest.fixture
 def npoints():
     return 6*(ORDER-1)**2 + 2
@@ -144,11 +143,11 @@ def test_m2l(
         OPERATOR_DIRPATH / "m2l"
         )
 
+    # pick a target box on level 2 or below
     source_level = target_level = 2
     x0 = octree.center
     r0 = octree.radius
 
-    # pick a target box on level 2 or below
     target_key = 15
     target_index = fmm.hilbert.remove_offset(target_key)
     target_center = fmm.hilbert.get_center_from_key(target_key, x0, r0)

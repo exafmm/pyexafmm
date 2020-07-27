@@ -213,6 +213,10 @@ def compute_interaction_list(key):
     list[int]
         Interaction list.
     """
+
+    if key < 9:
+        return []
+
     parent_key = get_parent(key)
 
     parent_neighbors = compute_neighbors(parent_key)
