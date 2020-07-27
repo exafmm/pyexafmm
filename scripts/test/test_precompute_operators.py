@@ -148,16 +148,17 @@ def test_m2l(
     x0 = octree.center
     r0 = octree.radius
 
-    # pick a source box on level 2 or below
-    source_key = 15
-    source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
-    interaction_list = fmm.hilbert.compute_interaction_list(source_key)
-
-    # pick a target box in source's interaction list
-    target_key = interaction_list[0]
+    # pick a target box on level 2 or below
+    target_key = 15
     target_index = fmm.hilbert.remove_offset(target_key)
     target_center = fmm.hilbert.get_center_from_key(target_key, x0, r0)
+    interaction_list = fmm.hilbert.compute_interaction_list(target_key)
 
+    # pick a source box in target's interaction list
+    source_key = interaction_list[0]
+    source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
+
+    # get the operator index
     operator_index = key_to_index[target_index][source_key]
 
     # place unit densities on source box
@@ -186,3 +187,4 @@ def test_m2l(
     )
 
     assert np.isclose(target_direct.density, source_direct.density, rtol=0.01)
+
