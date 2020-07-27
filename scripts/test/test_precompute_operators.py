@@ -27,15 +27,15 @@ OPERATOR_DIRPATH = HERE.parent.parent / f'precomputed_operators_order_{ORDER}'
 DATA_DIRPATH = HERE.parent.parent / CONFIG['data_dirname']
 
 
-def setup_module(module):
-    os.chdir(HERE.parent)
-    subprocess.run(['python', 'precompute_operators.py', CONFIG_FILEPATH])
-    os.chdir('test')
+# def setup_module(module):
+#     os.chdir(HERE.parent)
+#     subprocess.run(['python', 'precompute_operators.py', CONFIG_FILEPATH])
+#     os.chdir('test')
 
 
-def teardown_module(module):
-    os.chdir(HERE.parent.parent)
-    subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
+# def teardown_module(module):
+#     os.chdir(HERE.parent.parent)
+#     subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def octree():
     source_densities = data.load_hdf5_to_array(
         'source_densities', 'source_densities', DATA_DIRPATH)
 
-    return Octree(sources, targets, 5, source_densities)
+    return Octree(sources, targets, 2, source_densities)
 
 
 @pytest.fixture
@@ -58,18 +58,6 @@ def m2m():
 def l2l():
     return data.load_hdf5_to_array('l2l', 'l2l', OPERATOR_DIRPATH)
 
-
-@pytest.fixture
-def m2l():
-    return data.load_hdf5_to_array('m2l', 'm2l', OPERATOR_DIRPATH)
-
-
-@pytest.fixture
-def sources_relative_to_targets():
-    return data.load_hdf5_to_array(
-        'sources_relative_to_targets', 'sources_relative_to_targets',
-        OPERATOR_DIRPATH
-    )
 
 
 @pytest.fixture
@@ -140,7 +128,61 @@ def test_l2l(npoints, octree, l2l):
 def test_m2l(
     npoints,
     octree,
-    m2l,
-    sources_relative_to_targets,
     ):
 
+    level = octree.maximum_level
+
+    key_to_index = data.load_hdf5_to_array(
+        f'key_to_index_level_{level}',
+        f'key_to_index_level_{level}',
+        OPERATOR_DIRPATH / "m2l"
+        )
+
+    m2l = data.load_hdf5_to_array(
+        f'm2l_level_{level}',
+        f'm2l_level_{level}',
+        OPERATOR_DIRPATH / "m2l"
+        )
+
+    source_level = target_level = 2
+    x0 = octree.center
+    r0 = octree.radius
+
+    # pick a source box on level 2 or below
+    source_key = 15
+    source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
+    interaction_list = fmm.hilbert.compute_interaction_list(source_key)
+
+    # pick a target box in source's interaction list
+    target_key = interaction_list[0]
+    target_index = fmm.hilbert.remove_offset(target_key)
+    target_center = fmm.hilbert.get_center_from_key(target_key, x0, r0)
+
+    operator_index = key_to_index[target_index][source_key]
+
+    # place unit densities on source box
+    source_equivalent_density = np.ones(shape=(npoints))
+    source_equivalent_surface = scale_surface(SURFACE, r0, source_level, source_center, 1.05)
+
+    m2l_matrix = m2l[target_index][operator_index]
+
+    target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+    target_equivalent_surface = scale_surface(SURFACE, r0, target_level, target_center, 2.95)
+
+    local_point = np.array([list(target_center)])
+
+    target_direct = p2p(
+        kernel_function=KERNEL_FUNCTION,
+        targets=local_point,
+        sources=target_equivalent_surface,
+        source_densities=target_equivalent_density
+    )
+
+    source_direct = p2p(
+        kernel_function=KERNEL_FUNCTION,
+        targets=local_point,
+        sources=source_equivalent_surface,
+        source_densities=source_equivalent_density
+    )
+
+    assert np.isclose(target_direct.density, source_direct.density, rtol=0.01)

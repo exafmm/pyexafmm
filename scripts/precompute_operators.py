@@ -259,7 +259,7 @@ def main(
 
                     tmp = np.matmul(dc2e_u, se2tc)
 
-                    m2l_matrix = np.matmul(scale*dc2e_v, se2tc)
+                    m2l_matrix = np.matmul(scale*dc2e_v, tmp)
 
                     m2l[target_idx].append(m2l_matrix)
 
