@@ -46,7 +46,7 @@ def octree():
     source_densities = data.load_hdf5_to_array(
         'source_densities', 'source_densities', DATA_DIRPATH)
 
-    return Octree(sources, targets, 2, source_densities)
+    return Octree(sources, targets, CONFIG['octree_max_level'], source_densities)
 
 
 @pytest.fixture
@@ -70,64 +70,106 @@ def npoints():
     return 6*(ORDER-1)**2 + 2
 
 
-def test_m2m(npoints, octree, m2m):
+# def test_m2m(npoints, octree, m2m):
 
-    parent_key = 0
-    child_key = fmm.hilbert.get_children(parent_key)[0]
+#     parent_key = 0
+#     child_key = fmm.hilbert.get_children(parent_key)[0]
 
-    x0 = octree.center
-    r0 = octree.radius
+#     x0 = octree.center
+#     r0 = octree.radius
 
-    parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
-    child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
+#     parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
+#     child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
 
-    parent_level = fmm.hilbert.get_level(parent_key)
-    child_level = fmm.hilbert.get_level(child_key)
+#     parent_level = fmm.hilbert.get_level(parent_key)
+#     child_level = fmm.hilbert.get_level(child_key)
 
-    child_equivalent_density = np.ones(shape=(npoints))
+#     operator_idx = (child_key % 8) -1
 
-    parent_equivalent_density = np.matmul(m2m[0], child_equivalent_density)
+#     child_equivalent_density = np.ones(shape=(npoints))
 
-    distant_point = np.array([[1e3, 0, 0]])
+#     parent_equivalent_density = np.matmul(m2m[operator_idx], child_equivalent_density)
 
-    child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 1.05)
-    parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 1.05)
+#     distant_point = np.array([[1e3, 0, 0]])
 
-    parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
-    child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
+#     child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 1.05)
+#     parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 1.05)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.01)
+#     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
+#     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
+
+#     import matplotlib.pyplot as plt
+#     from mpl_toolkits.mplot3d import Axes3D
+
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
+#     ax.scatter(
+#         child_equivalent_surface[:, 0],
+#         child_equivalent_surface[:, 1],
+#         child_equivalent_surface[:, 2]
+#         )
+
+#     ax.scatter(
+#         parent_equivalent_surface[:, 0],
+#         parent_equivalent_surface[:, 1],
+#         parent_equivalent_surface[:, 2],
+#         color='green'
+#      )
+
+#     plt.show()
+
+#     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.01)
 
 
-def test_l2l(npoints, octree, l2l):
+# def test_l2l(npoints, octree, l2l):
 
-    parent_key = 0
-    child_key = fmm.hilbert.get_children(parent_key)[0]
+#     parent_key = 0
+#     child_key = fmm.hilbert.get_children(parent_key)[0]
 
-    x0 = octree.center
-    r0 = octree.radius
+#     x0 = octree.center
+#     r0 = octree.radius
 
-    parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
-    child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
+#     parent_center = fmm.hilbert.get_center_from_key(parent_key, x0, r0)
+#     child_center = fmm.hilbert.get_center_from_key(child_key, x0, r0)
 
-    parent_level = fmm.hilbert.get_level(parent_key)
-    child_level = fmm.hilbert.get_level(child_key)
+#     parent_level = fmm.hilbert.get_level(parent_key)
+#     child_level = fmm.hilbert.get_level(child_key)
 
-    parent_equivalent_density = np.ones(shape=(npoints))
+#     parent_equivalent_density = np.ones(shape=(npoints))
 
-    operator_idx = (child_key % 8) -1
+#     operator_idx = (child_key % 8) -1
 
-    child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
+#     child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
 
-    child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 2.95)
-    parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 2.95)
+#     child_equivalent_surface = scale_surface(SURFACE, r0, child_level, child_center, 2.95)
+#     parent_equivalent_surface = scale_surface(SURFACE, r0, parent_level, parent_center, 2.95)
 
-    local_point = np.array([list(child_center)])
+#     local_point = np.array([list(child_center)])
 
-    parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
-    child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
+#     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
+#     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.01)
+#     import matplotlib.pyplot as plt
+#     from mpl_toolkits.mplot3d import Axes3D
+
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
+#     ax.scatter(
+#         child_equivalent_surface[:, 0],
+#         child_equivalent_surface[:, 1],
+#         child_equivalent_surface[:, 2]
+#         )
+
+#     ax.scatter(
+#         parent_equivalent_surface[:, 0],
+#         parent_equivalent_surface[:, 1],
+#         parent_equivalent_surface[:, 2],
+#         color='green'
+#      )
+
+#     plt.show()
+
+#     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.01)
 
 
 def test_m2l(
@@ -140,7 +182,7 @@ def test_m2l(
     x0 = octree.center
     r0 = octree.radius
 
-    target_key = 77
+    target_key = 72
 
     source_level = target_level = fmm.hilbert.get_level(target_key)
 
@@ -151,7 +193,7 @@ def test_m2l(
     interaction_list = fmm.hilbert.compute_interaction_list(target_key)
 
     # pick a source box in target's interaction list
-    source_key = interaction_list[0]
+    source_key = interaction_list[2]
     source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
 
     # get the operator index from current level lookup table
@@ -159,7 +201,9 @@ def test_m2l(
     source_index = np.where(source_key == index_to_key)[0][0]
 
     # place unit densities on source box
-    source_equivalent_density = np.ones(shape=(npoints))
+    # source_equivalent_density = np.ones(shape=(npoints))
+    rand = np.random.rand
+    source_equivalent_density = rand(npoints)
     source_equivalent_surface = scale_surface(SURFACE, r0, source_level, source_center, 1.05)
 
     m2l_matrix = m2l[target_index][source_index]
@@ -184,3 +228,24 @@ def test_m2l(
     )
 
     assert np.isclose(target_direct.density, source_direct.density, rtol=0.01)
+
+    # import matplotlib.pyplot as plt
+    # from mpl_toolkits.mplot3d import Axes3D
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(
+    #     source_equivalent_surface[:, 0],
+    #     source_equivalent_surface[:, 1],
+    #     source_equivalent_surface[:, 2]
+    #     )
+
+    # ax.scatter(
+    #     target_equivalent_surface[:, 0],
+    #     target_equivalent_surface[:, 1],
+    #     target_equivalent_surface[:, 2],
+    #     color='green'
+    #  )
+
+    # plt.show()
+

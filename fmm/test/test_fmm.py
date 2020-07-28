@@ -28,6 +28,11 @@ SCRIPT_DIRPATH = HERE.parent.parent / 'scripts'
 KERNEL_FUNCTION = kernel.KERNELS['laplace']()
 
 
+@pytest.fixture
+def l2l():
+    return data.load_hdf5_to_array('l2l', 'l2l', OPERATOR_DIRPATH)
+
+
 # def setup_module(module):
 #     os.chdir(HERE.parent)
 #     subprocess.run(['python', SCRIPT_DIRPATH / 'precompute_operators.py', CONFIG_FILEPATH])
@@ -188,7 +193,7 @@ def fmm():
 #         assert np.isclose(leaf_result, source_result, rtol=0.01)
 
 
-def test_downward_pass(fmm):
+def test_downward_pass(fmm, l2l):
     fmm.upward_pass()
     fmm.downward_pass()
 
@@ -211,6 +216,7 @@ def test_downward_pass(fmm):
     current_level = 3
 
     while current_level <= fmm.maximum_level:
+
         parent_keys = [
             hilbert.get_parent(key) for key, node in fmm.source_data.items()
             if hilbert.get_level(key) == current_level
@@ -268,6 +274,26 @@ def test_downward_pass(fmm):
                         source_densities=parent_expansion
                     ).density
 
+
+                    # import matplotlib.pyplot as plt
+                    # from mpl_toolkits.mplot3d import Axes3D
+
+                    # fig = plt.figure()
+                    # ax = fig.add_subplot(111, projection='3d')
+                    # ax.scatter(
+                    #     child_equivalent_surface[:, 0],
+                    #     child_equivalent_surface[:, 1],
+                    #     child_equivalent_surface[:, 2]
+                    #     )
+
+                    # ax.scatter(
+                    #     parent_equivalent_surface[:, 0],
+                    #     parent_equivalent_surface[:, 1],
+                    #     parent_equivalent_surface[:, 2],
+                    #     color='green'
+                    #  )
+
+                    # plt.show()
                     assert np.isclose(child_potential, parent_potential, rtol=0.01)
 
         current_level += 1
@@ -288,11 +314,12 @@ def test_downward_pass(fmm):
 #         source_densities=fmm.octree.source_densities
 #     ).density
 
-#     error = fmm_results - direct
+#     error = abs(fmm_results) - abs(direct)
 
-#     percentage_error = 100*abs(error)/direct
+#     percentage_error = 100*error/direct
 
-#     # print("average percentage error", sum(percentage_error)/len(error))
+#     print("average percentage error", sum(percentage_error)/len(error))
 #     print(fmm_results[:10])
 #     print(direct[:10])
+
 #     assert False

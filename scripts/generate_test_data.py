@@ -30,17 +30,17 @@ def main(**config):
     sources = targets = rand(npoints, 3)
     source_densities = np.ones(npoints)
 
-    p2p_results = operator.p2p(
-        kernel_function=Laplace(),
-        targets=targets,
-        sources=sources,
-        source_densities=source_densities
-    ).density
+    # p2p_results = operator.p2p(
+    #     kernel_function=Laplace(),
+    #     targets=targets,
+    #     sources=sources,
+    #     source_densities=source_densities
+    # ).density
 
     data.save_array_to_hdf5(data_dirpath, 'random_sources', sources)
     data.save_array_to_hdf5(data_dirpath, 'random_targets', targets)
     data.save_array_to_hdf5(data_dirpath, 'source_densities', source_densities)
-    data.save_array_to_hdf5(data_dirpath, 'p2p_results', p2p_results)
+    # data.save_array_to_hdf5(data_dirpath, 'p2p_results', p2p_results)
 
 
 if __name__ == "__main__":

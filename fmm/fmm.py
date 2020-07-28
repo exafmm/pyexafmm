@@ -102,16 +102,31 @@ class Fmm:
         for level in range(2, 1 + self.octree.maximum_level):
 
             for key in self.octree.non_empty_target_nodes_by_level[level]:
-                index = self.octree.target_node_to_index[key]
 
                 # Translating mutlipole expansion in far field to a local
                 # expansion at currently examined node.
-                for neighbor_list in self.octree.interaction_list[index]:
-                    for child in neighbor_list:
-                        if child != -1:
-                            self.multipole_to_local(child, key)
+
+                interaction_list = hilbert.compute_interaction_list(key)
+                for source_key in interaction_list:
+                    if source_key in self.octree.non_empty_source_nodes_by_level[level]:
+                        self.multipole_to_local(
+                            source_key=source_key,
+                            target_key=key
+                        )
+
+                # index = self.octree.target_node_to_index[key]
+                # for neighbor_list in self.octree.interaction_list[index]:
+
+                #     for child in neighbor_list:
+                #         if child != -1:
+
+                #             self.multipole_to_local(
+                #                 source_key=child,
+                #                 target_key=key
+                #                 )
 
                 # Translate local expansion to the node's children
+
                 if level < self.octree.maximum_level:
                     self.local_to_local(key)
 
@@ -215,11 +230,9 @@ class Fmm:
         index_to_key = self.m2l_operators.index_to_key[level][target_index]
         source_index = np.where(source_key == index_to_key)[0][0]
 
-        m2l = self.m2l_operators.operators[level]
+        m2l_matrix = self.m2l_operators.operators[level][target_index][source_index]
 
-        operator = m2l[target_index][source_index]
-
-        target_equivalent_density = np.matmul(operator, source_equivalent_density)
+        target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
 
         self.target_data[target_key].expansion += target_equivalent_density
 
