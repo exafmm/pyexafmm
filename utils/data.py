@@ -8,7 +8,7 @@ import pickle
 import h5py
 
 
-def save_array_to_hdf5(directory, filename, array):
+def save_array_to_hdf5(dirpath, filename, array):
     """
     Save a Numpy Array to HDF5 format.
 
@@ -22,7 +22,7 @@ def save_array_to_hdf5(directory, filename, array):
     --------
     None
     """
-    dirpath = pathlib.Path(directory)
+    dirpath = pathlib.Path(dirpath)
     dirpath.mkdir(parents=True, exist_ok=True)
     filepath = dirpath / f'{filename}.hdf5'
 
@@ -30,18 +30,39 @@ def save_array_to_hdf5(directory, filename, array):
         f.create_dataset(f"{filename}", data=array)
 
 
-def save_pickle(obj, filename, directory):
+def save_pickle(obj, filename, dirpath):
+    """
+    Pickle Python object.
 
-    dirpath = pathlib.Path(directory)
+    Parameters:
+    -----------
+    obj : object
+    filename : str
+    dirpath : str
+    """
+
+    dirpath = pathlib.Path(dirpath)
     filepath = dirpath / f'{filename}.pkl'
 
     with open(filepath, 'wb') as f:
         pickle.dump(obj, f)
 
 
-def load_pickle(filename, directory):
+def load_pickle(filename, dirpath):
+    """
+    Load pickled object.
 
-    dirpath = pathlib.Path(directory)
+    Parameters:
+    -----------
+    filename : str
+    dirpath : str
+
+    Returns:
+    --------
+    object
+    """
+
+    dirpath = pathlib.Path(dirpath)
     filepath = dirpath / f'{filename}.pkl'
 
     with open(filepath, 'rb') as f:
@@ -50,26 +71,26 @@ def load_pickle(filename, directory):
     return obj
 
 
-def load_hdf5(filename, directory):
+def load_hdf5(filename, dirpath):
     """
     Load HDF5 file from disk.
 
     Parameters:
     -----------
     filename : str
-    directory : str
+    dirpath : str
 
     Returns:
     --------
     h5py.File
     """
-    dirpath = pathlib.Path(directory)
+    dirpath = pathlib.Path(dirpath)
     filepath = dirpath / f'{filename}.hdf5'
 
     return h5py.File(filepath, 'r')
 
 
-def load_hdf5_to_array(dataname, filename, directory):
+def load_hdf5_to_array(dataname, filename, dirpath):
     """
     Load HDF5 file from disk into an Numpy array object.
 
@@ -78,14 +99,14 @@ def load_hdf5_to_array(dataname, filename, directory):
     dataname : str
         HDF5 object data name
     filename : str
-    directory : str
+    dirpath : str
 
     Returns:
     --------
     np.ndarray
     """
 
-    hdf5_file = load_hdf5(filename, directory)
+    hdf5_file = load_hdf5(filename, dirpath)
 
     return hdf5_file[dataname][:]
 
@@ -109,20 +130,20 @@ def load_json(filepath):
     return obj
 
 
-def file_in_directory(filename, directory, ext='hdf5'):
+def file_in_directory(filename, dirpath, ext='hdf5'):
     """
     Check if a file with a given name already exists in a given directory.
 
     Parameters:
     -----------
     filename : str
-    directory: str
+    dirpath: str
 
     Returns:
     --------
     bool
     """
-    dirpath = pathlib.Path(directory).glob(f'*.{ext}')
+    dirpath = pathlib.Path(dirpath).glob(f'*.{ext}')
 
     files = [f for f in dirpath if f.is_file()]
 
@@ -133,7 +154,17 @@ def file_in_directory(filename, directory, ext='hdf5'):
 
 
 def directory_exists(dirpath):
+    """
+    Check if directory at dirpath exists.
 
+    Parameters:
+    -----------
+    dirpath : str
+
+    Returns:
+    --------
+    bool
+    """
     dirpath = pathlib.Path(dirpath)
 
     if dirpath.is_dir():
