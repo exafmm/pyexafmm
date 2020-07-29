@@ -66,7 +66,7 @@ def recompute_operators():
     subprocess.call([
         'rm',
         '-rf',
-        HERE.parent / f'precomputed_operators_order_{order}/',
+        HERE.parent / CONFIG['operator_dirname'],
     ])
 
     click.echo('Recomputing operators')
@@ -81,13 +81,15 @@ def recompute_operators():
     help='Generate random targets and sources with unit density'
 )
 @click.argument('npoints')
-def generate_test_data(npoints):
-    click.echo(f'Generating {npoints} random sources & targets')
+@click.argument('dtype')
+def generate_test_data(npoints, dtype):
+    click.echo(f'Generating {npoints} {dtype} sources & targets')
     subprocess.run([
         'python',
         HERE.parent/ 'scripts/generate_test_data.py',
         HERE.parent / 'config.json',
-        npoints
+        npoints,
+        dtype
     ])
 
 
@@ -97,4 +99,3 @@ cli.add_command(lint)
 cli.add_command(compute_operators)
 cli.add_command(generate_test_data)
 cli.add_command(recompute_operators)
-

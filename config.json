@@ -5,9 +5,9 @@
     "kernel": "laplace",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
-    "data_dirname": "data_100",
-    "source_filename": "random_sources",
-    "target_filename": "random_targets",
+    "data_dirname": "data_1k_separated",
+    "source_filename": "sources",
+    "target_filename": "targets",
     "source_densities_filename": "source_densities",
-    "octree_max_level": 2
+    "octree_max_level": 3
 }

@@ -58,8 +58,8 @@ def well_separated_data(npoints):
             np.array(shape=npoints)
         )
     """
-    source_center = np.array([-0.75, -0.75, -0.75])
-    target_center = np.array([0.75, 0.75, 0.75])
+    source_center = np.array([-1, -1, -1])
+    target_center = np.array([1, 1, 1])
     rand = np.random.rand(npoints, 3)*0.1
 
     sources = rand + source_center

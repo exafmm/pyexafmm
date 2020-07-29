@@ -62,7 +62,7 @@ def test_get_center_from_4d_index(index, center):
 # @pytest.mark.parametrize(
 #     "key",
 #     [
-#         65
+#         9
 #     ]
 # )
 # def test_compute_neighbors(key):

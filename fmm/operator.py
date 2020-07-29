@@ -230,7 +230,6 @@ def compute_check_to_equivalent_inverse(
         uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
         dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
 
-
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 
 
@@ -267,10 +266,17 @@ def p2p(kernel_function, targets, sources, source_densities):
 
 class M2LOperators:
     """
-    Class to inject with key2index lookup tables
+    Class to bundle precomputed M2L operators with their respective lookup table
+        to translate from Hilbert key to index within the precomputed datastructure
+        containing all M2L operators.
     """
     def __init__(self, config_filename=None):
-
+        """
+        Parameters:
+        -----------
+        config_filename : None/str
+            Defaults to project config: config.json.
+        """
         if config_filename is not None:
             config_filepath = PARENT / config_filename
         else:
@@ -306,5 +312,6 @@ class M2LOperators:
 
     @staticmethod
     def get_level(filename):
+        """Get level from the m2l operator's filename"""
         level = int(filename.split('.')[0][-1])
         return level

@@ -53,6 +53,7 @@ class Fmm:
         self.m2m = load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
         self.l2l = load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
 
+        # Bundle M2L operators with their lookup tables
         self.m2l_operators = M2LOperators(config_filename)
 
         # Load configuration properties
@@ -105,7 +106,6 @@ class Fmm:
 
                 # Translating mutlipole expansion in far field to a local
                 # expansion at currently examined node.
-
                 index = self.octree.target_node_to_index[key]
                 for neighbor_list in self.octree.interaction_list[index]:
 
