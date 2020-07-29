@@ -23,25 +23,27 @@ ORDER = CONFIG['order']
 SURFACE = compute_surface(ORDER)
 KERNEL_FUNCTION = Laplace()
 
-OPERATOR_DIRPATH = HERE.parent.parent / f'precomputed_operators_order_{ORDER}'
+OPERATOR_DIRPATH = HERE.parent.parent / CONFIG['operator_dirname']
 DATA_DIRPATH = HERE.parent.parent / CONFIG['data_dirname']
 
 
-# def setup_module(module):
-#     os.chdir(HERE.parent)
-#     subprocess.run(['python', 'precompute_operators.py', CONFIG_FILEPATH])
-#     os.chdir('test')
+def setup_module(module):
+    os.chdir(HERE.parent)
+    subprocess.run(['python', 'generate_test_data.py', CONFIG_FILEPATH, '100', 'separated'])
+    subprocess.run(['python', 'precompute_operators.py', CONFIG_FILEPATH])
+    os.chdir('test')
 
 
-# def teardown_module(module):
-#     os.chdir(HERE.parent.parent)
-#     subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
+def teardown_module(module):
+    os.chdir(HERE.parent.parent)
+    subprocess.run(['rm', '-fr', CONFIG['operator_dirname']])
+    subprocess.run(['rm', '-fr', CONFIG['data_dirname']])
 
 
 @pytest.fixture
 def octree():
-    sources = data.load_hdf5_to_array('random_sources', 'random_sources', DATA_DIRPATH)
-    targets = data.load_hdf5_to_array('random_sources', 'random_sources', DATA_DIRPATH)
+    sources = data.load_hdf5_to_array('sources', 'sources', DATA_DIRPATH)
+    targets = data.load_hdf5_to_array('targets', 'targets', DATA_DIRPATH)
 
     source_densities = data.load_hdf5_to_array(
         'source_densities', 'source_densities', DATA_DIRPATH)
@@ -61,13 +63,45 @@ def l2l():
 
 @pytest.fixture
 def m2l_operators():
-
     return M2LOperators(CONFIG_FILEPATH)
 
 
 @pytest.fixture
 def npoints():
     return 6*(ORDER-1)**2 + 2
+
+
+def plot_surfaces(source_surface, target_surface, check_surface=None):
+    """
+    Plot surfaces for testing purposes.
+    """
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(
+        source_surface[:, 0],
+        source_surface[:, 1],
+        source_surface[:, 2],
+        color='red'
+        )
+
+    ax.scatter(
+        target_surface[:, 0],
+        target_surface[:, 1],
+        target_surface[:, 2],
+        color='green'
+     )
+
+    if check_surface is not None:
+        ax.scatter(
+            check_surface[:, 0],
+            check_surface[:, 1],
+            check_surface[:, 2],
+        )
+
+    plt.show()
 
 
 def test_m2m(npoints, octree, m2m):
@@ -97,26 +131,6 @@ def test_m2m(npoints, octree, m2m):
 
     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
-
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(
-        child_equivalent_surface[:, 0],
-        child_equivalent_surface[:, 1],
-        child_equivalent_surface[:, 2]
-        )
-
-    ax.scatter(
-        parent_equivalent_surface[:, 0],
-        parent_equivalent_surface[:, 1],
-        parent_equivalent_surface[:, 2],
-        color='green'
-     )
-
-    plt.show()
 
     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
@@ -150,37 +164,10 @@ def test_l2l(npoints, octree, l2l):
     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-    # print(parent_direct.density, child_direct.density)
-    # assert False
-
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(
-        child_equivalent_surface[:, 0],
-        child_equivalent_surface[:, 1],
-        child_equivalent_surface[:, 2]
-        )
-
-    ax.scatter(
-        parent_equivalent_surface[:, 0],
-        parent_equivalent_surface[:, 1],
-        parent_equivalent_surface[:, 2],
-        color='green'
-     )
-
-    plt.show()
-
     assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
 
 
-def test_m2l(
-    npoints,
-    octree,
-    m2l_operators
- ):
+def test_m2l(npoints, octree, m2l_operators):
 
     # pick a target box on level 2 or below
     x0 = octree.center
@@ -232,24 +219,3 @@ def test_m2l(
     )
 
     assert np.isclose(target_direct.density, source_direct.density, rtol=0.05)
-
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(
-        source_equivalent_surface[:, 0],
-        source_equivalent_surface[:, 1],
-        source_equivalent_surface[:, 2]
-        )
-
-    ax.scatter(
-        target_equivalent_surface[:, 0],
-        target_equivalent_surface[:, 1],
-        target_equivalent_surface[:, 2],
-        color='green'
-     )
-
-    plt.show()
-
