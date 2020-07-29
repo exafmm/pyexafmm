@@ -193,133 +193,105 @@ def fmm():
 #         assert np.isclose(leaf_result, source_result, rtol=0.01)
 
 
-def test_downward_pass(fmm, l2l):
-    fmm.upward_pass()
-    fmm.downward_pass()
-
-    surface = data.load_hdf5_to_array('surface', 'surface', OPERATOR_DIRPATH)
-
-    # Group nodes by parent
-    nodes_by_parent = collections.defaultdict(list)
-    current_level = fmm.maximum_level
-
-    while current_level > 0:
-
-        for key, node in fmm.source_data.items():
-            if hilbert.get_level(key) == current_level:
-                nodes_by_parent[hilbert.get_parent(key)].append(node)
-
-        current_level -= 1
-
-    # Post-order tree traversal, checking local expansion of parent against that
-    # of their children
-    current_level = 3
-
-    while current_level <= fmm.maximum_level:
-
-        parent_keys = [
-            hilbert.get_parent(key) for key, node in fmm.source_data.items()
-            if hilbert.get_level(key) == current_level
-        ]
-
-        # Filter for unique parents
-        parent_keys = list(set(parent_keys))
-
-        # Get local expansion for each parent at this level
-        for parent_key in parent_keys:
-            parent_expansion = fmm.target_data[parent_key].expansion
-            parent_center = hilbert.get_center_from_key(
-                parent_key, fmm.octree.center, fmm.octree.radius
-            )
-
-            parent_equivalent_surface = operator.scale_surface(
-                surface=surface,
-                radius=fmm.octree.radius,
-                level=hilbert.get_level(parent_key),
-                center=parent_center,
-                alpha=2.95
-                )
-
-            children = hilbert.get_children(parent_key)
-
-            for child_key in children:
-                # Find child expansion only if it's got particles in it
-                if child_key in fmm.target_data.keys():
-
-                    child_center = hilbert.get_center_from_key(
-                        child_key, fmm.octree.center, fmm.octree.radius
-                        )
-
-                    child_expansion = fmm.target_data[child_key].expansion
-
-                    child_equivalent_surface = operator.scale_surface(
-                        surface=surface,
-                        radius=fmm.octree.radius,
-                        level=hilbert.get_level(child_key),
-                        center=child_center,
-                        alpha=2.95
-                    )
-
-                    child_potential = operator.p2p(
-                        kernel_function=KERNEL_FUNCTION,
-                        targets=child_center.reshape(1, 3),
-                        sources=child_equivalent_surface,
-                        source_densities=child_expansion
-                    ).density
-
-                    parent_potential = operator.p2p(
-                        kernel_function=KERNEL_FUNCTION,
-                        targets=child_center.reshape(1, 3),
-                        sources=parent_equivalent_surface,
-                        source_densities=parent_expansion
-                    ).density
-
-
-                    # import matplotlib.pyplot as plt
-                    # from mpl_toolkits.mplot3d import Axes3D
-
-                    # fig = plt.figure()
-                    # ax = fig.add_subplot(111, projection='3d')
-                    # ax.scatter(
-                    #     child_equivalent_surface[:, 0],
-                    #     child_equivalent_surface[:, 1],
-                    #     child_equivalent_surface[:, 2]
-                    #     )
-
-                    # ax.scatter(
-                    #     parent_equivalent_surface[:, 0],
-                    #     parent_equivalent_surface[:, 1],
-                    #     parent_equivalent_surface[:, 2],
-                    #     color='green'
-                    #  )
-
-                    # plt.show()
-                    assert np.isclose(child_potential, parent_potential, rtol=0.01)
-
-        current_level += 1
-
-
-# def test_fmm(fmm):
+# def test_downward_pass(fmm, l2l):
 #     fmm.upward_pass()
 #     fmm.downward_pass()
 
-#     fmm_results = np.array([
-#         res.density[0] for res in fmm.result_data
-#     ])
+#     surface = data.load_hdf5_to_array('surface', 'surface', OPERATOR_DIRPATH)
 
-#     direct = operator.p2p(
-#         kernel_function=KERNEL_FUNCTION,
-#         targets=fmm.octree.targets,
-#         sources=fmm.octree.sources,
-#         source_densities=fmm.octree.source_densities
-#     ).density
+#     # Group nodes by parent
+#     nodes_by_parent = collections.defaultdict(list)
+#     current_level = fmm.maximum_level
 
-#     error = abs(fmm_results) - abs(direct)
+#     while current_level > 0:
 
-#     percentage_error = 100*error/direct
+#         for key, node in fmm.source_data.items():
+#             if hilbert.get_level(key) == current_level:
+#                 nodes_by_parent[hilbert.get_parent(key)].append(node)
 
-#     print("average percentage error", sum(percentage_error)/len(error))
-#     print(fmm_results[:10])
-#     print(direct[:10])
+#         current_level -= 1
 
-#     assert False
+#     # Post-order tree traversal, checking local expansion of parent against that
+#     # of their children
+#     current_level = 2
+
+#     while current_level < fmm.maximum_level:
+
+#         target_keys = fmm.octree._target_nodes_by_level[current_level]
+
+#         for target_key in target_keys:
+
+#             target_expansion = fmm.target_data[target_key].expansion
+#             target_center = hilbert.get_center_from_key(
+#                 target_key, fmm.octree.center, fmm.octree.radius
+#             )
+#             target_surface = operator.scale_surface(
+#                 surface=surface,
+#                 radius=fmm.octree.radius,
+#                 level=current_level,
+#                 center=target_center,
+#                 alpha=2.95
+#             )
+
+#             children = hilbert.get_children(target_key)
+
+#             for child in children:
+#                 child_expansion = fmm.target_data[child].expansion
+#                 child_center = hilbert.get_center_from_key(
+#                     child, fmm.octree.center, fmm.octree.radius
+#                 )
+#                 child_surface = operator.scale_surface(
+#                     surface=surface,
+#                     radius=fmm.octree.radius,
+#                     level=current_level+1,
+#                     center=child_center,
+#                     alpha=2.95
+#                 )
+
+#                 # Evaluate expansions at child center
+#                 parent_result = operator.p2p(
+#                     kernel_function=fmm.kernel_function,
+#                     targets=child_center.reshape(1, 3),
+#                     sources=target_surface,
+#                     source_densities=target_expansion
+#                 )
+
+#                 child_result = operator.p2p(
+#                     kernel_function=fmm.kernel_function,
+#                     targets=child_center.reshape(1, 3),
+#                     sources=child_surface,
+#                     source_densities=child_expansion
+#                 )
+
+#                 print(parent_result.density, child_result.density)
+
+
+#                 # assert False
+
+#         current_level += 1
+
+
+def test_fmm(fmm):
+    fmm.upward_pass()
+    fmm.downward_pass()
+
+    fmm_results = np.array([
+        res.density[0] for res in fmm.result_data
+    ])
+
+    direct = operator.p2p(
+        kernel_function=KERNEL_FUNCTION,
+        targets=fmm.octree.targets,
+        sources=fmm.octree.sources,
+        source_densities=fmm.octree.source_densities
+    ).density
+
+    error = abs(fmm_results) - abs(direct)
+
+    percentage_error = 100*error/direct
+
+    print("average percentage error", sum(percentage_error)/len(error))
+    print(fmm_results[:10])
+    print(direct[:10])
+
+    assert False

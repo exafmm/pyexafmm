@@ -215,12 +215,21 @@ def compute_check_to_equivalent_inverse(
         targets=upward_check_surface
     )
 
+    e2c = gram_matrix(
+        kernel_function=kernel_function,
+        sources=upward_check_surface,
+        targets=upward_equivalent_surface
+    )
+
     # Compute SVD of Gram Matrix
 
     if alpha is None:
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e)
+        uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e)
+        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(c2e)
     else:
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e, alpha)
+        uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
+        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
+
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 
@@ -284,7 +293,6 @@ class M2LOperators:
         }
 
         for filename in operator_files:
-
             level = self.get_level(str(filename))
             self.operators[level] = data.load_pickle(
                 f'm2l_level_{level}', self.m2l_dirpath

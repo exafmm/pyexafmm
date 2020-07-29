@@ -105,7 +105,7 @@ def main(
             kernel_function=kernel_function,
             upward_check_surface=upward_check_surface,
             upward_equivalent_surface=upward_equivalent_surface,
-            alpha=0
+            alpha=None
         )
 
         # Save matrices
@@ -163,7 +163,13 @@ def main(
             m2m.append(np.matmul(uc2e_v, tmp))
 
             # Compute L2L operator for this octant
-            cc2pe = pc2ce.T
+            # cc2pe = pc2ce.T
+            cc2pe = operator.gram_matrix(
+                kernel_function=kernel_function,
+                targets=child_upward_equivalent_surface,
+                sources=parent_upward_check_surface
+            )
+
             tmp = np.matmul(cc2pe, scale*dc2e_v)
             l2l.append(np.matmul(tmp, dc2e_u))
 

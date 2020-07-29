@@ -186,6 +186,15 @@ class Fmm:
 
     def multipole_to_multipole(self, key):
         """Combine children expansions of node into node expansion."""
+        # import fmm.operator as operator
+
+        # parent_surface = operator.scale_surface(
+        #     surface=self.surface,
+        #     radius=self.octree.radius,
+        #     level=hilbert.get_level(key),
+        #     center=hilbert.get_center_from_key(key, self.octree.center, self.octree.radius),
+        #     alpha=1.05
+        # )
 
         for child in hilbert.get_children(key):
             # Only going through non-empty child nodes
@@ -208,6 +217,42 @@ class Fmm:
 
                 # Add to source data
                 self.source_data[key].expansion += parent_equivalent_density
+
+                ##
+                # child_surface = operator.scale_surface(
+                #     surface=self.surface,
+                #     radius=self.octree.radius,
+                #     level=hilbert.get_level(child),
+                #     center=hilbert.get_center_from_key(child, self.octree.center, self.octree.radius),
+                #     alpha=1.05
+                # )
+
+                # check_surface = operator.scale_surface(
+                #     surface=self.surface,
+                #     radius=self.octree.radius,
+                #     level=hilbert.get_level(child),
+                #     center=hilbert.get_center_from_key(child, self.octree.center, self.octree.radius),
+                #     alpha=2.95
+                # )
+
+                # parent_result = operator.p2p(
+                #     kernel_function=self.kernel_function,
+                #     sources=parent_surface,
+                #     targets=check_surface,
+                #     source_densities = self.source_data[key].expansion
+                # )
+
+                # child_result = operator.p2p(
+                #     kernel_function=self.kernel_function,
+                #     sources=child_surface,
+                #     targets=check_surface,
+                #     source_densities = self.source_data[child].expansion
+                # )
+
+                # print("m2m")
+                # print(f'parent {key} result', parent_result.density)
+                # print(f'child {child} result', child_result.density)
+                # print()
 
     def multipole_to_local(self, source_key, target_key):
         """
@@ -236,10 +281,69 @@ class Fmm:
 
         self.target_data[target_key].expansion += target_equivalent_density
 
+        # Compute manually just to check wtf is going on
+        # import fmm.operator as operator
+
+        # source_surface = operator.scale_surface(
+        #     surface=self.surface,
+        #     radius=self.octree.radius,
+        #     level=level,
+        #     center=hilbert.get_center_from_key(source_key, self.octree.center, self.octree.radius),
+        #     alpha=1.05
+        # )
+
+        # target_surface = operator.scale_surface(
+        #     surface=self.surface,
+        #     radius=self.octree.radius,
+        #     level=level,
+        #     center=hilbert.get_center_from_key(target_key, self.octree.center, self.octree.radius),
+        #     alpha=2.95
+        # )
+
+        # check_surface = operator.scale_surface(
+        #     surface=self.surface,
+        #     radius=self.octree.radius,
+        #     level=level,
+        #     center=hilbert.get_center_from_key(target_key, self.octree.center, self.octree.radius),
+        #     alpha=1.05
+        # )
+
+        # source_result = operator.p2p(
+        #     kernel_function=self.kernel_function,
+        #     sources=source_surface,
+        #     targets=check_surface,
+        #     source_densities = self.source_data[source_key].expansion
+        # )
+
+        # target_result = operator.p2p(
+        #     kernel_function=self.kernel_function,
+        #     sources=target_surface,
+        #     targets=check_surface,
+        #     source_densities = self.target_data[target_key].expansion
+        # )
+
+        # print("here")
+        # print('source result', source_result.density)
+        # print('target result', target_result.density)
+        # print()
+
+
     def local_to_local(self, key):
         """Translate local expansion of a node to it's children."""
 
         parent_equivalent_density = self.target_data[key].expansion
+        ##
+        import fmm.operator as operator
+
+        parent_surface = operator.scale_surface(
+            surface=self.surface,
+            radius=self.octree.radius,
+            level=hilbert.get_level(key),
+            center=hilbert.get_center_from_key(key, self.octree.center, self.octree.radius),
+            alpha=2.95
+        )
+
+        print("parent equivalent density", parent_equivalent_density)
 
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
@@ -257,6 +361,42 @@ class Fmm:
                 )
 
                 self.target_data[child].expansion = child_equivalent_density
+
+                #
+                child_surface = operator.scale_surface(
+                    surface=self.surface,
+                    radius=self.octree.radius,
+                    level=hilbert.get_level(child),
+                    center=hilbert.get_center_from_key(child, self.octree.center, self.octree.radius),
+                    alpha=2.95
+                )
+
+                check_surface = operator.scale_surface(
+                    surface=self.surface,
+                    radius=self.octree.radius,
+                    level=hilbert.get_level(child),
+                    center=hilbert.get_center_from_key(child, self.octree.center, self.octree.radius),
+                    alpha=1.05
+                )
+
+                parent_result = operator.p2p(
+                    kernel_function=self.kernel_function,
+                    sources=parent_surface,
+                    targets=check_surface,
+                    source_densities = self.target_data[key].expansion
+                )
+
+                child_result = operator.p2p(
+                    kernel_function=self.kernel_function,
+                    sources=child_surface,
+                    targets=check_surface,
+                    source_densities = self.target_data[child].expansion
+                )
+
+                print("l2l")
+                print('parent result', parent_result.density)
+                print('child result', child_result.density)
+                print()
 
     def local_to_particle(self, leaf_index):
         """
