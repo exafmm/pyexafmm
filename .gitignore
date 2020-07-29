@@ -7,9 +7,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Data files
-**/*.hdf5
-
 # C extensions
 *.so
 

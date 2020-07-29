@@ -7,7 +7,7 @@ import numpy as np
 import fmm.hilbert as hilbert
 from fmm.density import Potential
 from fmm.node import Node
-from fmm.operator import p2p, scale_surface, compute_m2l_operator_index
+from fmm.operator import p2p, scale_surface, M2LOperators
 from fmm.kernel import KERNELS
 from fmm.octree import Octree
 
@@ -52,11 +52,9 @@ class Fmm:
         self.uc2e_v = load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
         self.m2m = load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
         self.l2l = load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
-        self.m2l = load_hdf5_to_array('m2l', 'm2l', operator_dirpath)
-        self.sources_relative_to_targets = load_hdf5_to_array(
-            'sources_relative_to_targets', 'sources_relative_to_targets',
-            operator_dirpath
-        )
+
+        # Bundle M2L operators with their lookup tables
+        self.m2l_operators = M2LOperators(config_filename)
 
         # Load configuration properties
         self.maximum_level = self.config['octree_max_level']
@@ -105,14 +103,19 @@ class Fmm:
         for level in range(2, 1 + self.octree.maximum_level):
 
             for key in self.octree.non_empty_target_nodes_by_level[level]:
-                index = self.octree.target_node_to_index[key]
 
                 # Translating mutlipole expansion in far field to a local
                 # expansion at currently examined node.
+                index = self.octree.target_node_to_index[key]
                 for neighbor_list in self.octree.interaction_list[index]:
+
                     for child in neighbor_list:
                         if child != -1:
-                            self.multipole_to_local(child, key)
+
+                            self.multipole_to_local(
+                                source_key=child,
+                                target_key=key
+                                )
 
                 # Translate local expansion to the node's children
                 if level < self.octree.maximum_level:
@@ -210,17 +213,18 @@ class Fmm:
 
         source_equivalent_density = self.source_data[source_key].expansion
 
-        # Compute 4D indice in order to lookup right (relative) m2l operator
-        source_4d_idx = hilbert.get_4d_index_from_key(source_key)
-        target_4d_idx = hilbert.get_4d_index_from_key(target_key)
+        level = hilbert.get_level(source_key)
 
-        operator_idx = compute_m2l_operator_index(
-            self.sources_relative_to_targets, source_4d_idx, target_4d_idx
-            )
+        # Lookup correct m2l operator
+        target_index = hilbert.remove_offset(target_key)
 
-        operator = self.m2l[operator_idx]
+        index_to_key = self.m2l_operators.index_to_key[level][target_index]
+        source_index = np.where(source_key == index_to_key)[0][0]
 
-        target_equivalent_density = np.matmul(operator, source_equivalent_density)
+        m2l_matrix = self.m2l_operators.operators[level][target_index][source_index]
+
+        target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+
         self.target_data[target_key].expansion += target_equivalent_density
 
     def local_to_local(self, key):
@@ -360,4 +364,3 @@ class Fmm:
                 # Updating indices
                 self.result_data[target_index].indices.update(
                     self.source_data[leaf_node_key].indices)
-

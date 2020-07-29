@@ -11,7 +11,7 @@ import pytest
 from fmm.octree import Octree
 import fmm.hilbert
 from fmm.kernel import Laplace
-from fmm.operator import compute_surface, scale_surface, p2p, compute_m2l_operator_index
+from fmm.operator import compute_surface, scale_surface, p2p, M2LOperators
 import utils.data as data
 
 
@@ -23,29 +23,19 @@ ORDER = CONFIG['order']
 SURFACE = compute_surface(ORDER)
 KERNEL_FUNCTION = Laplace()
 
-OPERATOR_DIRPATH = HERE.parent.parent / f'precomputed_operators_order_{ORDER}'
-
-
-def setup_module(module):
-    os.chdir(HERE.parent)
-    subprocess.run(['python', 'precompute_operators.py', CONFIG_FILEPATH])
-    os.chdir('test')
-
-
-def teardown_module(module):
-    os.chdir(HERE.parent.parent)
-    subprocess.run(['rm', '-fr', f'precomputed_operators_order_{ORDER}'])
+OPERATOR_DIRPATH = HERE.parent.parent / CONFIG['operator_dirname']
+DATA_DIRPATH = HERE.parent.parent / CONFIG['data_dirname']
 
 
 @pytest.fixture
 def octree():
-    sources = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
-    targets = data.load_hdf5_to_array('random_sources', 'random_sources', '../../data')
+    sources = data.load_hdf5_to_array('sources', 'sources', DATA_DIRPATH)
+    targets = data.load_hdf5_to_array('targets', 'targets', DATA_DIRPATH)
 
     source_densities = data.load_hdf5_to_array(
-        'source_densities', 'source_densities', '../../data')
+        'source_densities', 'source_densities', DATA_DIRPATH)
 
-    return Octree(sources, targets, 5, source_densities)
+    return Octree(sources, targets, CONFIG['octree_max_level'], source_densities)
 
 
 @pytest.fixture
@@ -59,21 +49,46 @@ def l2l():
 
 
 @pytest.fixture
-def m2l():
-    return data.load_hdf5_to_array('m2l', 'm2l', OPERATOR_DIRPATH)
-
-
-@pytest.fixture
-def sources_relative_to_targets():
-    return data.load_hdf5_to_array(
-        'sources_relative_to_targets', 'sources_relative_to_targets',
-        OPERATOR_DIRPATH
-    )
+def m2l_operators():
+    return M2LOperators(CONFIG_FILEPATH)
 
 
 @pytest.fixture
 def npoints():
     return 6*(ORDER-1)**2 + 2
+
+
+def plot_surfaces(source_surface, target_surface, check_surface=None):
+    """
+    Plot surfaces for testing purposes.
+    """
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(
+        source_surface[:, 0],
+        source_surface[:, 1],
+        source_surface[:, 2],
+        color='red'
+        )
+
+    ax.scatter(
+        target_surface[:, 0],
+        target_surface[:, 1],
+        target_surface[:, 2],
+        color='green'
+     )
+
+    if check_surface is not None:
+        ax.scatter(
+            check_surface[:, 0],
+            check_surface[:, 1],
+            check_surface[:, 2],
+        )
+
+    plt.show()
 
 
 def test_m2m(npoints, octree, m2m):
@@ -90,9 +105,11 @@ def test_m2m(npoints, octree, m2m):
     parent_level = fmm.hilbert.get_level(parent_key)
     child_level = fmm.hilbert.get_level(child_key)
 
+    operator_idx = (child_key % 8) -1
+
     child_equivalent_density = np.ones(shape=(npoints))
 
-    parent_equivalent_density = np.matmul(m2m[0], child_equivalent_density)
+    parent_equivalent_density = np.matmul(m2m[operator_idx], child_equivalent_density)
 
     distant_point = np.array([[1e3, 0, 0]])
 
@@ -102,13 +119,13 @@ def test_m2m(npoints, octree, m2m):
     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
 
 
 def test_l2l(npoints, octree, l2l):
 
-    parent_key = 0
-    child_key = fmm.hilbert.get_children(parent_key)[0]
+    parent_key = 9
+    child_key = fmm.hilbert.get_children(parent_key)[-1]
 
     x0 = octree.center
     r0 = octree.radius
@@ -121,7 +138,7 @@ def test_l2l(npoints, octree, l2l):
 
     parent_equivalent_density = np.ones(shape=(npoints))
 
-    operator_idx = (child_key % 8) -1
+    operator_idx = (child_key % 8) - 1
 
     child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
 
@@ -133,39 +150,42 @@ def test_l2l(npoints, octree, l2l):
     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
 
 
-def test_m2l(
-    npoints,
-    octree,
-    m2l,
-    sources_relative_to_targets,
-    ):
+def test_m2l(npoints, octree, m2l_operators):
 
-    source_level = target_level = 3
+    # pick a target box on level 2 or below
     x0 = octree.center
     r0 = octree.radius
 
-    # pick a source box on level 3 or below
-    source_key = fmm.hilbert.get_key_from_point(x0, source_level, x0, r0)
-    source_4d_index = fmm.hilbert.get_4d_index_from_key(source_key)
-    source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
-    interaction_list = fmm.hilbert.compute_interaction_list(source_key)
+    target_key = 72
 
-    # pick a target box in source's interaction list
-    target_key = interaction_list[0]
+    source_level = target_level = fmm.hilbert.get_level(target_key)
+
+    m2l = m2l_operators.operators[source_level]
+
+    target_index = fmm.hilbert.remove_offset(target_key)
     target_center = fmm.hilbert.get_center_from_key(target_key, x0, r0)
-    target_4d_index = fmm.hilbert.get_4d_index_from_key(target_key)
+    interaction_list = fmm.hilbert.compute_interaction_list(target_key)
 
-    operator_index = compute_m2l_operator_index(
-        sources_relative_to_targets, source_4d_index, target_4d_index)
+    # pick a source box in target's interaction list
+    source_key = interaction_list[2]
+    source_center = fmm.hilbert.get_center_from_key(source_key, x0, r0)
+
+    # get the operator index from current level lookup table
+    index_to_key = m2l_operators.index_to_key[target_level][target_index]
+    source_index = np.where(source_key == index_to_key)[0][0]
 
     # place unit densities on source box
-    source_equivalent_density = np.ones(shape=(npoints))
+    # source_equivalent_density = np.ones(shape=(npoints))
+    rand = np.random.rand
+    source_equivalent_density = rand(npoints)
     source_equivalent_surface = scale_surface(SURFACE, r0, source_level, source_center, 1.05)
 
-    target_equivalent_density = np.matmul(m2l[operator_index], source_equivalent_density)
+    m2l_matrix = m2l[target_index][source_index]
+
+    target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
     target_equivalent_surface = scale_surface(SURFACE, r0, target_level, target_center, 2.95)
 
     local_point = np.array([list(target_center)])
@@ -184,4 +204,4 @@ def test_m2l(
         source_densities=source_equivalent_density
     )
 
-    assert np.isclose(target_direct.density, source_direct.density, rtol=0.01)
+    assert np.isclose(target_direct.density, source_direct.density, rtol=0.1)

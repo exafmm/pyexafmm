@@ -1,10 +1,20 @@
 """
 Operator helper methods.
 """
+import glob
+import os
+import pathlib
+import pickle
+
 import numpy as np
 
 from fmm.density import Potential
 import fmm.rotation_matrices as rotations
+import utils.data as data
+
+
+HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+PARENT = HERE.parent
 
 
 def compute_surface(order):
@@ -205,12 +215,20 @@ def compute_check_to_equivalent_inverse(
         targets=upward_check_surface
     )
 
+    e2c = gram_matrix(
+        kernel_function=kernel_function,
+        sources=upward_check_surface,
+        targets=upward_equivalent_surface
+    )
+
     # Compute SVD of Gram Matrix
 
     if alpha is None:
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e)
+        uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e)
+        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(e2c)
     else:
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = compute_pseudo_inverse(c2e, alpha)
+        uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
+        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(e2c, alpha)
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 
@@ -246,79 +264,53 @@ def p2p(kernel_function, targets, sources, source_densities):
     return Potential(targets, target_densities)
 
 
-def compute_equivalent_orientations(vector):
+class M2LOperators:
     """
-    Compute equivalent rotations/reflections of a given vector. This is a helper
-        method to look up the correct precomputed M2L operator.
-
-    Parameters:
-    -----------
-    vector : np.array(shape=(1, 3))
-        A 3D cartesian vector
+    Class to bundle precomputed M2L operators with their respective lookup table
+        to translate from Hilbert key to index within the precomputed datastructure
+        containing all M2L operators.
     """
+    def __init__(self, config_filename=None):
+        """
+        Parameters:
+        -----------
+        config_filename : None/str
+            Defaults to project config: config.json.
+        """
+        if config_filename is not None:
+            config_filepath = PARENT / config_filename
+        else:
+            config_filepath = PARENT / "config.json"
 
-    orientations = np.zeros(shape=(48, 3))
+        self.config = data.load_json(config_filepath)
+        self.m2l_dirpath = PARENT/ self.config["operator_dirname"]
 
-    tmp = vector
-    idx = 0
-    for _ in range(4):
-        tmp = np.matmul(rotations.X_ROT_90, tmp)
-        orientations[idx] = tmp
-        idx += 1
+        # Load operators and key2index lookup tables
+        operator_files = self.m2l_dirpath.glob('m2l*')
+        index_to_key_files = self.m2l_dirpath.glob('index*')
 
-    for _ in range(4):
-        tmp = np.matmul(rotations.Y_ROT_90, tmp)
-        orientations[idx] = tmp
-        idx += 1
+        self.operators = {
+            level: None for level in range(2, self.config['octree_max_level']+1)
+        }
 
-    for _ in range(4):
-        tmp = np.matmul(rotations.Z_ROT_90, tmp)
-        orientations[idx] = tmp
-        idx += 1
+        self.index_to_key = {
+            level: None for level in range(2, self.config['octree_max_level']+1)
+        }
 
-    for i in range(12):
-        orientations[idx] = np.matmul(rotations.X_REF, orientations[i])
-        orientations[idx+1] = np.matmul(rotations.Y_REF, orientations[i])
-        orientations[idx+2] = np.matmul(rotations.Z_REF, orientations[i])
-        idx += 3
+        for filename in operator_files:
+            level = self.get_level(str(filename))
+            self.operators[level] = data.load_pickle(
+                f'm2l_level_{level}', self.m2l_dirpath
+            )
 
-    orientations = np.unique(orientations, axis=0)
+        for filename in index_to_key_files:
+            level = self.get_level(str(filename))
+            self.index_to_key[level] = data.load_pickle(
+                f'index_to_key_level_{level}', self.m2l_dirpath
+            )
 
-    return orientations
-
-
-def compute_m2l_operator_index(
-    sources_relative_to_targets, source_4d_index, target_4d_index
-    ):
-    """
-    Return the index of the m2l operator for a given source and target box.
-
-    Parameters:
-    -----------
-    sources_relative_to_targets: np.array(shape=(n, 5), dtype=np.float64)
-        Where `n` is the number of sources. Of the form
-        [[xidx, yidx, zidx, relative_distance, key]...]
-    source_4d_index : np.array(shape=(1, 4), dtype=np.int64)
-        Of the form [xidx, yidx, zidx, level]
-    target_4d_index : np.array(shape=(1, 4), dtype=np.int64)
-
-    Returns:
-    --------
-    int
-        Operator index.
-    """
-    relative_4d_index = source_4d_index - target_4d_index
-
-    equivalent_orientations = \
-        compute_equivalent_orientations(relative_4d_index[:3])
-
-    # Search for the first equivalent orientation already computed
-    for orientation in equivalent_orientations:
-        operator_index = np.where(
-            np.all(sources_relative_to_targets[:, :3] == orientation, axis=1)
-        )
-
-        if operator_index[0].size != 0:
-            break
-
-    return operator_index[0][0]
+    @staticmethod
+    def get_level(filename):
+        """Get level from the m2l operator's filename"""
+        level = int(filename.split('.')[0][-1])
+        return level
