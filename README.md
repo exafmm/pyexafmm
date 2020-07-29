@@ -43,7 +43,7 @@ After installation, use provided scripts to precompute and cache FMM operators,
 e.g.
 
 ```bash
-ci precompute-operators
+ci compute-operators
 ```
 
 Make sure to configure the FMM simulation using the `config.json` file.
