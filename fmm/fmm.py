@@ -364,4 +364,3 @@ class Fmm:
                 # Updating indices
                 self.result_data[target_index].indices.update(
                     self.source_data[leaf_node_key].indices)
-

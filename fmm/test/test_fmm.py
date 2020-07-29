@@ -258,29 +258,3 @@ def test_downward_pass(fmm, l2l):
                     assert np.isclose(parent_result.density, child_result.density, rtol=0.10)
 
         current_level += 1
-
-
-def test_fmm(fmm):
-    fmm.upward_pass()
-    fmm.downward_pass()
-
-    fmm_results = np.array([
-        res.density[0] for res in fmm.result_data
-    ])
-
-    direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
-        targets=fmm.octree.targets,
-        sources=fmm.octree.sources,
-        source_densities=fmm.octree.source_densities
-    ).density
-
-    error = abs(fmm_results) - abs(direct)
-
-    percentage_error = 100*error/direct
-
-    print("average percentage error", sum(percentage_error)/len(error))
-    print(fmm_results[:10])
-    print(direct[:10])
-
-    assert False
