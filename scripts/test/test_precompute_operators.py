@@ -119,7 +119,7 @@ def test_m2m(npoints, octree, m2m):
     parent_direct = p2p(KERNEL_FUNCTION, distant_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, distant_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.05)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
 
 
 def test_l2l(npoints, octree, l2l):
@@ -150,7 +150,7 @@ def test_l2l(npoints, octree, l2l):
     parent_direct = p2p(KERNEL_FUNCTION, local_point, parent_equivalent_surface, parent_equivalent_density)
     child_direct = p2p(KERNEL_FUNCTION, local_point, child_equivalent_surface, child_equivalent_density)
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.06)
+    assert np.isclose(parent_direct.density, child_direct.density, rtol=0.1)
 
 
 def test_m2l(npoints, octree, m2l_operators):
@@ -204,4 +204,4 @@ def test_m2l(npoints, octree, m2l_operators):
         source_densities=source_equivalent_density
     )
 
-    assert np.isclose(target_direct.density, source_direct.density, rtol=0.05)
+    assert np.isclose(target_direct.density, source_direct.density, rtol=0.1)

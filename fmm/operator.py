@@ -225,10 +225,10 @@ def compute_check_to_equivalent_inverse(
 
     if alpha is None:
         uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e)
-        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(c2e)
+        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(e2c)
     else:
         uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
-        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
+        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(e2c, alpha)
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 
@@ -281,7 +281,6 @@ class M2LOperators:
             config_filepath = PARENT / config_filename
         else:
             config_filepath = PARENT / "config.json"
-
 
         self.config = data.load_json(config_filepath)
         self.m2l_dirpath = PARENT/ self.config["operator_dirname"]
