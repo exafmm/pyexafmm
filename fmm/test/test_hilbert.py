@@ -70,7 +70,7 @@ def test_get_octant(key, expected):
 @pytest.mark.parametrize(
     "index, expected",
     [
-        (np.array([1, 3, 1, 2]), 2)
+        (np.array([1, 1, 1, 1]), 8)
     ]
 )
 def test_get_key_from_4d_index(index, expected):

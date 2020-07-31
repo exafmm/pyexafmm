@@ -86,17 +86,28 @@ def get_key_from_4d_index(index):
     """
     Compute Hilbert key from a 4d index, The 4D index is composed as
         [xidx, yidx, zidx, level], corresponding to the physical index of a node
-        in a partitioned box.
+        in a partitioned box. This method works by calculating the octant
+        coordinates at level 1 [x, y, z] , where x,y,z ∈ {0, 1}, and appending
+        the resulting bit value `xyz` to the key. It continues to do this until
+        it reaches the maximum level of the octree. Finally it adds a level
+        offset to ensure that the keys at each level are unique.
 
+    Parameters:
+    -----------
+    index : np.array(shape=(4,))
+
+    Returns:
+    --------
+    int
     """
-    octree_depth = index[-1]
+    max_level = index[-1]
     key = 0
-    for level in range(octree_depth):
+    for level in range(max_level):
         key |= (index[2] & (1 << level)) << 2 * level
         key |= (index[1] & (1 << level)) << 2 * level + 1
         key |= (index[0] & (1 << level)) << 2 * level + 2
 
-    key += get_level_offset(octree_depth)
+    key += get_level_offset(max_level)
 
     return key
 
