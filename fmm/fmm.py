@@ -216,7 +216,7 @@ class Fmm:
         level = hilbert.get_level(source_key)
 
         # Lookup correct m2l operator
-        target_index = hilbert.remove_offset(target_key)
+        target_index = hilbert.remove_level_offset(target_key)
 
         index_to_key = self.m2l_operators.index_to_key[level][target_index]
         source_index = np.where(source_key == index_to_key)[0][0]

@@ -8,18 +8,21 @@ import fmm.hilbert as hilbert
 
 
 @pytest.mark.parametrize(
-    "level, offset", [
+    "level, offset",
+    [
         (0, 0),
         (1, 1),
         (2, 9),
         (3, 73)
     ]
 )
-def test_level_offset(level, offset):
-    assert hilbert.level_offset(level) == offset
+def test_get_level_offset(level, offset):
+    assert hilbert.get_level_offset(level) == offset
+
 
 @pytest.mark.parametrize(
-    "key, level", [
+    "key, level",
+    [
         (0, 0),
         (8, 1),
         (64, 2)
@@ -30,7 +33,53 @@ def test_get_level(key, level):
 
 
 @pytest.mark.parametrize(
-    "key, index", [
+    "level, expected",
+    [
+        (-1, -1),
+        (0, 0),
+        (1, 1),
+        (2, 9),
+    ]
+)
+def test_get_level_offset(level, expected):
+    assert hilbert.get_level_offset(level) == expected
+
+
+@pytest.mark.parametrize(
+    "key, expected",
+    [
+        (9, 0),
+        (72, 63)
+    ]
+)
+def test_remove_level_offset(key, expected):
+    assert hilbert.remove_level_offset(key) == expected
+
+
+@pytest.mark.parametrize(
+    "key, expected",
+    [
+        (0, 0),
+        (132, 3),
+    ]
+)
+def test_get_octant(key, expected):
+    assert hilbert.get_octant(key) == expected
+
+
+@pytest.mark.parametrize(
+    "index, expected",
+    [
+        (np.array([1, 3, 1, 2]), 2)
+    ]
+)
+def test_get_key_from_4d_index(index, expected):
+    assert hilbert.get_key_from_4d_index(index) == expected
+
+
+@pytest.mark.parametrize(
+    "key, index",
+    [
         (0, np.array([0, 0, 0, 0])),
         (8, np.array([1, 1, 1, 1]))
     ]
@@ -57,6 +106,9 @@ def test_get_center_from_4d_index(index, center):
         hilbert.get_center_from_4d_index(index, center, r0),
         x0
     )
+
+
+
 
 
 # @pytest.mark.parametrize(

@@ -7,79 +7,91 @@ import sys
 
 import numpy as np
 
+import fmm.hilbert as hilbert
 from fmm.kernel import KERNELS
 from fmm.octree import Octree
 import fmm.operator as operator
-import fmm.hilbert as hilbert
-
 import utils.data as data
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
-def main(
-        operator_dirname,
-        surface_filename,
-        order,
-        alpha_inner,
-        alpha_outer,
-        kernel,
-        data_dirname,
-        source_filename,
-        target_filename,
-        source_densities_filename,
-        octree_max_level
-        ):
+def main(**config):
     """
     Main script, configure using config.json file in module root.
     """
 
-    data_dirpath = PARENT / f"{data_dirname}/"
-    operator_dirpath = PARENT / f"{operator_dirname}/"
+    data_dirpath = PARENT / f"{config['data_dirname']}/"
+    operator_dirpath = PARENT / f"{config['operator_dirname']}/"
 
     # Step 0: Construct Octree and load Python config objs
     print("source filename", data_dirpath)
 
-    sources = data.load_hdf5_to_array(source_filename, source_filename, data_dirpath)
-    targets = data.load_hdf5_to_array(target_filename, target_filename, data_dirpath)
+    sources = data.load_hdf5_to_array(
+        config['source_filename'],
+        config['source_filename'],
+        config['data_dirpath']
+        )
+
+    targets = data.load_hdf5_to_array(
+        config['target_filename'],
+        config['target_filename'],
+        config['data_dirpath']
+        )
+
     source_densities = data.load_hdf5_to_array(
-        source_densities_filename, source_densities_filename, data_dirpath)
-    octree = Octree(sources, targets, octree_max_level, source_densities)
+        config['source_densities_filename'],
+        config['source_densities_filename'],
+        config['data_dirpath']
+        )
+
+    octree = Octree(
+        sources, targets, config['octree_max_level'], source_densities
+        )
 
     # Load required Python objects
-    kernel_function = KERNELS[kernel]()
+    kernel_function = KERNELS[config['kernel']]()
 
     # Step 1: Compute a surface of a given order
     # Check if surface already exists
-    if data.file_in_directory(surface_filename, operator_dirpath):
-        print(f"Already Computed Surface of Order {order}")
+    if data.file_in_directory(config['surface_filename'], operator_dirpath):
+        print(f"Already Computed Surface of Order {config['order']}")
         print(f"Loading ...")
-        surface = data.load_hdf5_to_array(surface_filename, surface_filename, operator_dirpath)
+        surface = data.load_hdf5_to_array(
+            config['surface_filename'],
+            config['surface_filename'],
+            config['operator_dirpath']
+            )
 
     else:
-        print(f"Computing Surface of Order {order}")
-        surface = operator.compute_surface(order)
+        print(f"Computing Surface of Order {config['order']}")
+        surface = operator.compute_surface(config['order'])
+
         print("Saving Surface to HDF5")
-        data.save_array_to_hdf5(operator_dirpath, f'{surface_filename}', surface)
+        data.save_array_to_hdf5(
+            config['operator_dirpath'],
+            config['surface_filename'],
+            surface
+            )
 
     # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # This is a useful quantity that will form the basis of most operators.
 
     if data.file_in_directory('uc2e_u', operator_dirpath):
-        print(f"Already Computed Inverse of Check To Equivalent Kernel of Order {order}")
+        print(f"Already Computed Inverse of Check To Equivalent Kernel of Order {config['order']}")
         print("Loading...")
 
         # Upward check to upward equivalent
-        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
-        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
+        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', config['operator_dirpath'])
+        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', config['operator_dirpath'])
 
         # Downward check to downward equivalent
-        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirpath)
-        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirpath)
+        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', config['operator_dirpath'])
+        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', config['operator_dirpath'])
 
     else:
-        print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {order}")
+        print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
 
         # Compute upward check surface and upward equivalent surface
         # These are computed in a decomposed from the SVD of the Gram matrix
@@ -90,7 +102,7 @@ def main(
             radius=octree.radius,
             level=0,
             center=octree.center,
-            alpha=alpha_inner
+            alpha=config['alpha_inner']
         )
 
         upward_check_surface = operator.scale_surface(
@@ -98,7 +110,7 @@ def main(
             radius=octree.radius,
             level=0,
             center=octree.center,
-            alpha=alpha_outer
+            alpha=config['alpha_outer']
         )
 
         uc2e_v, uc2e_u, dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
@@ -120,7 +132,7 @@ def main(
             data.file_in_directory('m2m', operator_dirpath)
             and data.file_in_directory('l2l', operator_dirpath)
        ):
-        print(f"Already Computed M2M & L2L Operators of Order {order}")
+        print(f"Already Computed M2M & L2L Operators of Order {config['order']}")
 
     else:
         parent_center = octree.center
@@ -134,7 +146,11 @@ def main(
         ]
 
         parent_upward_check_surface = operator.scale_surface(
-            surface, octree.radius, parent_level, octree.center, alpha_outer
+            surface=surface,
+            radius=octree.radius,
+            level=parent_level,
+            center=octree.center,
+            alpha=config['alpha_outer']
             )
 
         m2m = []
@@ -144,12 +160,16 @@ def main(
 
         scale = (1/2)**(child_level)
 
-        print(f"Computing M2M & L2L Operators of Order {order}")
+        print(f"Computing M2M & L2L Operators of Order {config['order']}")
         for child_idx, child_center in enumerate(child_centers):
             print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
 
             child_upward_equivalent_surface = operator.scale_surface(
-                surface, octree.radius, child_level, child_center, alpha_inner
+                surface=surface,
+                radius=octree.radius,
+                level=child_level,
+                center=child_center,
+                alpha=config['alpha_inner']
             )
 
             pc2ce = operator.gram_matrix(
@@ -188,10 +208,9 @@ def main(
 
     already_computed = False
 
-    while current_level <= octree_max_level:
+    while current_level <= config['octree_max_level']:
 
         m2l_filename = f'm2l_level_{current_level}'
-        index_to_key_filename = f'index_to_key_level_{current_level}'
 
         if data.file_in_directory(m2l_filename, operator_dirpath, ext='pkl'):
             already_computed = True
@@ -204,8 +223,8 @@ def main(
             print(f"Computing M2L Operators for Level {current_level}")
 
             leaves = np.arange(
-                hilbert.level_offset(current_level),
-                hilbert.level_offset(current_level+1)
+                hilbert.get_level_offset(current_level),
+                hilbert.get_level_offset(current_level+1)
                 )
 
             loading = 0
@@ -217,6 +236,8 @@ def main(
             index_to_key = [
                 None for leaf in range(len(leaves))
             ]
+
+            index_to_key_filename = f'index_to_key_level_{current_level}'
 
             for target_idx, target in enumerate(leaves):
 
@@ -236,7 +257,7 @@ def main(
                     radius=octree.radius,
                     level=current_level,
                     center=target_center,
-                    alpha=alpha_inner
+                    alpha=config['alpha_inner']
                 )
 
                 # Create index mapping for looking up the m2l operator
@@ -255,7 +276,7 @@ def main(
                         radius=octree.radius,
                         level=current_level,
                         center=source_center,
-                        alpha=alpha_inner
+                        alpha=config['alpha_inner']
                     )
 
                     se2tc = operator.gram_matrix(
@@ -273,13 +294,14 @@ def main(
                     m2l[target_idx].append(m2l_matrix)
 
             m2l = np.array(m2l)
+
             print("Saving M2L matrices")
             data.save_pickle(
-                m2l, f'm2l_level_{current_level}', m2l_dirpath
+                m2l, m2l_filename, m2l_dirpath
             )
 
             data.save_pickle(
-                index_to_key, f'index_to_key_level_{current_level}', m2l_dirpath
+                index_to_key, index_to_key_filename, m2l_dirpath
             )
 
         current_level += 1

@@ -372,7 +372,7 @@ def _numba_compute_neighbors(target_nodes, source_node_map):
                             neighbor_vec[2],
                             nodes_per_side,
                     ):
-                        neighbor_key = hilbert.get_key(neighbor_vec)
+                        neighbor_key = hilbert.get_key_from_4d_index(neighbor_vec)
                         if source_node_map[neighbor_key] != -1:
                             neighbors[index, count] = neighbor_key
                         else:
@@ -437,13 +437,13 @@ def _numba_sort_nodes_by_level(keys):
     sorted_keys = np.sort(keys)
 
     next_level = 1
-    next_offset = hilbert.level_offset(next_level)
+    next_offset = hilbert.get_level_offset(next_level)
     indexptr = [0]
     for index, key in enumerate(sorted_keys):
         if key >= next_offset:
             indexptr.append(index)
             next_level += 1
-            next_offset = hilbert.level_offset(next_level)
+            next_offset = hilbert.get_level_offset(next_level)
     indexptr.append(len(keys))
     return sorted_keys, indexptr
 
