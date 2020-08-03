@@ -186,3 +186,11 @@ def test_get_number_of_all_nodes(level, expected):
     assert hilbert.get_number_of_all_nodes(level) == expected
 
 
+
+def test_compute_neighbors():
+    pass
+
+
+
+def test_compute_interaction_list():
+    pass

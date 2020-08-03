@@ -319,9 +319,10 @@ def get_number_of_all_nodes(level):
     return get_level_offset(level + 1)
 
 
+@numba.njit(cache=True)
 def compute_neighbors(key):
     """
-    Compute all near neighbors of a given key.
+    Compute all near neighbors of a given a node indexed by a given Hilbert key.
 
     Parameters:
     -----------
@@ -330,17 +331,17 @@ def compute_neighbors(key):
 
     Returns:
     --------
-    list[int]
-        List of neighbors.
+    np.array(shape=(nneighbors,), dtype=np.int64)
+        Array of neighbors.
     """
     vec = get_4d_index_from_key(key)
 
-    max_coord = 2**get_level(key)
+    max_coord = 1 << get_level(key)
 
     count = -1
-    offset = np.zeros(4, dtype=np.int64)
+    offset = np.zeros(shape=(4,), dtype=np.int64)
 
-    neighbors = []
+    neighbors = -1 * np.ones(shape=(27,), dtype=np.int64)
 
     for i in range(-1, 2):
         for j in range(-1, 2):
@@ -358,13 +359,16 @@ def compute_neighbors(key):
                 # Otherwise, compute the key
                 else:
                     neighbor_key = get_key_from_4d_index(neighbor_vec)
-                    neighbors.append(neighbor_key)
+                    neighbors[count] = neighbor_key
+
+    # Remove remaining -1s
+    neighbors = neighbors[neighbors != -1]
 
     # Remove the key itself from the list of neighbors
-    neighbors = set(neighbors)
-    neighbors.remove(key)
+    neighbors = np.unique(neighbors)
+    neighbors = neighbors[neighbors != key]
 
-    return list(neighbors)
+    return neighbors
 
 
 def compute_interaction_list(key):
