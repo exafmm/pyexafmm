@@ -5,13 +5,13 @@ import pathlib
 import numpy as np
 
 import fmm.hilbert as hilbert
-from fmm.density import Potential
-from fmm.node import Node
-from fmm.operator import p2p, scale_surface, M2LOperators
-from fmm.kernel import KERNELS
-from fmm.octree import Octree
+import fmm.density as density
+import fmm.node as node
+import fmm.operator as operator
+import fmm.kernel as kernel
+import fmm.octree as octree
 
-from utils.data import load_json, load_hdf5_to_array
+import utils.data as data
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
@@ -32,7 +32,7 @@ class Fmm:
             config_filepath = PARENT / "config.json"
 
 
-        self.config = load_json(config_filepath)
+        self.config = data.load_json(config_filepath)
 
         data_dirpath = PARENT / self.config["data_dirname"]
         operator_dirpath = PARENT/ self.config["operator_dirname"]
@@ -41,26 +41,24 @@ class Fmm:
         source_densities_filename = self.config['source_densities_filename']
 
         # Load sources, targets and source densities
-        self.surface = load_hdf5_to_array('surface', 'surface', operator_dirpath)
-        self.sources = load_hdf5_to_array(source_filename, source_filename, data_dirpath)
-        self.targets = load_hdf5_to_array(target_filename, target_filename, data_dirpath)
-        self.source_densities = load_hdf5_to_array(
+        self.surface = data.load_hdf5_to_array('surface', 'surface', operator_dirpath)
+        self.sources = data.load_hdf5_to_array(source_filename, source_filename, data_dirpath)
+        self.targets = data.load_hdf5_to_array(target_filename, target_filename, data_dirpath)
+        self.source_densities = data.load_hdf5_to_array(
             'source_densities', source_densities_filename, data_dirpath)
 
         # Load precomputed operators
-        self.uc2e_u = load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
-        self.uc2e_v = load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
-        self.m2m = load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
-        self.l2l = load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
-
-        # Bundle M2L operators with their lookup tables
-        self.m2l_operators = M2LOperators(config_filename)
+        self.uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
+        self.uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
+        self.m2m = data.load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
+        self.l2l = data.load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
+        self.m2l = operator.M2L(config_filename)
 
         # Load configuration properties
         self.maximum_level = self.config['octree_max_level']
-        self.kernel_function = KERNELS[self.config['kernel']]()
+        self.kernel_function = kernel.KERNELS[self.config['kernel']]()
         self.order = self.config['order']
-        self.octree = Octree(
+        self.octree = octree.Octree(
             self.sources, self.targets, self.maximum_level, self.source_densities)
 
         # Coefficients discretising surface of a node
@@ -68,17 +66,17 @@ class Fmm:
 
         # Containers for results
         self.result_data = [
-            Potential(target, np.zeros(1, dtype='float64'))
+            density.Potential(target, np.zeros(1, dtype='float64'))
             for target in self.octree.targets
             ]
 
         self.source_data = {
-            key: Node(key, self.ncoefficients)
+            key: node.Node(key, self.ncoefficients)
             for key in self.octree.non_empty_source_nodes
         }
 
         self.target_data = {
-            key: Node(key, self.ncoefficients)
+            key: node.Node(key, self.ncoefficients)
             for key in self.octree.non_empty_target_nodes
         }
 
@@ -153,7 +151,7 @@ class Fmm:
             leaf_key, self.octree.center, self.octree.radius
         )
 
-        upward_check_surface = scale_surface(
+        upward_check_surface = operator.scale_surface(
             surface=self.surface,
             radius=self.octree.radius,
             level=self.octree.maximum_level,
@@ -163,7 +161,7 @@ class Fmm:
 
         scale = (1/2)**self.octree.maximum_level
 
-        check_potential = p2p(
+        check_potential = operator.p2p(
             kernel_function=self.kernel_function,
             targets=upward_check_surface,
             sources=leaf_sources,
@@ -218,10 +216,10 @@ class Fmm:
         # Lookup correct m2l operator
         target_index = hilbert.remove_level_offset(target_key)
 
-        index_to_key = self.m2l_operators.index_to_key[level][target_index]
+        index_to_key = self.m2l.index_to_key[level][target_index]
         source_index = np.where(source_key == index_to_key)[0][0]
 
-        m2l_matrix = self.m2l_operators.operators[level][target_index][source_index]
+        m2l_matrix = self.m2l.operators[level][target_index][source_index]
 
         target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
 
@@ -266,7 +264,7 @@ class Fmm:
 
         leaf_density = self.target_data[leaf_key].expansion
 
-        leaf_surface = scale_surface(
+        leaf_surface = operator.scale_surface(
             surface=self.surface,
             radius=self.octree.radius,
             level=self.octree.maximum_level,
@@ -283,7 +281,7 @@ class Fmm:
 
             target = self.octree.targets[target_index].reshape(1, 3)
 
-            result = p2p(
+            result = operator.p2p(
                 kernel_function=self.kernel_function,
                 targets=target,
                 sources=leaf_surface,
@@ -328,7 +326,7 @@ class Fmm:
 
                     target = self.octree.targets[target_index].reshape(1, 3)
 
-                    result = p2p(
+                    result = operator.p2p(
                         kernel_function=self.kernel_function,
                         targets=target,
                         sources=neighbor_sources,
@@ -352,7 +350,7 @@ class Fmm:
             for target_index in target_indices:
                 target = self.octree.targets[target_index].reshape(1, 3)
 
-                result = p2p(
+                result = operator.p2p(
                     kernel_function=self.kernel_function,
                     targets=target,
                     sources=leaf_sources,
