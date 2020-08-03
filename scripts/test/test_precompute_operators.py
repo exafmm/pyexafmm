@@ -51,7 +51,7 @@ def l2l():
 
 @pytest.fixture
 def m2l_operators():
-    return operator.M2LOperators(CONFIG_FILEPATH)
+    return operator.M2L(CONFIG_FILEPATH)
 
 
 @pytest.fixture
