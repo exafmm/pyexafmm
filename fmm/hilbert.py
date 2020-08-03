@@ -371,6 +371,7 @@ def compute_neighbors(key):
     return neighbors
 
 
+@numba.njit(cache=True)
 def compute_interaction_list(key):
     """
     Compute dense interaction list of a given key.
@@ -382,24 +383,26 @@ def compute_interaction_list(key):
 
     Returns:
     --------
-    list[int]
+    np.array(shape=(ninteraction_list), dtype=np.int64)
         Interaction list.
     """
-
-    if key < 9:
-        return []
 
     parent_key = get_parent(key)
 
     parent_neighbors = compute_neighbors(parent_key)
     child_neighbors = compute_neighbors(key)
 
-    interaction_list = []
+    interaction_list = -1 * np.ones(shape=(189,), dtype=np.int64)
+
+    count = 0
 
     for parent_neighbor in parent_neighbors:
         children = get_children(parent_neighbor)
         for child in children:
-            if child not in child_neighbors and child != key:
-                interaction_list.append(child)
 
-    return list(set(interaction_list))
+            if ~np.any(child_neighbors == child) and child != key:
+                interaction_list[count] = child
+                count += 1
+
+    # Filter out unique values in the interaction list
+    return interaction_list[interaction_list != -1]

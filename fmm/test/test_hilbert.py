@@ -186,11 +186,26 @@ def test_get_number_of_all_nodes(level, expected):
     assert hilbert.get_number_of_all_nodes(level) == expected
 
 
+@pytest.mark.parametrize(
+    "key, expected",
+    [
+        (1, np.array([2, 3, 4, 5, 6, 7, 8]))
+    ]
+)
+def test_compute_neighbors(key, expected):
 
-def test_compute_neighbors():
-    pass
+    result = hilbert.compute_neighbors(key)
+
+    assert np.array_equal(result, expected)
+
+    assert len(result) <= 26
 
 
-
-def test_compute_interaction_list():
+@pytest.mark.parametrize(
+    "key, expected",
+    [
+        (9, 213)
+    ]
+)
+def test_compute_interaction_list(key, expected):
     pass
