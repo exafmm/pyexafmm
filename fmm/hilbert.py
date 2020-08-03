@@ -42,8 +42,6 @@ def get_level_offset(level):
     int
     """
 
-    if level < 0:
-        return -1
     return ((1 << 3 * level) - 1) // 7
 
 
@@ -84,7 +82,7 @@ def get_octant(key):
 @numba.njit(cache=True)
 def get_key_from_4d_index(index):
     """
-    Compute Hilbert key from a 4d index, The 4D index is composed as
+    Compute Hilbert key from a 4D index, The 4D index is composed as
         [xidx, yidx, zidx, level], corresponding to the physical index of a node
         in a partitioned box. This method works by calculating the octant
         coordinates at level 1 [x, y, z] , where x,y,z ∈ {0, 1}, and appending
@@ -94,7 +92,7 @@ def get_key_from_4d_index(index):
 
     Parameters:
     -----------
-    index : np.array(shape=(4,))
+    index : np.array(shape=(4,), type=np.int64)
 
     Returns:
     --------
@@ -115,8 +113,9 @@ def get_key_from_4d_index(index):
 @numba.njit(cache=True)
 def get_4d_index_from_key(key):
     """
-    The 4D index is composed as [xidx, yidx, zidx, level], corresponding to
-        physical index of node in partitioned box.
+    Compute the 4D index from a Hilbert key. The 4D index is composed as
+        [xidx, yidx, zidx, level], corresponding to the physical index of a node
+        in a partitioned box.
 
     Parameters:
     -----------
@@ -125,90 +124,204 @@ def get_4d_index_from_key(key):
 
     Returns:
     --------
-    vec : np.array(shape=(4), type=np.int64)
+    index : np.array(shape=(4,), type=np.int64)
     """
-    level = get_level(key)
-    key = key - get_level_offset(level)
-    vec = np.zeros(4, np.int64)
-    vec[3] = level
-    for level_index in range(level):
-        vec[2] |= (key & (1 << 3 * level_index)) >> 2 * level_index
-        vec[1] |= (key & (1 << 3 * level_index + 1)) >> (2 * level_index + 1)
-        vec[0] |= (key & (1 << 3 * level_index + 2)) >> (2 * level_index + 2)
-    return vec
+    max_level = get_level(key)
+    key = key - get_level_offset(max_level)
+    index = np.zeros(4, np.int64)
+    index[3] = max_level
+    for level in range(max_level):
+        index[2] |= (key & (1 << 3 * level)) >> 2 * level
+        index[1] |= (key & (1 << 3 * level + 1)) >> (2 * level + 1)
+        index[0] |= (key & (1 << 3 * level + 2)) >> (2 * level + 2)
+    return index
 
 
 @numba.njit(cache=True)
 def get_4d_index_from_point(point, level, x0, r0):
-    """Get 4d index from point in 3 dimensions."""
-    vec = np.empty(4, dtype=np.int64)
-    vec[3] = level
+    """
+    Get 4D index from point in 3 dimensions contained in the computational
+        domain defined by an Octree with a root node center at x0 and a root
+        node radius of r0. This method is only valid for points known to be in
+        the Octree's computational domain.
+
+    Parameters:
+    -----------
+    point : np.array(shape=(3,), dtype=np.float64)
+    level : np.int64
+    x0 : np.array(shape=(3,))
+        The center of the Octree's root node.
+    r0: np.float64
+        The half side length of the Octree's root node
+
+    Returns:
+    --------
+    np.array(shape=(4,), dtype=np.int64)
+    """
+    index = np.empty(4, dtype=np.int64)
+    index[3] = level
     xmin = x0 - r0
-    dx = 2 * r0 / (1 << level)
-    vec[:3] = np.floor((point - xmin) / dx).astype(np.int64)
-    return vec
+
+    side_length = 2 * r0 / (1 << level)
+    index[:3] = np.floor((point - xmin) / side_length).astype(np.int64)
+
+    return index
 
 
 @numba.njit(cache=True)
 def get_key_from_point(point, level, x0, r0):
-    """Get key from 3d point."""
+    """
+    Get Hilbert key from Cartesian coordinates of a point in the computational
+        domain of a given Octree.
+
+    Parameters:
+    -----------
+    point : np.array(shape=(3,), dtype=np.float64)
+    level : np.int64
+        The level at which the key is being calculated
+    x0 : np.array(shape=(3,))
+        The center of the Octree's root node.
+    r0: np.float64
+        The half side length of the Octree's root node
+
+    Returns:
+    --------
+    np.int64
+    """
     vec = get_4d_index_from_point(point, level, x0, r0)
     return get_key_from_4d_index(vec)
 
 
 @numba.njit(cache=True)
-def get_keys_from_points_array(points, level, x0, r0):
-    """Get keys from array of points."""
+def get_keys_from_points(points, level, x0, r0):
+    """
+    Get Hilbert keys from array of points in computational domain of a given
+        Octree.
+
+    Parameters:
+    -----------
+    points : np.array(shape=(3,n), dtype=np.float64)
+        An array of `n` points.
+    level : np.int64
+        The level at which the key is being calculated
+    x0 : np.array(shape=(3,))
+        The center of the Octree's root node.
+    r0: np.float64
+        The half side length of the Octree's root node
+
+    Returns:
+    --------
+    np.array(n, dtype=np.int64)
+    """
     npoints = len(points)
     keys = np.empty(npoints, dtype=np.int64)
-    vecs = np.empty((npoints, 4), dtype=np.int64)
-    vecs[:, -1] = level
+    indices = np.empty((npoints, 4), dtype=np.int64)
+    indices[:, -1] = level
     xmin = x0 - r0
-    dx = 2 * r0 / (1 << level)
-    vecs[:, :3] = np.floor((points - xmin) / dx).astype(np.int64)
-    for index in range(npoints):
-        keys[index] = get_key_from_4d_index(vecs[index, :])
+    side_length = 2 * r0 / (1 << level)
+    indices[:, :3] = np.floor((points - xmin) / side_length).astype(np.int64)
+    for i in range(npoints):
+        keys[i] = get_key_from_4d_index(indices[i, :])
     return keys
 
 
 @numba.njit(cache=True)
-def get_center_from_4d_index(vec, x0, r0):
-    """Get center of box from 4d index."""
+def get_center_from_4d_index(index, x0, r0):
+    """
+    Get center of given Octree node described by a 4d index.
+
+    Parameters:
+    -----------
+    index : np.array(shape=(4,), dtype=np.int64)
+        4D index.
+    x0 : np.array(shape=(3,))
+        Center of root node of Octree.
+    r0 : np.float64
+        Half width length of root node.
+
+    Returns:
+    --------
+    np.array(shape=(3,))
+
+    """
     xmin = x0 - r0
-    dx = 2 * r0 / (1 << vec[-1])
-    return (vec[:3] + .5) * dx + xmin
+    level = index[-1]
+    side_length = 2 * r0 / (1 << level)
+    return (index[:3] + .5) * side_length + xmin
 
 
 @numba.njit(cache=True)
 def get_center_from_key(key, x0, r0):
-    """Get center of box from a key"""
-    vec = get_4d_index_from_key(key)
-    return get_center_from_4d_index(vec, x0, r0)
+    """
+    Get (Cartesian) center of node from its Hilbert key.
+
+    Parameters:
+    -----------
+    key : np.int64
+    x0 : np.array(shape=(3,))
+    r0 : np.float64
+
+    Returns:
+    --------
+    np.array(shape=(3,))
+    """
+    index = get_4d_index_from_key(key)
+    return get_center_from_4d_index(index, x0, r0)
 
 
 @numba.njit(cache=True)
 def get_parent(key):
-    """Return the parent key."""
+    """
+    Return the parent key of a given Hilbert key.
+
+    Parameters:
+    -----------
+    key : np.int64
+
+    Returns:
+    --------
+    np.int64
+    """
     level = get_level(key)
     return (remove_level_offset(key) >> 3) + get_level_offset(level - 1)
 
 
 @numba.njit(cache=True)
 def get_children(key):
-    """Return the parent key."""
+    """
+    Return the child keys of a given Hilbert key.
+
+    Parameters:
+    -----------
+    key : np.int64
+
+    Returns:
+    --------
+    np.array(shape=(nchildren,))
+    """
     level = get_level(key)
     return (remove_level_offset(key) << 3) + get_level_offset(level + 1) + np.arange(8)
 
 
 @numba.njit(cache=True)
 def get_number_of_all_nodes(level):
-    """Return number of all nodes up to a given level."""
+    """
+    Return number of all nodes up to a given level.
+
+    Paraneters:
+    -----------
+    level : np.int64
+
+    Returns:
+    --------
+    np.int64
+    """
     return get_level_offset(level + 1)
 
 
 def compute_neighbors(key):
     """
-    Compute *all* near neighbors of a given key.
+    Compute all near neighbors of a given key.
 
     Parameters:
     -----------

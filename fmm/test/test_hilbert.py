@@ -35,7 +35,6 @@ def test_get_level(key, level):
 @pytest.mark.parametrize(
     "level, expected",
     [
-        (-1, -1),
         (0, 0),
         (1, 1),
         (2, 9),
@@ -70,7 +69,8 @@ def test_get_octant(key, expected):
 @pytest.mark.parametrize(
     "index, expected",
     [
-        (np.array([1, 1, 1, 1]), 8)
+        (np.array([1, 1, 1, 1]), 8),
+        (np.array([0, 0, 0, 0]), 0)
     ]
 )
 def test_get_key_from_4d_index(index, expected):
@@ -85,10 +85,54 @@ def test_get_key_from_4d_index(index, expected):
     ]
 )
 def test_get_4d_index_from_key(key, index):
-    assert np.array_equal(
-        hilbert.get_4d_index_from_key(key),
-        index
-    )
+    result = hilbert.get_4d_index_from_key(key)
+    assert np.array_equal(result, index)
+
+    assert result.shape == (4,)
+
+
+@pytest.mark.parametrize(
+    "point, level, expected",
+    [
+        (np.array([1, 1, 0]), 1, np.array([1, 1, 0, 1]))
+    ]
+)
+def test_get_4d_index_from_point(point, level, expected):
+    x0 = np.array([1, 1, 1])
+    r0 = 1
+
+    result = hilbert.get_4d_index_from_point(point, level, x0, r0)
+    assert np.array_equal(result,expected)
+
+    assert result.shape == (4,)
+
+
+
+@pytest.mark.parametrize(
+    "point, level, x0, r0, expected",
+    [
+        (np.array([0, 0, 0]), 1, np.array([1, 1, 1]), 1, 1),
+        (np.array([0.9, 0.9, 0.9]), 1, np.array([1, 1, 1]), 1, 1),
+    ]
+)
+def test_get_key_from_point(point, level, x0, r0, expected):
+    result = hilbert.get_key_from_point(point, level, x0, r0)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "points, level, x0, r0, expected",
+    [
+      (np.array([[0, 0, 0]]), 1, np.array([1, 1, 1]), 1, np.array([1]))
+    ]
+)
+def test_get_keys_from_points(points, level, x0, r0, expected):
+    result = hilbert.get_keys_from_points(points,level, x0, r0)
+    assert np.array_equal(result, expected)
+
+    assert result.shape == (1, )
+
+
 
 @pytest.mark.parametrize(
     "index, center",
@@ -102,64 +146,43 @@ def test_get_center_from_4d_index(index, center):
     # Center and side half-length of root node
     x0 = np.array([0, 0, 0])
     r0 = 1
-    assert np.array_equal(
-        hilbert.get_center_from_4d_index(index, center, r0),
-        x0
-    )
+
+    result = hilbert.get_center_from_4d_index(index, center, r0)
+    assert np.array_equal(result, x0)
+
+    assert result.shape == (3,)
 
 
+@pytest.mark.parametrize(
+    "key, expected",
+    [
+        (1, 0),
+        (9, 1),
+        (73, 9)
+    ]
+)
+def test_get_parent(key, expected):
+    assert hilbert.get_parent(key) == expected
 
 
-
-# @pytest.mark.parametrize(
-#     "key",
-#     [
-#         9
-#     ]
-# )
-# def test_compute_neighbors(key):
-
-#     neighbors = hilbert.compute_neighbors(key)
-#     interaction_list = hilbert.compute_interaction_list(key)
-
-#     # assert len(neighbors) == 26
-
-#     neighbor_coords = np.array([
-#         hilbert.get_4d_index_from_key(k)[:3]
-#         for k in neighbors
-#     ])
-
-#     int_list_coords = np.array([
-#         hilbert.get_4d_index_from_key(k)[:3]
-#         for k in interaction_list
-#     ])
-
-#     node_coords = hilbert.get_4d_index_from_key(key)[:3]
-
-#     import matplotlib.pyplot as plt
-#     from mpl_toolkits.mplot3d import Axes3D
-
-#     fig = plt.figure()
-#     ax = fig.add_subplot(111, projection='3d')
-#     ax.scatter(neighbor_coords[:, 0],neighbor_coords[:, 1],neighbor_coords[:, 2])
-#     ax.scatter(node_coords[0],node_coords[1],node_coords[2], color='red')
-#     ax.scatter(int_list_coords[:, 0],int_list_coords[:, 1],int_list_coords[:, 2], color='green')
-
-#     plt.show()
-
-#     assert False
+@pytest.mark.parametrize(
+    "parent, expected",
+    [
+        (0, 1+np.arange(8))
+    ]
+)
+def test_get_children(parent, expected):
+    assert np.array_equal(hilbert.get_children(parent), expected)
 
 
-# @pytest.mark.parametrize(
-#     "key",
-#     [
-#         9,
-#     ]
-# )
-# def test_compute_interaction_list(key):
+@pytest.mark.parametrize(
+    "level, expected",
+    [
+        (1, 9),
+        (2, 73)
+    ]
+)
+def test_get_number_of_all_nodes(level, expected):
+    assert hilbert.get_number_of_all_nodes(level) == expected
 
-#     interaction_list = hilbert.compute_interaction_list(key)
 
-#     print(interaction_list, len(interaction_list))
-
-#     assert False

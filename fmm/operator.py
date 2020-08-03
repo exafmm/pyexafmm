@@ -1,15 +1,12 @@
 """
 Operator helper methods.
 """
-import glob
 import os
 import pathlib
-import pickle
 
 import numpy as np
 
 from fmm.density import Potential
-import fmm.rotation_matrices as rotations
 import utils.data as data
 
 

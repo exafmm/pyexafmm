@@ -250,7 +250,7 @@ class Octree:
         """
 
         # Find Hilbert keys for each point
-        assigned_nodes = hilbert.get_keys_from_points_array(
+        assigned_nodes = hilbert.get_keys_from_points(
             points, self.maximum_level, self.center, self.radius
         )
 
