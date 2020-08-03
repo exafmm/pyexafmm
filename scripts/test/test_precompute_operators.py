@@ -214,7 +214,7 @@ def test_m2l(npoints, octree, m2l_operators):
 
     target_index = hilbert.remove_level_offset(target_key)
     target_center = hilbert.get_center_from_key(target_key, x0, r0)
-    interaction_list = hilbert.compute_interaction_list(target_key)
+    interaction_list = hilbert.get_interaction_list(target_key)
 
     # pick a source box in target's interaction list
     source_key = interaction_list[2]

@@ -192,20 +192,34 @@ def test_get_number_of_all_nodes(level, expected):
         (1, np.array([2, 3, 4, 5, 6, 7, 8]))
     ]
 )
-def test_compute_neighbors(key, expected):
+def test_get_neighbors(key, expected):
 
-    result = hilbert.compute_neighbors(key)
+    result = hilbert.get_neighbors(key)
 
     assert np.array_equal(result, expected)
 
     assert len(result) <= 26
 
 
+TEST_INTERACTION_LIST = np.array(
+    [
+        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+        34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+        51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67,
+        68, 69, 70, 71, 72
+        ]
+    )
+
 @pytest.mark.parametrize(
     "key, expected",
     [
-        (9, 213)
+        (1, np.array([])),
+        (9, TEST_INTERACTION_LIST)
     ]
 )
-def test_compute_interaction_list(key, expected):
-    pass
+def test_get_interaction_list(key, expected):
+
+    result = hilbert.get_interaction_list(key)
+    assert np.array_equal(result, expected)
+
+    assert len(result) <= 189

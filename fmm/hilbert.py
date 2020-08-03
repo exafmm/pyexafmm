@@ -320,7 +320,7 @@ def get_number_of_all_nodes(level):
 
 
 @numba.njit(cache=True)
-def compute_neighbors(key):
+def get_neighbors(key):
     """
     Compute all near neighbors of a given a node indexed by a given Hilbert key.
 
@@ -361,10 +361,10 @@ def compute_neighbors(key):
                     neighbor_key = get_key_from_4d_index(neighbor_vec)
                     neighbors[count] = neighbor_key
 
-    # Remove remaining -1s
+    # Filter remaining -1s
     neighbors = neighbors[neighbors != -1]
 
-    # Remove the key itself from the list of neighbors
+    # Filter the key itself, and keep only unique neighbors
     neighbors = np.unique(neighbors)
     neighbors = neighbors[neighbors != key]
 
@@ -372,7 +372,7 @@ def compute_neighbors(key):
 
 
 @numba.njit(cache=True)
-def compute_interaction_list(key):
+def get_interaction_list(key):
     """
     Compute dense interaction list of a given key.
 
@@ -389,8 +389,8 @@ def compute_interaction_list(key):
 
     parent_key = get_parent(key)
 
-    parent_neighbors = compute_neighbors(parent_key)
-    child_neighbors = compute_neighbors(key)
+    parent_neighbors = get_neighbors(parent_key)
+    child_neighbors = get_neighbors(key)
 
     interaction_list = -1 * np.ones(shape=(189,), dtype=np.int64)
 
