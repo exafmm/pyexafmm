@@ -1,3 +1,6 @@
+"""
+Tests for the operator module.
+"""
 import os
 import pathlib
 

@@ -1,5 +1,5 @@
 """
-Tests for Octree data structure
+Tests for Octree data structure and its helper methods
 """
 import os
 import pathlib
@@ -11,7 +11,6 @@ import fmm.hilbert as hilbert
 import fmm.octree as octree
 import utils.data as data
 
-NPOINTS = 10000
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 ROOT = HERE.parent.parent
@@ -102,7 +101,7 @@ def test_neighbors(tree):
 def test_correct_keys_assigned_to_leafs(tree):
     """Test that the correct keys were assigned to the leafs."""
 
-    max_dist = 2 * tree.radius / tree.nodes_per_side(CONFIG['octree_max_level'])
+    max_dist = 2 * tree.radius / octree.nodes_per_side(CONFIG['octree_max_level'])
 
     for index, node in enumerate(tree.source_leaf_nodes):
         vec = hilbert.get_4d_index_from_key(node)
@@ -114,8 +113,6 @@ def test_correct_keys_assigned_to_leafs(tree):
         ]:
             dist = np.max(np.abs(node_center - tree.sources[source_index]))
             assert dist <= max_dist
-
-
 
 
 def test_interaction_list_assignment(tree):
@@ -143,6 +140,8 @@ def test_interaction_list_assignment(tree):
                         assert tree.interaction_list[node_index, neighbor_index, child_index] == child  # pylint: disable=C0301
                     else:
                         assert tree.interaction_list[node_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
+
+
 
 
 @pytest.mark.parametrize(

@@ -3,7 +3,6 @@ Test the precomputed operators
 """
 import os
 import pathlib
-import subprocess
 
 import numpy as np
 import pytest

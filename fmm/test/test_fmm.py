@@ -206,7 +206,7 @@ def test_downward_pass(fmm, l2l):
 
     while current_level < fmm.maximum_level:
 
-        target_keys = fmm.octree._target_nodes_by_level[current_level]
+        target_keys = fmm.octree.non_empty_target_nodes_by_level[current_level]
 
         for target_key in target_keys:
 
