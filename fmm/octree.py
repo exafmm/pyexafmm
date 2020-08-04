@@ -463,7 +463,6 @@ def compute_bounds(sources, targets):
     sources : np.array(shape=(3, nsources), dtype=np.float64)
     targets : np.array(shape=(3, ntargets), dtype=np.float64)
 
-
     Returns:
     --------
     (np.array(shape=(3,), dtype=np.float64), np.array(shape=(3,), dtype=np.float64))

@@ -145,17 +145,39 @@ def test_interaction_list_assignment(tree):
                         assert tree.interaction_list[node_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
 
 
-# @pytest.mark.parametrize(
-#     "sources, targets, expected",
-#     [
-#         (
-#             np.array([[0, 0, 0]]),
-#             np.array([[1, 1, 1]]),
-#             (np.array([0.5, 0.5, 0.5]), 0.5*1.00001)
-#         )
-#     ]
-# )
-# def test_compute_bounds(sources, targets, expected):
-#     center, radius = octree.compute_bounds(sources, targets)
-#     assert np.array_equal(center, expected[0])
-#     assert radius == expected[1]
+@pytest.mark.parametrize(
+    "sources, targets, max_bound, min_bound",
+    [
+        (
+            np.array([[0, 4, 0]]),
+            np.array([[1, 1, 1]]),
+            np.array([1, 4, 1]),
+            np.array([0, 1, 0]),
+        )
+    ]
+)
+def test_compute_bounds(sources, targets, max_bound, min_bound):
+    result = octree.compute_bounds(sources, targets)
+
+    assert np.array_equal(result[0], max_bound)
+    assert np.array_equal(result[1], min_bound)
+
+
+@pytest.mark.parametrize(
+    "max_bound, min_bound, expected",
+    [
+        (np.array([1, 1, 1,]), np.array([0, 0, 0]), np.array([0.5, 0.5, 0.5]))
+    ]
+)
+def test_compute_center(max_bound, min_bound, expected):
+    assert np.array_equal(octree.compute_center(max_bound, min_bound), expected)
+
+
+@pytest.mark.parametrize(
+    "center, max_bound, min_bound, expected",
+    [
+        (np.array([0, 0, 0]), np.array([1, 1, 1]), np.array([0, 0, 0]), 1*(1+1e-5))
+    ]
+)
+def test_compute_radius(center, max_bound, min_bound, expected):
+    assert octree.compute_radius(center, max_bound, min_bound) == expected
