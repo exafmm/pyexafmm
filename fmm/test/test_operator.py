@@ -19,6 +19,7 @@ NSOURCES = 3
 CONFIG_FILEPATH = ROOT / 'test_config.json'
 CONFIG = data.load_json(CONFIG_FILEPATH)
 
+
 @pytest.fixture
 def surface():
     """Order 2 surface"""

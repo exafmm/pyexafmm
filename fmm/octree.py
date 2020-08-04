@@ -33,7 +33,9 @@ class Octree:
         self._source_densities = source_densities
 
         # Center of the box and radius of the box
-        self._center, self._radius = compute_bounds(sources, targets)
+        max_bound, min_bound = compute_bounds(sources, targets)
+        self._center = compute_center(max_bound, min_bound)
+        self._radius = compute_radius(max_bound, min_bound, self.center)
 
         # Maps source node to index
         self._source_node_to_index = None
@@ -418,6 +420,7 @@ def _numba_compute_interaction_list(
                     interaction_list[node_index, neighbor_index, child_index] = neighbor_child
     return interaction_list
 
+
 def _sort_nodes_by_level(keys):
     """Return dict with nodes sorted by level."""
     sorted_keys, indexptr = _numba_sort_nodes_by_level(keys)
@@ -432,7 +435,9 @@ def _sort_nodes_by_level(keys):
 
 @numba.njit(cache=True)
 def _numba_sort_nodes_by_level(keys):
-    """Sort nodes by level implementation."""
+    """
+    Sort nodes by level implementation.
+    """
 
     sorted_keys = np.sort(keys)
 
@@ -449,18 +454,72 @@ def _numba_sort_nodes_by_level(keys):
 
 
 def compute_bounds(sources, targets):
-    """Compute center and radius of arrays of sources and targets."""
+    """
+    Compute bounds of computational domain of an Octree containing given
+        sources and targets.
+
+    Parameters:
+    -----------
+    sources : np.array(shape=(3, nsources), dtype=np.float64)
+    targets : np.array(shape=(3, ntargets), dtype=np.float64)
+
+
+    Returns:
+    --------
+    (np.array(shape=(3,), dtype=np.float64), np.array(shape=(3,), dtype=np.float64))
+        Tuple containing the maximal/minimal coordinate in the sources/targets
+        provided.
+    """
     min_bound = np.min(
         np.vstack([np.min(sources, axis=0), np.min(targets, axis=0)]), axis=0
     )
+
     max_bound = np.max(
         np.vstack([np.max(sources, axis=0), np.max(targets, axis=0)]), axis=0
     )
 
-    center = (min_bound + max_bound) / 2
-    radius = (
-        np.max([np.max(center - min_bound), np.max(max_bound - center)])
-        * 1.00001
-    )
+    return max_bound, min_bound
 
-    return center, radius
+
+def compute_center(max_bound, min_bound):
+    """
+    Compute center of Octree's root node.
+
+    Parameters:
+    -----------
+    max_bound : np.array(shape=(3,) dtype=np.float64)
+        Maximal point in Octree's root node.
+    min_bound : np.array(shape=(3,) dtype=np.float64)
+        Minimal point in Octree's root node.
+
+    Returns:
+    --------
+    np.array(shape=(3,), dtype=np.float64)
+        Cartesian coordinates of center.
+    """
+
+    center = (min_bound + max_bound) / 2
+
+    return center
+
+
+def compute_radius(center, max_bound, min_bound):
+    """
+    Compute half side length of Octree's root node.
+
+    Parameters:
+    ----------
+    center : np.array(shape=(3,) dtype=np.float64)
+    max_bound : np.array(shape=(3,) dtype=np.float64)
+        Maximal point in Octree's root node.
+    min_bound : np.array(shape=(3,) dtype=np.float64)
+        Minimal point in Octree's root node.:
+
+    Returns:
+    --------
+    np.float64
+    """
+    factor = 1 + 1e-5
+    radius = np.max([np.max(center - min_bound), np.max(max_bound - center)]) * factor
+
+    return radius

@@ -45,7 +45,8 @@ class Fmm:
         self.sources = data.load_hdf5_to_array(source_filename, source_filename, data_dirpath)
         self.targets = data.load_hdf5_to_array(target_filename, target_filename, data_dirpath)
         self.source_densities = data.load_hdf5_to_array(
-            'source_densities', source_densities_filename, data_dirpath)
+            source_densities_filename, source_densities_filename, data_dirpath
+            )
 
         # Load precomputed operators
         self.uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
@@ -59,7 +60,8 @@ class Fmm:
         self.kernel_function = kernel.KERNELS[self.config['kernel']]()
         self.order = self.config['order']
         self.octree = octree.Octree(
-            self.sources, self.targets, self.maximum_level, self.source_densities)
+            self.sources, self.targets, self.maximum_level, self.source_densities
+            )
 
         # Coefficients discretising surface of a node
         self.ncoefficients = 6*(self.order-1)**2 + 2
