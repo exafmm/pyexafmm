@@ -99,8 +99,8 @@ class Octree:
             self._target_node_to_index
         ) = self._enumerate_non_empty_nodes(self._target_leaf_nodes)
 
-        self._source_nodes_by_level = _sort_nodes_by_level(self._non_empty_source_nodes)
-        self._target_nodes_by_level = _sort_nodes_by_level(self._non_empty_target_nodes)
+        self._source_nodes_by_level = sort_keys_by_level(self._non_empty_source_nodes)
+        self._target_nodes_by_level = sort_keys_by_level(self._non_empty_target_nodes)
 
         self._target_neighbors = _numba_compute_neighbors(
             self._non_empty_target_nodes, self._source_node_to_index
@@ -289,7 +289,6 @@ class Octree:
         list_of_nodes: list
 
         node_map: np.array(shape=(n_nodes))
-
         """
 
         nleafs = len(leaf_nodes)
@@ -318,22 +317,7 @@ class Octree:
         # indices sorted by counts
         indices = np.argsort(node_map[list_of_nodes])
 
-        # print("indices", indices)
-
-        # print("list_of_nodes[indices]", list_of_nodes[indices], len(list_of_nodes))
         return list_of_nodes[indices], node_map
-
-
-# def _numba_assign_points_to_nodes(points, level, x0, r0):
-    # """Assign points to leaf nodes."""
-
-    # npoints = len(points)
-    # assigned_nodes = np.empty(npoints, dtype=np.int64)
-    # for index in range(npoints):
-        # assigned_nodes[index] = hilbert.get_key_from_point(
-            # points[index], level, x0, r0
-        # )
-    # return assigned_nodes
 
 
 @numba.njit(cache=True)
@@ -421,36 +405,64 @@ def _numba_compute_interaction_list(
     return interaction_list
 
 
-def _sort_nodes_by_level(keys):
-    """Return dict with nodes sorted by level."""
-    sorted_keys, indexptr = _numba_sort_nodes_by_level(keys)
+def sort_keys_by_level(keys):
+    """
+    Return dict with nodes sorted by level.
 
-    levels_dict = {}
-    number_of_levels = len(indexptr) - 1
-    for level in range(number_of_levels):
-        levels_dict[level] = sorted_keys[indexptr[level] : indexptr[1 + level]]
+    Parameters:
+    -----------
+    keys : np.array(shape=(nkeys,) dtype=np.int64)
 
-    return levels_dict
+    Returns:
+    --------
+    dict[int, np.array(dtype=np.int64)]
+    """
+    sorted_keys, index_pointer = _numba_sort_keys_by_level(keys)
+
+    level_to_keys = {}
+    max_level = len(index_pointer) - 1
+    for level in range(max_level):
+        level_to_keys[level] = sorted_keys[index_pointer[level] : index_pointer[1 + level]]
+
+    return level_to_keys
 
 
 @numba.njit(cache=True)
-def _numba_sort_nodes_by_level(keys):
+def _numba_sort_keys_by_level(keys):
     """
-    Sort nodes by level implementation.
+    Sort nodes, indexed by Hilbert keys, by level.
+
+    Parameters:
+    -----------
+    keys : np.array(shape=(nkeys,) dtype=np.int64)
+
+    Returns:
+    --------
+    (np.array(shape=(nkey,), dtype=np.int64), list[int])
+        Return the sorted keys and the index pointer as a tuple.
     """
+
+    # Store indices for start/end of keys at a given level in the index pointer
+    initial_index = 0
+    index_pointer = [initial_index]
 
     sorted_keys = np.sort(keys)
 
     next_level = 1
     next_offset = hilbert.get_level_offset(next_level)
-    indexptr = [0]
+
     for index, key in enumerate(sorted_keys):
         if key >= next_offset:
-            indexptr.append(index)
+
+            index_pointer.append(index)
+
             next_level += 1
             next_offset = hilbert.get_level_offset(next_level)
-    indexptr.append(len(keys))
-    return sorted_keys, indexptr
+
+    final_index = len(keys)
+
+    index_pointer.append(final_index)
+    return sorted_keys, index_pointer
 
 
 def compute_bounds(sources, targets):

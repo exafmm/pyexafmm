@@ -146,6 +146,26 @@ def test_interaction_list_assignment(tree):
 
 
 @pytest.mark.parametrize(
+    "keys, expected",
+    [
+        (
+            np.arange(10),
+            {
+                0: np.array([0]),
+                1: np.array([1, 2, 3, 4, 5, 6, 7, 8]),
+                2: np.array([9])
+            }
+        )
+    ]
+)
+def test_sort_keys_by_level(keys, expected):
+    result = octree.sort_keys_by_level(keys)
+
+    for key, value in result.items():
+        assert np.array_equal(value, expected[key])
+
+
+@pytest.mark.parametrize(
     "sources, targets, max_bound, min_bound",
     [
         (
