@@ -69,9 +69,9 @@ class Octree:
         (
             self.non_empty_source_nodes,
             self.source_node_to_index
-        ) =  enumerate_non_empty_nodes(
+        ) = enumerate_non_empty_nodes(
             maximum_level=maximum_level,
-            leaf_nodes=self.source_leaf_nodes
+            leaves=self.source_leaf_nodes
             )
 
         (
@@ -79,14 +79,15 @@ class Octree:
             self.target_node_to_index
         ) = enumerate_non_empty_nodes(
             maximum_level=maximum_level,
-            leaf_nodes=self.target_leaf_nodes
+            leaves=self.target_leaf_nodes
             )
 
         self.non_empty_source_nodes_by_level = sort_keys_by_level(self.non_empty_source_nodes)
         self.non_empty_target_nodes_by_level = sort_keys_by_level(self.non_empty_target_nodes)
 
         self.target_neighbors = numba_compute_neighbors(
-            self.non_empty_target_nodes, self.source_node_to_index
+            target_nodes=self.non_empty_target_nodes,
+            source_node_to_index=self.source_node_to_index
         )
 
         self.interaction_list = _numba_compute_interaction_list(
@@ -153,49 +154,50 @@ def assign_points_to_leaf_nodes(maximum_level, x0, r0, points):
     return nodes, point_indices_by_node, index_ptr
 
 
-def enumerate_non_empty_nodes(maximum_level, leaf_nodes):
+def enumerate_non_empty_nodes(maximum_level, leaves):
     """
     Enumerate all non-empty leaf nodes across the tree.
 
     Parameters:
     -----------
-    leaf_nodes : list[int]
-        List of leaf node keys.
+    maximum_level : int
+    leaves : np.array(shape=(nleaf,), dtype=npint64)
+        Non empty leaf nodes referenced by their Hilbert keys.
 
     Returns:
     --------
     list_of_nodes: list
-
     node_map: np.array(shape=(n_nodes))
     """
 
-    nleafs = len(leaf_nodes)
 
-    node_map = -1*np.ones(
-        hilbert.get_number_of_all_nodes(maximum_level), dtype=np.int64
+    node_to_index = -1*np.ones(
+        shape=(hilbert.get_number_of_all_nodes(maximum_level),),
+        dtype=np.int64
     )
 
-    # Enumerate non empty leaf nodes with a value from range(nleafs)
-    node_map[leaf_nodes] = range(nleafs)
+    # Enumerate leaf nodes with a value from range(nleaves)
+    nleaves = len(leaves)
+    node_to_index[leaves] = range(nleaves)
 
-    count = nleafs
-    for node in leaf_nodes:
-        parent = node
+    count = nleaves
+
+    for leaf in leaves:
+        parent = leaf
         while parent != 0:
             parent = hilbert.get_parent(parent)
-            if node_map[parent] == -1:
-                node_map[parent] = count
+            if node_to_index[parent] == -1:
+                node_to_index[parent] = count
                 count += 1
 
+    # Returns indices of node_to_index not equal to -1
+    list_of_nodes = np.flatnonzero(node_to_index != -1)
 
-    # Returns indices of node_map not equal to -1
-    list_of_nodes = np.flatnonzero(node_map != -1)
-
-    # node_map[list_of_nodes] = non-empty node values (count)
+    # node_to_index[list_of_nodes] = non-empty node values (count)
     # indices sorted by counts
-    indices = np.argsort(node_map[list_of_nodes])
+    indices = np.argsort(node_to_index[list_of_nodes])
 
-    return list_of_nodes[indices], node_map
+    return list_of_nodes[indices], node_to_index
 
 
 @numba.njit(cache=True)
@@ -225,15 +227,16 @@ def _in_range(n1, n2, n3, upper_bound, lower_bound):
 @numba.njit(cache=True)
 def numba_compute_neighbors(target_nodes, source_node_to_index):
     """
-    Compute all non-empty neighbors for the given nodes.
+    Compute all non-empty neighbors for the given target nodes.
         The emptyness is determined through comparison with the second set
         comp_set. In this way target neighbors can be computed that contain
         source points.
 
     Parameters:
     -----------
-    target_nodes :
-    source_node_to_index :
+    target_nodes : np.array(shape=(ntargets,), dtype=np.int64)
+        Target nodes, referenced by their Hilbert key.
+    source_node_to_index : np.array(shape=(n,sources), dtype=np.int64)
 
     Returns:
     --------
@@ -281,8 +284,6 @@ def numba_compute_neighbors(target_nodes, source_node_to_index):
                         neighbors[target_index, count] = -1
 
     return neighbors
-
-
 
 
 @numba.njit(cache=True)

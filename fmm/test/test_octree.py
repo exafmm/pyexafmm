@@ -36,6 +36,30 @@ def tree():
     return octree.Octree(sources, targets, CONFIG['octree_max_level'], source_densities)
 
 
+@pytest.mark.parametrize(
+    "level, expected",
+    [
+        (0, 1),
+        (1, 2)
+    ]
+)
+def test_nodes_per_side(level, expected):
+    assert octree.nodes_per_side(level) == expected
+
+
+
+@pytest.mark.parametrize(
+    "level, expected",
+    [
+        (0, 8**0),
+        (1, 8**1),
+        (5, 8**5)
+    ]
+)
+def test_nodes_per_level(level, expected):
+    assert octree.nodes_per_level(level) == expected
+
+
 def test_source_leaf_assignment(tree):
     """Test source leaf assignment."""
 
@@ -142,6 +166,10 @@ def test_interaction_list_assignment(tree):
                         assert tree.interaction_list[node_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
 
 
+
+
+def test_enumerate_non_empty_nodes(maximum_level, leaves):
+    pass
 
 
 @pytest.mark.parametrize(
