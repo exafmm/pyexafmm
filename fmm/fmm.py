@@ -161,7 +161,7 @@ class Fmm:
             alpha=self.config['alpha_outer']
         )
 
-        scale = (1/2)**self.octree.maximum_level
+        scale = (1/self.kernel_function.scale)**self.octree.maximum_level
 
         check_potential = operator.p2p(
             kernel_function=self.kernel_function,
