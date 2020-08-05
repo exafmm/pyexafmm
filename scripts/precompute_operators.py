@@ -31,19 +31,19 @@ def main(**config):
     sources = data.load_hdf5_to_array(
         config['source_filename'],
         config['source_filename'],
-        config['data_dirpath']
+        data_dirpath
         )
 
     targets = data.load_hdf5_to_array(
         config['target_filename'],
         config['target_filename'],
-        config['data_dirpath']
+        data_dirpath
         )
 
     source_densities = data.load_hdf5_to_array(
         config['source_densities_filename'],
         config['source_densities_filename'],
-        config['data_dirpath']
+        data_dirpath
         )
 
     octree = Octree(
@@ -61,7 +61,7 @@ def main(**config):
         surface = data.load_hdf5_to_array(
             config['surface_filename'],
             config['surface_filename'],
-            config['operator_dirpath']
+            operator_dirpath
             )
 
     else:
@@ -70,7 +70,7 @@ def main(**config):
 
         print("Saving Surface to HDF5")
         data.save_array_to_hdf5(
-            config['operator_dirpath'],
+            operator_dirpath,
             config['surface_filename'],
             surface
             )
@@ -83,12 +83,12 @@ def main(**config):
         print("Loading...")
 
         # Upward check to upward equivalent
-        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', config['operator_dirpath'])
-        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', config['operator_dirpath'])
+        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
+        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
 
         # Downward check to downward equivalent
-        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', config['operator_dirpath'])
-        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', config['operator_dirpath'])
+        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirpath)
+        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirpath)
 
     else:
         print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
