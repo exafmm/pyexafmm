@@ -24,6 +24,12 @@ class Kernel(abc.ABC):
         Operator value (scaled by 4pi) between points x and y.
     """
 
+    @abc.abstractproperty
+    def scale(self):
+        """Implement level dependent scale.
+        """
+        raise NotImplementedError
+
     @abc.abstractstaticmethod
     def kernel_function(x, y):
         """ Implement static kernel function.
@@ -38,6 +44,11 @@ class Kernel(abc.ABC):
 class Identity(Kernel):
     """Identity operation
     """
+
+    @property
+    def scale(self):
+        return 1
+
     @staticmethod
     def kernel_function(x, y):
         return np.dot(x, y)
@@ -49,6 +60,11 @@ class Identity(Kernel):
 class Laplace(Kernel):
     """Single layer Laplace kernel
     """
+
+    @property
+    def scale(self):
+        return 2
+
     @staticmethod
     def kernel_function(x, y):
         r = np.linalg.norm(x-y)
