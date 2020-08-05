@@ -244,7 +244,7 @@ def main(**config):
                 print(f"Computed M2L operators for ({loading}/{len(leaves)}) leaves")
                 loading += 1
 
-                interaction_list = hilbert.cget_interaction_listompute_interaction_list(target)
+                interaction_list = hilbert.get_interaction_list(target)
 
                 target_center = hilbert.get_center_from_key(
                     key=target,

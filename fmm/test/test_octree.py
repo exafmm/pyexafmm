@@ -64,16 +64,17 @@ def test_source_leaf_assignment(tree):
 
     for index, source_node in enumerate(tree.source_leaf_nodes):
         for point_index in tree.sources_by_leafs[
-                tree.source_index_ptr[index] : tree.source_index_ptr[1 + index]
+                tree.source_index_ptr[index] : tree.source_index_ptr[index + 1]
         ]:
             expected = source_node
-            actual = hilbert.get_key_from_point(
+
+            result = hilbert.get_key_from_point(
                 tree.sources[point_index],
                 tree.maximum_level,
                 tree.center,
                 tree.radius,
             )
-            assert expected == actual
+            assert result == expected
 
 
 def test_target_leaf_assignment(tree):
@@ -81,16 +82,18 @@ def test_target_leaf_assignment(tree):
 
     for index, target_node in enumerate(tree.target_leaf_nodes):
         for point_index in tree.targets_by_leafs[
-                tree.target_index_ptr[index] : tree.target_index_ptr[1 + index]
+                tree.target_index_ptr[index] : tree.target_index_ptr[index + 1]
         ]:
             expected = target_node
-            actual = hilbert.get_key_from_point(
+
+            result = hilbert.get_key_from_point(
                 tree.targets[point_index],
                 tree.maximum_level,
                 tree.center,
                 tree.radius,
             )
-            assert expected == actual
+
+            assert result == expected
 
 
 def test_parents(tree):
@@ -100,11 +103,14 @@ def test_parents(tree):
         key = hilbert.get_key_from_point(
             point, tree.maximum_level, tree.center, tree.radius
         )
-        actual = hilbert.get_parent(key)
+
+        result = hilbert.get_parent(key)
+
         expected = hilbert.get_key_from_point(
             point, tree.maximum_level - 1, tree.center, tree.radius
         )
-        assert actual == expected
+
+        assert result == expected
 
 
 def test_neighbors(tree):
@@ -126,15 +132,17 @@ def test_correct_keys_assigned_to_leafs(tree):
 
     max_dist = 2 * tree.radius / octree.nodes_per_side(CONFIG['octree_max_level'])
 
-    for index, node in enumerate(tree.source_leaf_nodes):
-        vec = hilbert.get_4d_index_from_key(node)
-        node_center = hilbert.get_center_from_4d_index(
-            vec, tree.center, tree.radius
+    for index, leaf in enumerate(tree.source_leaf_nodes):
+
+        leaf_4d_index = hilbert.get_4d_index_from_key(leaf)
+        leaf_center = hilbert.get_center_from_4d_index(
+            leaf_4d_index, tree.center, tree.radius
         )
+
         for source_index in tree.sources_by_leafs[
                 tree.source_index_ptr[index] : tree.source_index_ptr[index + 1]
         ]:
-            dist = np.max(np.abs(node_center - tree.sources[source_index]))
+            dist = np.max(np.abs(leaf_center - tree.sources[source_index]))
             assert dist <= max_dist
 
 
@@ -143,29 +151,31 @@ def test_interaction_list_assignment(tree):
 
     source_nodes_set = set(tree.non_empty_source_nodes)
 
-
-    for node_index, node in enumerate(tree.non_empty_target_nodes):
-        level = hilbert.get_level(node)
+    for target_index, target in enumerate(tree.non_empty_target_nodes):
+        level = hilbert.get_level(target)
         if level < 2:
             continue
-        parent = hilbert.get_parent(node)
-        parent_neighbors = tree.target_neighbors[tree.target_node_to_index[parent]]
-        node_neighbors = tree.target_neighbors[tree.target_node_to_index[node]]
+
+        parent = hilbert.get_parent(target)
+        parent_index = tree.target_node_to_index[parent]
+        parent_neighbors = tree.target_neighbors[parent_index]
+
+        target_neighbors = tree.target_neighbors[tree.target_node_to_index[target]]
 
         for neighbor_index in range(27):
             parent_neighbor = parent_neighbors[neighbor_index]
 
             if parent_neighbors[neighbor_index] == -1:
                 # The corresponding neighbor has no sources.
-                assert np.all(tree.interaction_list[node_index, neighbor_index] == -1)
+                assert np.all(tree.interaction_list[target_index, neighbor_index] == -1)
 
             else:
                 # There are sources in the neighbor
                 for child_index, child in enumerate(hilbert.get_children(parent_neighbor)):
-                    if child in source_nodes_set and child not in set(node_neighbors):
-                        assert tree.interaction_list[node_index, neighbor_index, child_index] == child  # pylint: disable=C0301
+                    if child in source_nodes_set and child not in set(target_neighbors):
+                        assert tree.interaction_list[target_index, neighbor_index, child_index] == child  # pylint: disable=C0301
                     else:
-                        assert tree.interaction_list[node_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
+                        assert tree.interaction_list[target_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
 
 
 @pytest.mark.parametrize(
