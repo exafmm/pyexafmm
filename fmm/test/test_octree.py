@@ -47,7 +47,6 @@ def test_nodes_per_side(level, expected):
     assert octree.nodes_per_side(level) == expected
 
 
-
 @pytest.mark.parametrize(
     "level, expected",
     [
@@ -152,11 +151,14 @@ def test_interaction_list_assignment(tree):
         parent = hilbert.get_parent(node)
         parent_neighbors = tree.target_neighbors[tree.target_node_to_index[parent]]
         node_neighbors = tree.target_neighbors[tree.target_node_to_index[node]]
+
         for neighbor_index in range(27):
             parent_neighbor = parent_neighbors[neighbor_index]
+
             if parent_neighbors[neighbor_index] == -1:
                 # The corresponding neighbor has no sources.
                 assert np.all(tree.interaction_list[node_index, neighbor_index] == -1)
+
             else:
                 # There are sources in the neighbor
                 for child_index, child in enumerate(hilbert.get_children(parent_neighbor)):
@@ -164,7 +166,6 @@ def test_interaction_list_assignment(tree):
                         assert tree.interaction_list[node_index, neighbor_index, child_index] == child  # pylint: disable=C0301
                     else:
                         assert tree.interaction_list[node_index, neighbor_index, child_index] == -1  # pylint: disable=C0301
-
 
 
 @pytest.mark.parametrize(
@@ -248,22 +249,6 @@ def test_compute_neighbors(targets, source_node_to_index, expected):
 
     # Check neighbors are correct
     assert set(result.flatten()) == set(expected.flatten())
-
-
-@pytest.mark.parametrize(
-    "targets, target_neighbors, source_node_to_index, target_node_to_index, expected",
-    [
-
-    ]
-)
-def test_compute_interaction_list(
-    targets,
-    target_neighbors,
-    source_node_to_index,
-    target_node_to_index,
-    expected
-    ):
-    pass
 
 
 @pytest.mark.parametrize(

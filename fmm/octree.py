@@ -379,8 +379,8 @@ def numba_compute_interaction_list(
                             key=neighbor_child
                             )
 
-                        if source_node_to_index[neighbor_child] != -1 and ~is_neighbor:
 
+                        if source_node_to_index[neighbor_child] != -1 and ~is_neighbor:
                             interaction_list[target_index, parent_neighbor_index, neigbhor_child_index] = neighbor_child
 
     return interaction_list
