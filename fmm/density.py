@@ -32,9 +32,6 @@ class Charge(AbstractDensity):
     """
     Return object bundling computed charge, at corresponding points.
     """
-    def __init__(self, surface, density):
-        super().__init__(surface, density)
-
     def __repr__(self):
         return str((self.surface, self.density))
 

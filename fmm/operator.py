@@ -1,15 +1,13 @@
 """
 Operator helper methods.
 """
-import glob
 import os
 import pathlib
-import pickle
+import re
 
 import numpy as np
 
 from fmm.density import Potential
-import fmm.rotation_matrices as rotations
 import utils.data as data
 
 
@@ -264,7 +262,7 @@ def p2p(kernel_function, targets, sources, source_densities):
     return Potential(targets, target_densities)
 
 
-class M2LOperators:
+class M2L:
     """
     Class to bundle precomputed M2L operators with their respective lookup table
         to translate from Hilbert key to index within the precomputed datastructure
@@ -283,7 +281,7 @@ class M2LOperators:
             config_filepath = PARENT / "config.json"
 
         self.config = data.load_json(config_filepath)
-        self.m2l_dirpath = PARENT/ self.config["operator_dirname"]
+        self.m2l_dirpath = PARENT / self.config["operator_dirname"]
 
         # Load operators and key2index lookup tables
         operator_files = self.m2l_dirpath.glob('m2l*')
@@ -312,5 +310,7 @@ class M2LOperators:
     @staticmethod
     def get_level(filename):
         """Get level from the m2l operator's filename"""
-        level = int(filename.split('.')[0][-1])
+        pattern = '(?<=level_)(.*)(?=.pkl)'
+        prog = re.compile(pattern)
+        level = int(prog.search(filename).group())
         return level

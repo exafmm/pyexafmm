@@ -1,12 +1,27 @@
+"""
+Tests for the operator module.
+"""
+import os
+import pathlib
+
 import numpy as np
 import pytest
 
 import fmm.operator as operator
 from fmm.kernel import KERNELS
+import utils.data as data
+
+
+HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+ROOT = HERE.parent.parent
 
 ORDER = 3
 NTARGETS = 4
 NSOURCES = 3
+
+CONFIG_FILEPATH = ROOT / 'test_config.json'
+CONFIG = data.load_json(CONFIG_FILEPATH)
+
 
 @pytest.fixture
 def surface():
@@ -54,6 +69,11 @@ def gram_matrix(upward_check_surface, upward_equivalent_surface):
         sources=upward_equivalent_surface,
         targets=upward_check_surface
     )
+
+
+@pytest.fixture
+def m2l():
+    return operator.M2L(config_filename='test_config.json')
 
 
 @pytest.mark.parametrize(
@@ -181,7 +201,6 @@ def test_compute_pseudo_inverse(K, alpha):
     result = np.matmul(K, K_inv)
     expected = np.diag(np.ones(len(K)))
 
-    print(result[0])
     assert np.all(np.isclose(result, expected, rtol=0.001))
 
 
@@ -234,3 +253,19 @@ def test_p2p(kernel_function, sources, targets):
         expected += kernel_function(source, targets[target_idx])
 
     assert expected == potential_density[target_idx]
+
+
+def test_m2l(m2l):
+    assert list(m2l.operators.keys()) == [2, CONFIG['octree_max_level']]
+    assert list(m2l.index_to_key.keys()) == [2, CONFIG['octree_max_level']]
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("m2l_level_42.pkl", 42)
+    ]
+)
+def test_m2l_get_level(m2l, filename, expected):
+    result = m2l.get_level(filename)
+    assert result == expected
