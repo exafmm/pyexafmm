@@ -167,8 +167,102 @@ def test_interaction_list_assignment(tree):
 
 
 
+@pytest.mark.parametrize(
+    "maximum_level, x0, r0, points, expected",
+    [
+        (
+            1,
+            np.array([0.5, 0.5, 0.5]),
+            1,
+            np.array([
+                [0.1, 0.1, 0.1],
+                [0.2, 0.2, 0.2]
+            ]),
+            (
+                [1],
+                [0, 1],
+                [0, 2]
+            )
+        )
+    ]
+)
+def test_assign_points_to_leaf_nodes(maximum_level, x0, r0, points, expected):
+    result = octree.assign_points_to_leaf_nodes(
+        maximum_level,
+        x0,
+        r0,
+        points
+    )
 
-def test_enumerate_non_empty_nodes(maximum_level, leaves):
+    assert result[0] == expected[0]
+    assert result[1] == expected[1]
+    assert result[2] == expected[2]
+
+
+@pytest.mark.parametrize(
+    "maximum_level, leaves, expected",
+    [
+        (
+            1,
+            np.array([2]),
+            (
+                np.array([2, 0]),
+                np.array([1, -1, 0, -1, -1, -1, -1, -1, -1])
+            )
+        )
+    ]
+)
+def test_enumerate_non_empty_nodes(maximum_level, leaves, expected):
+    result = octree.enumerate_non_empty_nodes(maximum_level, leaves)
+
+    # Test that output is as expected
+    assert np.array_equal(result[0], expected[0])
+    assert np.array_equal(result[1], expected[1])
+
+    # Test output dimensions are as expected
+    assert len(result[1]) == sum([8**level for level in range(maximum_level+1)])
+
+
+@pytest.mark.parametrize(
+    "targets, source_node_to_index, expected",
+    [
+        (
+            np.array([1]),
+            np.array([1, -1, 0, -1, -1, -1, -1, -1, -1]),
+            np.array([[
+                2, -1, -1, -1, -1,
+                -1, -1, -1, -1, -1,
+                -1, -1, -1, -1, -1,
+                -1, -1, -1, -1, -1,
+                -1, -1, -1, -1, -1,
+                -1, -1
+                ]])
+        )
+    ]
+)
+def test_compute_neighbors(targets, source_node_to_index, expected):
+    result = octree.numba_compute_neighbors(targets, source_node_to_index)
+
+    # Check dimensions are as expected
+    assert result.shape == (len(targets), 27)
+
+    # Check neighbors are correct
+    assert set(result.flatten()) == set(expected.flatten())
+
+
+@pytest.mark.parametrize(
+    "targets, target_neighbors, source_node_to_index, target_node_to_index, expected",
+    [
+
+    ]
+)
+def test_compute_interaction_list(
+    targets,
+    target_neighbors,
+    source_node_to_index,
+    target_node_to_index,
+    expected
+    ):
     pass
 
 

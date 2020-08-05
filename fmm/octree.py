@@ -86,15 +86,15 @@ class Octree:
         self.non_empty_target_nodes_by_level = sort_keys_by_level(self.non_empty_target_nodes)
 
         self.target_neighbors = numba_compute_neighbors(
-            target_nodes=self.non_empty_target_nodes,
+            targets=self.non_empty_target_nodes,
             source_node_to_index=self.source_node_to_index
         )
 
-        self.interaction_list = _numba_compute_interaction_list(
-            self.non_empty_target_nodes,
-            self.target_neighbors,
-            self.source_node_to_index,
-            self.target_node_to_index,
+        self.interaction_list = numba_compute_interaction_list(
+            targets=self.non_empty_target_nodes,
+            target_neighbors=self.target_neighbors,
+            source_node_to_index=self.source_node_to_index,
+            target_node_to_index=self.target_node_to_index,
         )
 
 
@@ -124,7 +124,7 @@ def assign_points_to_leaf_nodes(maximum_level, x0, r0, points):
     point_indices_by_node : list[int]
         Indices that link (unsorted) array of points to (sorted) list of
         nodes returned by this method.
-    index_ptr : list[int]
+    index_pointer : list[int]
         Pointers (indices) that link the (sorted) array of points to each
         (unique) non-empty node returned by `nodes`.
     """
@@ -136,52 +136,56 @@ def assign_points_to_leaf_nodes(maximum_level, x0, r0, points):
 
     # Need to sort point indices as we use a sorted list of nodes to check
     # whether points belong to same node.
-    point_indices_by_node = np.argsort(assigned_nodes)
-
-    index_ptr = []
+    point_indices_by_node = list(np.argsort(assigned_nodes))
+    index_pointer = []
     nodes = []
 
     count = 0
     previous_node = -1
     for node in assigned_nodes[point_indices_by_node]:
         if node != previous_node:
-            index_ptr.append(count)
+            index_pointer.append(count)
             nodes.append(node)
             previous_node = node
         count += 1
-    index_ptr.append(count)
+    index_pointer.append(count)
 
-    return nodes, point_indices_by_node, index_ptr
+    return nodes, point_indices_by_node, index_pointer
 
 
 def enumerate_non_empty_nodes(maximum_level, leaves):
     """
-    Enumerate all non-empty leaf nodes across the tree.
+    Enumerate all non-empty nodes across the Octree, across all levels.
 
     Parameters:
     -----------
     maximum_level : int
+        Depth of the Octree.
     leaves : np.array(shape=(nleaf,), dtype=npint64)
         Non empty leaf nodes referenced by their Hilbert keys.
 
     Returns:
     --------
-    list_of_nodes: list
-    node_map: np.array(shape=(n_nodes))
+    non_empty_nodes: list[int]
+        The non-empty nodes in the Octree, at all levels.
+    node_to_index: np.array(shape=(n_nodes))
+        Maps from a Hilbert key to the index in the list of `non_empty_nodes`
+        returned by this method.
     """
-
 
     node_to_index = -1*np.ones(
         shape=(hilbert.get_number_of_all_nodes(maximum_level),),
         dtype=np.int64
     )
 
-    # Enumerate leaf nodes with a value from range(nleaves)
+    # node_to_index maps between hilbert keys and index values
+    # The index values
     nleaves = len(leaves)
     node_to_index[leaves] = range(nleaves)
 
     count = nleaves
 
+    # Traverse from leaves to root enumerating each node
     for leaf in leaves:
         parent = leaf
         while parent != 0:
@@ -191,13 +195,13 @@ def enumerate_non_empty_nodes(maximum_level, leaves):
                 count += 1
 
     # Returns indices of node_to_index not equal to -1
-    list_of_nodes = np.flatnonzero(node_to_index != -1)
+    non_empty_nodes = np.flatnonzero(node_to_index != -1)
 
     # node_to_index[list_of_nodes] = non-empty node values (count)
     # indices sorted by counts
-    indices = np.argsort(node_to_index[list_of_nodes])
+    indices = np.argsort(node_to_index[non_empty_nodes])
 
-    return list_of_nodes[indices], node_to_index
+    return non_empty_nodes[indices], node_to_index
 
 
 @numba.njit(cache=True)
@@ -225,38 +229,38 @@ def _in_range(n1, n2, n3, upper_bound, lower_bound):
 
 
 @numba.njit(cache=True)
-def numba_compute_neighbors(target_nodes, source_node_to_index):
+def numba_compute_neighbors(targets, source_node_to_index):
     """
-    Compute all non-empty neighbors for the given target nodes.
-        The emptyness is determined through comparison with the second set
-        comp_set. In this way target neighbors can be computed that contain
-        source points.
+    Compute all, non-empty, source neighbors for the given target nodes.
 
     Parameters:
     -----------
-    target_nodes : np.array(shape=(ntargets,), dtype=np.int64)
+    targets : np.array(shape=(ntargets,), dtype=np.int64)
         Target nodes, referenced by their Hilbert key.
     source_node_to_index : np.array(shape=(n,sources), dtype=np.int64)
+        Indexed by Hilbert key, values are indices for the non-empty source
+        nodes found by the `enumerate_non_empty_nodes` method.
 
     Returns:
     --------
-    np.array((nnodes, 27), dtype=np.int64)
+    np.array((ntargets, 27), dtype=np.int64)
         The non-empty nearest neighbors.
     """
 
-    nnodes = len(target_nodes)
+    ntargets = len(targets)
 
-    neighbors = np.empty((nnodes, 27), dtype=np.int64)
-
+    neighbors = np.empty((ntargets, 27), dtype=np.int64)
     offset = np.zeros(4, dtype=np.int64)
 
-    for target_index, target_node in enumerate(target_nodes):
-        index_4d = hilbert.get_4d_index_from_key(target_node)
+    for target_index, target in enumerate(targets):
 
+        # Calculate 4D index, in order to find bound/key
+        index_4d = hilbert.get_4d_index_from_key(target)
+
+        # Max value of the index defined by the level
         max_4d_index = 1 << index_4d[3]
 
         count = -1
-
         for i in range(-1, 2):
             for j in range(-1, 2):
                 for k in range(-1, 2):
@@ -272,7 +276,12 @@ def numba_compute_neighbors(target_nodes, source_node_to_index):
                             lower_bound=0,
                             upper_bound=max_4d_index,
                     ):
+
                         neighbor_key = hilbert.get_key_from_4d_index(neighbor_vec)
+
+                        # Check if the source node is empty, if it isn't add
+                        # it to the niehgbors of the target currently being
+                        # considered. Otherwise, pass.
 
                         if source_node_to_index[neighbor_key] != -1:
                             neighbors[target_index, count] = neighbor_key
@@ -287,63 +296,92 @@ def numba_compute_neighbors(target_nodes, source_node_to_index):
 
 
 @numba.njit(cache=True)
-def find_neighbors(array, node_index, neighbor_child):
+def _is_neighbor(target_neighbors, target_index, key):
     """
-    Find node in neighbors array.
+    Check if a given 'key' is in the target_neighbors array of a given node
+        referenced by 'target_node_index'
 
     Parameters:
     -----------
+    target_neighbors : np.array((ntargets, 27), dtype=np.int64)
+        Calculated via `numba_compute_neighbors` method.
+    target_index : np.int64
+        Refers to index from `enumerate_non_empty_nodes` method.
+    key : np.int64
+        Hilbert key of node being checked for membership of the target's
+        interaction list.
+
+    Returns:
+    --------
+    bool
     """
-    for index in range(27):
-        if array[node_index, index] == neighbor_child:
+    for i in range(27):
+        if target_neighbors[target_index, i] == key:
             return True
     return False
 
 
 @numba.njit(cache=True)
-def _numba_compute_interaction_list(
-        target_nodes, target_source_neighbors, source_node_to_index, target_node_to_index
+def numba_compute_interaction_list(
+        targets,
+        target_neighbors,
+        source_node_to_index,
+        target_node_to_index
 ):
     """
-    Compute the interaction list.
+    Compute the interaction list for all given target nodes.
 
     Parameters:
     -----------
-    target_nodes :
-    target_source_neighbors :
-    source_node_to_index :
-    target_node_to_index :
+    targets : np.array(shape=(ntargets,), dtype=np.int64)
+        Target nodes, referenced by Hilbert key, for which interaction lists are
+        being computed.
+    target_neighbors : np.array(shape=(ntargets, 27), dtype=np.int64)
+        Contains information on non-empty source neighbor nodes of each target,
+        computed via `numba_compute_neighbors`.
+    source_node_to_index : np.array(shape=(nsources,), dtype=np.int64)
+    target_node_to_index : np.array(shape=(ntargets,), dtype=np.int64)
 
     Returns:
     --------
-
-        Interaction list
-
+    np.array(shape=(ntargets, 27, 8), dtype=np.int64)
+        Interaction list, each target in n targets has an associated (27, 8)
+        matrix associated with it.
     """
 
-    nnodes = len(target_nodes)
+    ntargets = len(targets)
 
-    interaction_list = -np.ones((nnodes, 27, 8), dtype=np.int64)
+    interaction_list = -1 * np.ones((ntargets, 27, 8), dtype=np.int64)
 
-    for node_index, node in enumerate(target_nodes):
-        level = hilbert.get_level(node)
-        if level < 2:
-            continue
+    for target_index, target in enumerate(targets):
+        target_level = hilbert.get_level(target)
 
-        parent = hilbert.get_parent(node)
+        if target_level >= 2:
 
-        for neighbor_index, neighbor in enumerate(
-                target_source_neighbors[target_node_to_index[parent]]
-        ):
-            if neighbor == -1:
-                continue
+            # Find parent
+            parent = hilbert.get_parent(target)
 
-            for child_index, neighbor_child in enumerate(
-                    hilbert.get_children(neighbor)
-            ):
-                is_neighbor = find_neighbors(target_source_neighbors, node_index, neighbor_child)
-                if source_node_to_index[neighbor_child] != -1 and ~is_neighbor:
-                    interaction_list[node_index, neighbor_index, child_index] = neighbor_child
+            # Find parent neighbors
+            parent_index = target_node_to_index[parent]
+            parent_neighbors = target_neighbors[parent_index]
+
+            for parent_neighbor_index, parent_neighbor in enumerate(parent_neighbors):
+
+                if parent_neighbor != -1:
+
+                    parent_neighbor_children = hilbert.get_children(parent_neighbor)
+
+                    for neigbhor_child_index, neighbor_child in enumerate(parent_neighbor_children):
+
+                        is_neighbor = _is_neighbor(
+                            target_neighbors=target_neighbors,
+                            target_index=target_index,
+                            key=neighbor_child
+                            )
+
+                        if source_node_to_index[neighbor_child] != -1 and ~is_neighbor:
+
+                            interaction_list[target_index, parent_neighbor_index, neigbhor_child_index] = neighbor_child
 
     return interaction_list
 
