@@ -51,7 +51,7 @@ def main(**config):
         )
 
     # Load required Python objects
-    kernel_function = KERNELS[config['kernel']]()
+    kernel = KERNELS[config['kernel']]()
 
     # Step 1: Compute a surface of a given order
     # Check if surface already exists
@@ -114,7 +114,7 @@ def main(**config):
         )
 
         uc2e_v, uc2e_u, dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
-            kernel_function=kernel_function,
+            kernel_function=kernel,
             upward_check_surface=upward_check_surface,
             upward_equivalent_surface=upward_equivalent_surface,
             alpha=None
@@ -158,7 +158,7 @@ def main(**config):
 
         loading = len(child_centers)
 
-        scale = (1/2)**(child_level)
+        scale = (1/kernel.scale)**(child_level)
 
         print(f"Computing M2M & L2L Operators of Order {config['order']}")
         for child_idx, child_center in enumerate(child_centers):
@@ -173,7 +173,7 @@ def main(**config):
             )
 
             pc2ce = operator.gram_matrix(
-                kernel_function=kernel_function,
+                kernel_function=kernel,
                 targets=parent_upward_check_surface,
                 sources=child_upward_equivalent_surface,
             )
@@ -185,7 +185,7 @@ def main(**config):
             # Compute L2L operator for this octant
             # cc2pe = pc2ce.T
             cc2pe = operator.gram_matrix(
-                kernel_function=kernel_function,
+                kernel_function=kernel,
                 targets=child_upward_equivalent_surface,
                 sources=parent_upward_check_surface
             )
@@ -280,12 +280,12 @@ def main(**config):
                     )
 
                     se2tc = operator.gram_matrix(
-                        kernel_function=kernel_function,
+                        kernel_function=kernel,
                         sources=source_equivalent_surface,
                         targets=target_check_surface
                     )
 
-                    scale = (1/2)**(current_level)
+                    scale = (1/kernel.scale)**(current_level)
 
                     tmp = np.matmul(dc2e_u, se2tc)
 
