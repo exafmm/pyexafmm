@@ -155,8 +155,6 @@ def compute_pseudo_inverse(matrix, alpha=None):
 
     if alpha is None:
         alpha = max(s)*0.00725
-    else:
-        alpha = 0
 
     a = alpha*np.ones(len(s)) + s*s
 

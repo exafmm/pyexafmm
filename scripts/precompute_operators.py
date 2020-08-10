@@ -117,7 +117,7 @@ def main(**config):
             kernel_function=kernel,
             upward_check_surface=upward_check_surface,
             upward_equivalent_surface=upward_equivalent_surface,
-            alpha=None
+            alpha=1e-5
         )
 
         # Save matrices
@@ -190,8 +190,8 @@ def main(**config):
                 sources=parent_upward_check_surface
             )
 
-            tmp = np.matmul(cc2pe, scale*dc2e_v)
-            l2l.append(np.matmul(tmp, dc2e_u))
+            tmp = np.matmul(dc2e_u, cc2pe)
+            l2l.append(np.matmul(scale*dc2e_v, tmp))
 
         # Save m2m & l2l operators, index is equivalent to their Hilbert key
         m2m = np.array(m2m)
