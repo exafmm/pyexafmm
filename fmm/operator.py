@@ -178,9 +178,9 @@ def compute_pseudo_inverse(matrix, alpha=None):
 
 def compute_check_to_equivalent_inverse(
         kernel_function,
-        upward_check_surface,
-        upward_equivalent_surface,
-        alpha=None
+        check_surface,
+        equivalent_surface,
+        cond=None
         ):
     """
     Compute the inverse of the upward check-to-equivalent gram matrix, and the
@@ -190,9 +190,9 @@ def compute_check_to_equivalent_inverse(
     Parameters:
     -----------
     kernel_function : function
-    upward_check_surface : np.array(shape=(n, 3))
-    upward_equivalent_surface : np.array(shape=(n, 3))
-    alpha : float [optional]
+    check_surface : np.array(shape=(n, 3))
+    equivalent_surface : np.array(shape=(n, 3))
+    cond : float [optional]
         Regularisation parameter
 
     Returns:
@@ -204,26 +204,16 @@ def compute_check_to_equivalent_inverse(
     # Compute Gram Matrix of upward check to upward equivalent surfaces
     c2e = gram_matrix(
         kernel_function=kernel_function,
-        sources=upward_equivalent_surface,
-        targets=upward_check_surface
+        sources=equivalent_surface,
+        targets=check_surface
     )
 
-    e2c = gram_matrix(
-        kernel_function=kernel_function,
-        sources=upward_check_surface,
-        targets=upward_equivalent_surface
-    )
-
-    # Compute SVD of Gram Matrix
-
-    if alpha is None:
-        uc2e_v, uc2e_u = compute_pseudo_inverse(c2e)
-        dc2e_v, dc2e_u = compute_pseudo_inverse(e2c)
+    if cond is None:
+        c2e_inv_v, c2e_inv_u = compute_pseudo_inverse(c2e)
     else:
-        uc2e_v, uc2e_u = compute_pseudo_inverse(c2e, alpha)
-        dc2e_v, dc2e_u = compute_pseudo_inverse(e2c, alpha)
+        c2e_inv_v, c2e_inv_u = compute_pseudo_inverse(c2e, cond)
 
-    return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
+    return c2e_inv_v, c2e_inv_u
 
 
 def p2p(kernel_function, targets, sources, source_densities):
