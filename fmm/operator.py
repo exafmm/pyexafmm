@@ -130,7 +130,7 @@ def gram_matrix(kernel_function, sources, targets):
     return matrix
 
 
-def compute_pseudo_inverse(matrix, alpha=None):
+def compute_pseudo_inverse(matrix, cond=None):
     """
     Compute pseudo-inverse using SVD of a given matrix. Based on the backward-
         stable pseudo-inverse introduced by Malhotra et al. 2018.
@@ -138,7 +138,7 @@ def compute_pseudo_inverse(matrix, alpha=None):
     Parameters:
     ----------
     matrix: np.array(shape=any)
-    alpha : float
+    cond : float
         Optional regularisation parameter
 
     Returns:
@@ -153,10 +153,10 @@ def compute_pseudo_inverse(matrix, alpha=None):
     u, s, v_t = np.linalg.svd(matrix)
 
     # Compute inverse of diagonal matrix with regularisation, hand tuned.
-    if alpha is None:
-        alpha = max(s)*0.00725
+    if cond is None:
+        cond = max(s)*0.00725
 
-    a = alpha*np.ones(len(s)) + s*s
+    a = cond*np.ones(len(s)) + s*s
 
     # Ignore small diagonal values
     tol = np.finfo(float).eps*4*max(a)
