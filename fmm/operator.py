@@ -148,16 +148,17 @@ def compute_pseudo_inverse(matrix, alpha=None):
         of the matrix, and the second two elements multiply together to form the
         inverse of the matrix's transpose.
     """
+
     # Compute SVD
     u, s, v_t = np.linalg.svd(matrix)
 
     # Compute inverse of diagonal matrix with regularisation, hand tuned.
-
     if alpha is None:
         alpha = max(s)*0.00725
 
     a = alpha*np.ones(len(s)) + s*s
 
+    # Ignore small diagonal values
     tol = np.finfo(float).eps*4*max(a)
 
     for i, val in enumerate(a):
@@ -168,15 +169,11 @@ def compute_pseudo_inverse(matrix, alpha=None):
 
     s = np.matmul(np.diag(a), np.diag(s))
 
-    # Compnents of the inverse of the matrix
+    # Components of the inverse of the matrix
     av = np.matmul(v_t.T, s)
     au = u.T
 
-    # Components of the inverse of the matrix transpose
-    bv = np.matmul(u, s)
-    bu = v_t
-
-    return (av, au, bv, bu)
+    return av, au
 
 
 def compute_check_to_equivalent_inverse(
@@ -201,8 +198,8 @@ def compute_check_to_equivalent_inverse(
     Returns:
     --------
     tuple
-        Tuple of upward check-to-equivalent inverse stored as two compoennts,
-        and downard check-to-equivalent inverse stored as two components.
+        Tuple of upward check-to-equivalent inverse stored as two components,
+        and downward check-to-equivalent inverse stored as two components.
     """
     # Compute Gram Matrix of upward check to upward equivalent surfaces
     c2e = gram_matrix(
@@ -220,11 +217,11 @@ def compute_check_to_equivalent_inverse(
     # Compute SVD of Gram Matrix
 
     if alpha is None:
-        uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e)
-        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(e2c)
+        uc2e_v, uc2e_u = compute_pseudo_inverse(c2e)
+        dc2e_v, dc2e_u = compute_pseudo_inverse(e2c)
     else:
-        uc2e_v, uc2e_u, _, _ = compute_pseudo_inverse(c2e, alpha)
-        dc2e_v, dc2e_u, _, _ = compute_pseudo_inverse(e2c, alpha)
+        uc2e_v, uc2e_u = compute_pseudo_inverse(c2e, alpha)
+        dc2e_v, dc2e_u = compute_pseudo_inverse(e2c, alpha)
 
     return (uc2e_v, uc2e_u, dc2e_v, dc2e_u)
 

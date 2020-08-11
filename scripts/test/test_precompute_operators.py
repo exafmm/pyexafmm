@@ -35,7 +35,12 @@ def octree():
     source_densities = data.load_hdf5_to_array(
         'source_densities', 'source_densities', DATA_DIRPATH)
 
-    return Octree(sources, targets, CONFIG['octree_max_level'], source_densities)
+    return Octree(
+        sources=sources,
+        targets=targets,
+        maximum_level=CONFIG['octree_max_level'],
+        source_densities=source_densities
+        )
 
 
 @pytest.fixture

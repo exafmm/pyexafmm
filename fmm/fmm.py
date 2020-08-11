@@ -60,7 +60,10 @@ class Fmm:
         self.kernel_function = kernel.KERNELS[self.config['kernel']]()
         self.order = self.config['order']
         self.octree = octree.Octree(
-            self.sources, self.targets, self.maximum_level, self.source_densities
+            sources=self.sources,
+            targets=self.targets,
+            source_densities=self.source_densities,
+            maximum_level=self.maximum_level,
             )
 
         # Coefficients discretising surface of a node
@@ -227,66 +230,10 @@ class Fmm:
 
         self.target_data[target_key].expansion += target_equivalent_density
 
-        # # Check that the sources result in the same potential as that from
-        # # the translated Local expansion
-
-        # target_center = hilbert.get_center_from_key(target_key, self.octree.center, self.octree.radius)
-
-        # # Find source points for this source key box, and compute directly
-        # sources_by_key = hilbert.get_keys_from_points(
-        #     points=self.sources,
-        #     level=hilbert.get_level(source_key),
-        #     x0=self.octree.center,
-        #     r0=self.octree.radius
-        # )
-
-        # sources_in_box = []
-        # for source_idx, source in enumerate(sources_by_key):
-        #     if source == source_key:
-        #         sources_in_box.append(self.sources[source_idx])
-
-        # sources_in_box = np.array(sources_in_box)
-
-        # source_result = operator.p2p(
-        #     kernel_function=self.kernel_function,
-        #     targets=target_center.reshape(1, 3),
-        #     sources=sources_in_box,
-        #     source_densities=np.ones(len(sources_in_box))
-        # )
-
-        # # Find result from target expansion
-        # target_surface = operator.scale_surface(
-        #     self.surface, self.octree.radius, hilbert.get_level(target_key), target_center, 2.95
-        # )
-
-        # target_result = operator.p2p(
-        #     kernel_function=self.kernel_function,
-        #     targets=target_center.reshape(1, 3),
-        #     sources=target_surface,
-        #     source_densities=target_equivalent_density
-        # )
-
-        # print(source_result.density, target_result.density)
-        # assert np.allclose(source_result.density, target_result.density, atol=0, rtol=0.125)
-
-
     def local_to_local(self, key):
         """Translate local expansion of a node to it's children."""
 
         parent_equivalent_density = self.target_data[key].expansion
-
-        ###############################################################
-        # parent_center = hilbert.get_center_from_key(
-        #     key, self.octree.center, self.octree.radius
-        # )
-
-        # parent_surface = operator.scale_surface(
-        #     surface=self.surface,
-        #     radius=self.octree.radius,
-        #     level=hilbert.get_level(key),
-        #     center=parent_center,
-        #     alpha=2.95
-        # )
 
         for child in hilbert.get_children(key):
             if self.octree.target_node_to_index[child] != -1:
@@ -304,40 +251,6 @@ class Fmm:
                 )
 
                 self.target_data[child].expansion = child_equivalent_density
-
-                # ###############################################################
-                # child_center = hilbert.get_center_from_key(
-                #     child, self.octree.center, self.octree.radius
-                # )
-
-                # child_surface = operator.scale_surface(
-                #     surface=self.surface,
-                #     radius=self.octree.radius,
-                #     level=hilbert.get_level(child),
-                #     center=child_center,
-                #     alpha=2.95
-                # )
-
-                # parent_result = operator.p2p(
-                #     kernel_function=self.kernel_function,
-                #     targets=child_center.reshape(1, 3),
-                #     sources=parent_surface,
-                #     source_densities=parent_equivalent_density,
-                # ).density
-
-                # child_result = operator.p2p(
-                #     kernel_function=self.kernel_function,
-                #     targets=child_center.reshape(1, 3),
-                #     sources=child_surface,
-                #     source_densities=child_equivalent_density
-                # ).density
-
-                # print(parent_equivalent_density)
-                # print()
-                # print(parent_result, child_result)
-                # print()
-                # assert np.allclose(parent_result, child_result, atol=0, rtol=0.1)
-
 
     def local_to_particle(self, leaf_index):
         """

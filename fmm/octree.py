@@ -10,7 +10,7 @@ import fmm.hilbert as hilbert
 class Octree:
     """Data structure for handling Octrees."""
 
-    def __init__(self, sources, targets, maximum_level, source_densities):
+    def __init__(self, sources, targets, source_densities, maximum_level):
         """
         Initialize an Octree.
 
@@ -18,6 +18,7 @@ class Octree:
         -----------
         sources : np.array(shape=(nsources, 3), dtype=np.float64)
         targets : np.array(shape=(nsources, 3), dtype=np.float64)
+        source_densities : np.array(shape=(nsources,), dtype=np.float64)
         maximum_level : int
             The maximum level of the Octree.
         """

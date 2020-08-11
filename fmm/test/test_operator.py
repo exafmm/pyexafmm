@@ -195,7 +195,7 @@ def test_gram_matrix(
 def test_compute_pseudo_inverse(K, alpha):
 
     # Compute pseudo inverse of matrix K
-    av, au, bv, bu = operator.compute_pseudo_inverse(K, alpha)
+    av, au = operator.compute_pseudo_inverse(K, alpha)
     K_inv = np.matmul(av, au)
 
     result = np.matmul(K, K_inv)

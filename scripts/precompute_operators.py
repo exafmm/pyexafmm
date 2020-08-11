@@ -25,7 +25,7 @@ def main(**config):
     data_dirpath = PARENT / f"{config['data_dirname']}/"
     operator_dirpath = PARENT / f"{config['operator_dirname']}/"
 
-    # Step 0: Construct Octree and load Python config objs
+    # Step 0: Construct Octree and load Python config object
     print("source filename", data_dirpath)
 
     sources = data.load_hdf5_to_array(
@@ -47,8 +47,11 @@ def main(**config):
         )
 
     octree = Octree(
-        sources, targets, config['octree_max_level'], source_densities
-        )
+        sources=sources,
+        targets=targets,
+        source_densities=source_densities,
+        maximum_level=config['octree_max_level'],
+    )
 
     # Load required Python objects
     kernel = KERNELS[config['kernel']]()
@@ -117,7 +120,7 @@ def main(**config):
             kernel_function=kernel,
             upward_check_surface=upward_check_surface,
             upward_equivalent_surface=upward_equivalent_surface,
-            alpha=1e-5
+            alpha=None
         )
 
         # Save matrices

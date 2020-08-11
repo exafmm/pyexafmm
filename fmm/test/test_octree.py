@@ -33,7 +33,12 @@ def tree():
         SOURCE_DENSITIES_FILENAME, SOURCE_DENSITIES_FILENAME, DATA_DIRPATH
         )
 
-    return octree.Octree(sources, targets, CONFIG['octree_max_level'], source_densities)
+    return octree.Octree(
+        sources=sources,
+        targets=targets,
+        maximum_level=CONFIG['octree_max_level'],
+        source_densities=source_densities
+        )
 
 
 @pytest.mark.parametrize(
