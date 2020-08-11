@@ -173,12 +173,6 @@ def compute_pseudo_inverse(matrix, cond=None):
 
     return av, au
 
-# e2c = gram_matrix(
-#         kernel_function=kernel_function,
-#         sources=upward_check_surface,
-#         targets=upward_equivalent_surface
-#     )
-
 
 def compute_check_to_equivalent_inverse(
         kernel_function,
