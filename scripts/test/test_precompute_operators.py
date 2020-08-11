@@ -149,16 +149,6 @@ def test_m2m(npoints, octree, m2m):
     assert np.isclose(parent_direct.density, child_direct.density, rtol=RTOL)
 
 
-parent_equivalent_density = np.array(
-    [
-        4.08530528,  4.98335145,  8.79908241, 11.36927637, 19.36460982,  4.95690057,
-        6.84512128, 11.34198553, 18.25788085,  4.26111775,  6.83114839, 10.41075108,
-        17.35226654, 32.10162004, 37.59156295, 44.76134101, 19.80916225, 17.38448808,
-        37.55814296, 47.58635286, 19.78243739, 18.25720914, 38.90247477, 47.56580171,
-        21.06584849, 19.32057619
-    ]
-)
-
 def test_l2l(npoints, octree, l2l):
 
     parent_key = 9
@@ -173,7 +163,7 @@ def test_l2l(npoints, octree, l2l):
     parent_level = hilbert.get_level(parent_key)
     child_level = hilbert.get_level(child_key)
 
-    # parent_equivalent_density = np.ones(shape=(npoints))
+    parent_equivalent_density = np.ones(shape=(npoints))
 
     operator_idx = (child_key % 8) - 1
 
@@ -214,12 +204,6 @@ def test_l2l(npoints, octree, l2l):
     assert np.isclose(parent_direct.density, child_direct.density, rtol=RTOL)
 
 
-f = np.array([0.22073459, 0.35864311,  0.17874369,  0.24654391,  0.15047553,  0.1210559,
-  0.13997958,  0.00978738, -0.04337865,  0.32848649,  0.75337007,  0.21722818,
-  0.35063859,  0.01678733, -0.03936223,  0.16834922,  0.00866047,  0.11725961,
-  0.14546409,  0.20802148,  0.2423115,   0.38121081, -0.03373622, -0.20371675,
-  0.01821985, -0.03785398])
-
 def test_m2l(npoints, octree, m2l_operators):
 
     # pick a target box on level 2 or below
@@ -245,9 +229,7 @@ def test_m2l(npoints, octree, m2l_operators):
     source_index = np.where(source_key == index_to_key)[0][0]
 
     # place unit densities on source box
-    # source_equivalent_density = np.ones(shape=(npoints))
-    # source_equivalent_density = np.random.rand(npoints)
-    source_equivalent_density = f
+    source_equivalent_density = np.ones(shape=(npoints))
 
     source_equivalent_surface = operator.scale_surface(
         surface=SURFACE,
