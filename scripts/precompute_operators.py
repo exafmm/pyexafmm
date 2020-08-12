@@ -1,9 +1,11 @@
 """
-Script to precompute and store M2M/L2L and M2L operators.
+Script to precompute and store M2M/L2L and M2L operators. M2L computation
+accellerated via multiprocessing.
 """
 import os
 import pathlib
 import sys
+import time
 
 import numpy as np
 
@@ -12,15 +14,88 @@ from fmm.kernel import KERNELS
 from fmm.octree import Octree
 import fmm.operator as operator
 import utils.data as data
+import utils.multiproc as multiproc
+import utils.time
+
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
+
+
+# Setup a global variable for M2L counter
+M2L_COUNTER = multiproc.setup_counter(default=8)
+M2L_LOCK = multiproc.setup_lock()
+
+
+# Incremeneter for M2L counter
+def increment_m2l_counter():
+    """
+    Increment the M2L counter.
+    """
+    with M2L_LOCK:
+        M2L_COUNTER.value += 1
+
+
+def compute_m2l_matrices(
+    kernel, surface, x0, r0, dc2e_v, dc2e_u, current_level,
+    interaction_list, target_check_surface,
+    ):
+    """
+    Compute all M2L matrices for a given target
+    """
+    m2l_matrices = []
+
+    # Increment counter, and print progress
+    increment_m2l_counter()
+
+    max_number = sum([8**(level) for level in range(0, current_level)])
+    matrix_number = M2L_COUNTER.value - max_number
+
+    print(f"Computed {matrix_number}/{8**current_level} M2L Operators")
+
+    # Compute Task
+    for source in interaction_list:
+
+        source_center = hilbert.get_center_from_key(
+            key=source,
+            x0=x0,
+            r0=r0
+        )
+
+        source_equivalent_surface = operator.scale_surface(
+            surface=surface,
+            radius=r0,
+            level=current_level,
+            center=source_center,
+            alpha=config['alpha_inner']
+        )
+
+        se2tc = operator.gram_matrix(
+            kernel_function=kernel,
+            sources=source_equivalent_surface,
+            targets=target_check_surface
+        )
+
+        scale = (1/kernel.scale)**(current_level)
+
+        tmp = np.matmul(dc2e_u, se2tc)
+
+        m2l_matrix = np.matmul(scale*dc2e_v, tmp)
+
+        m2l_matrices.append(m2l_matrix)
+
+    return m2l_matrices
 
 
 def main(**config):
     """
     Main script, configure using config.json file in module root.
     """
+    start = time.time()
+
+    # Setup Multiproc
+    processes = os.cpu_count()
+    pool = multiproc.setup_pool(processes=processes)
 
     data_dirpath = PARENT / f"{config['data_dirname']}/"
     operator_dirpath = PARENT / f"{config['operator_dirname']}/"
@@ -113,7 +188,7 @@ def main(**config):
             alpha=config['alpha_outer']
         )
 
-        uc2e_v, uc2e_u,= operator.compute_check_to_equivalent_inverse(
+        uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
             kernel_function=kernel,
             check_surface=upward_check_surface,
             equivalent_surface=upward_equivalent_surface,
@@ -128,13 +203,13 @@ def main(**config):
         )
 
         # Save matrices
-        print("Saving SVD Decompositions")
+        print("Saving Inverse of Check To Equivalent Matrices")
         data.save_array_to_hdf5(operator_dirpath, 'uc2e_v', uc2e_v)
         data.save_array_to_hdf5(operator_dirpath, 'uc2e_u', uc2e_u)
         data.save_array_to_hdf5(operator_dirpath, 'dc2e_v', dc2e_v)
         data.save_array_to_hdf5(operator_dirpath, 'dc2e_u', dc2e_u)
 
-    # Compute M2M/L2L operators
+    # Step 3: Compute M2M/L2L operators
     if (
             data.file_in_directory('m2m', operator_dirpath)
             and data.file_in_directory('l2l', operator_dirpath)
@@ -190,7 +265,6 @@ def main(**config):
             m2m.append(np.matmul(uc2e_v, tmp))
 
             # Compute L2L operator for this octant
-            # cc2pe = pc2ce.T
             cc2pe = operator.gram_matrix(
                 kernel_function=kernel,
                 targets=child_upward_equivalent_surface,
@@ -207,7 +281,7 @@ def main(**config):
         data.save_array_to_hdf5(operator_dirpath, 'm2m', m2m)
         data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
 
-    # Compute M2L operators
+    # Step 4: Compute M2L operators
 
     # Create sub-directory to store m2l computations
     m2l_dirpath = operator_dirpath
@@ -246,9 +320,12 @@ def main(**config):
 
             index_to_key_filename = f'index_to_key_level_{current_level}'
 
+            args = []
+
+            # Gather arguments needed to send out to processes, and create index
+            # mapping
             for target_idx, target in enumerate(leaves):
 
-                print(f"Computed M2L operators for ({loading}/{len(leaves)}) leaves")
                 loading += 1
 
                 interaction_list = hilbert.get_interaction_list(target)
@@ -270,39 +347,19 @@ def main(**config):
                 # Create index mapping for looking up the m2l operator
                 index_to_key[target_idx] = interaction_list
 
-                for source in interaction_list:
+                # Add arg to args for parallel mapping
+                arg = (kernel, surface, octree.center, octree.radius, dc2e_v,
+                        dc2e_u, current_level, interaction_list, target_check_surface)
 
-                    source_center = hilbert.get_center_from_key(
-                        key=source,
-                        x0=octree.center,
-                        r0=octree.radius
-                    )
+                args.append(arg)
 
-                    source_equivalent_surface = operator.scale_surface(
-                        surface=surface,
-                        radius=octree.radius,
-                        level=current_level,
-                        center=source_center,
-                        alpha=config['alpha_inner']
-                    )
+            # Submit tasks to process pool
+            m2l = pool.starmap(compute_m2l_matrices, args)
 
-                    se2tc = operator.gram_matrix(
-                        kernel_function=kernel,
-                        sources=source_equivalent_surface,
-                        targets=target_check_surface
-                    )
+            # Convert results to matrix
+            m2l = np.array([np.array(l) for l in m2l])
 
-                    scale = (1/kernel.scale)**(current_level)
-
-                    tmp = np.matmul(dc2e_u, se2tc)
-
-                    m2l_matrix = np.matmul(scale*dc2e_v, tmp)
-
-                    m2l[target_idx].append(m2l_matrix)
-
-            m2l = np.array(m2l)
-
-            print("Saving M2L matrices")
+            print(f"Saving M2L Operators for level {current_level}")
             data.save_pickle(
                 m2l, m2l_filename, m2l_dirpath
             )
@@ -313,6 +370,9 @@ def main(**config):
 
         current_level += 1
         already_computed = False
+
+    minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
+    print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
 
 
 if __name__ == "__main__":
