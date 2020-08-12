@@ -113,11 +113,18 @@ def main(**config):
             alpha=config['alpha_outer']
         )
 
-        uc2e_v, uc2e_u, dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
+        uc2e_v, uc2e_u,= operator.compute_check_to_equivalent_inverse(
             kernel_function=kernel,
-            upward_check_surface=upward_check_surface,
-            upward_equivalent_surface=upward_equivalent_surface,
-            alpha=None
+            check_surface=upward_check_surface,
+            equivalent_surface=upward_equivalent_surface,
+            cond=None
+        )
+
+        dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
+            kernel_function=kernel,
+            check_surface=upward_equivalent_surface,
+            equivalent_surface=upward_check_surface,
+            cond=None
         )
 
         # Save matrices
@@ -190,8 +197,8 @@ def main(**config):
                 sources=parent_upward_check_surface
             )
 
-            tmp = np.matmul(cc2pe, scale*dc2e_v)
-            l2l.append(np.matmul(tmp, dc2e_u))
+            tmp = np.matmul(dc2e_u, cc2pe)
+            l2l.append(np.matmul(scale*dc2e_v, tmp))
 
         # Save m2m & l2l operators, index is equivalent to their Hilbert key
         m2m = np.array(m2m)

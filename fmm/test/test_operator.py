@@ -195,7 +195,7 @@ def test_gram_matrix(
 def test_compute_pseudo_inverse(K, alpha):
 
     # Compute pseudo inverse of matrix K
-    av, au, bv, bu = operator.compute_pseudo_inverse(K, alpha)
+    av, au = operator.compute_pseudo_inverse(K, alpha)
     K_inv = np.matmul(av, au)
 
     result = np.matmul(K, K_inv)
@@ -204,28 +204,28 @@ def test_compute_pseudo_inverse(K, alpha):
     assert np.all(np.isclose(result, expected, rtol=0.001))
 
 
-def test_compute_pseudo_inverse_transpose():
+# def test_compute_pseudo_inverse_transpose():
 
-    K = operator.gram_matrix(
-            kernel_function=KERNELS['laplace'](),
-            sources=upward_equivalent_surface(surface()),
-            targets=upward_check_surface(surface())
-        )
+#     K = operator.gram_matrix(
+#             kernel_function=KERNELS['laplace'](),
+#             sources=upward_equivalent_surface(surface()),
+#             targets=upward_check_surface(surface())
+#         )
 
-    KT = operator.gram_matrix(
-            kernel_function=KERNELS['laplace'](),
-            targets=upward_equivalent_surface(surface()),
-            sources=upward_check_surface(surface())
-        )
+#     KT = operator.gram_matrix(
+#             kernel_function=KERNELS['laplace'](),
+#             targets=upward_equivalent_surface(surface()),
+#             sources=upward_check_surface(surface())
+#         )
 
-    _, _, bv, bu = operator.compute_pseudo_inverse(K)
+#     _, _, bv, bu = operator.compute_pseudo_inverse(K)
 
-    av, au, _, _ = operator.compute_pseudo_inverse(KT)
+#     av, au, _, _ = operator.compute_pseudo_inverse(KT)
 
-    expected = np.matmul(bv, bu)
-    result = np.matmul(av, au)
+#     expected = np.matmul(bv, bu)
+#     result = np.matmul(av, au)
 
-    assert np.all(np.isclose(result, expected, rtol=0.01))
+#     assert np.all(np.isclose(result, expected, rtol=0.01))
 
 
 
