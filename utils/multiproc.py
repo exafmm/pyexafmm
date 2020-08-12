@@ -1,4 +1,5 @@
-from multiprocessing import Pool
+from ctypes import c_int
+from multiprocessing import Pool, Value, Lock
 
 
 class SingletonDecorator:
@@ -47,3 +48,19 @@ def setup_pool(processes, initializer=None, initargs=None, maxtasksperchild=None
             )
 
     return pool
+
+
+def setup_counter(default):
+    """
+    Setup a global counter.
+    """
+    counter = Value(c_int)
+    counter.value = default
+    return counter
+
+
+def setup_lock():
+    """
+    Setup a lock.
+    """
+    return Lock()

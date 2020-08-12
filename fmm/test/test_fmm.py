@@ -1,17 +1,14 @@
 """
 Test the FMM
 """
-import collections
 import os
 import pathlib
-import subprocess
 
 import numpy as np
 import pytest
 
 from fmm.fmm import Fmm
 import fmm.operator as operator
-import fmm.hilbert as hilbert
 import fmm.kernel as kernel
 import utils.data as data
 
@@ -36,3 +33,26 @@ def l2l():
 @pytest.fixture
 def fmm():
     return Fmm(config_filename='test_config.json')
+
+
+def test_fmm(fmm):
+    """
+    End To End Fmm Test
+    """
+    fmm.upward_pass()
+    fmm.downward_pass()
+
+    direct = operator.p2p(
+        kernel_function=fmm.kernel_function,
+        targets=fmm.targets,
+        sources=fmm.sources,
+        source_densities=fmm.source_densities
+    ).density
+
+    fmm_results = np.array([result.density for result in fmm.result_data]).flatten()
+
+    percentage_error = 100*(fmm_results - direct)/direct
+
+    average_percentage_error = sum(percentage_error)/len(percentage_error)
+
+    assert average_percentage_error < 2
