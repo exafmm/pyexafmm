@@ -1,3 +1,6 @@
+"""
+Wrappers to help with multiprocessing utilities.
+"""
 from ctypes import c_int
 from multiprocessing import Pool, Value, Lock
 
@@ -53,6 +56,15 @@ def setup_pool(processes, initializer=None, initargs=None, maxtasksperchild=None
 def setup_counter(default):
     """
     Setup a global counter.
+
+    Parameters:
+    -----------
+    default : int
+        Default value
+
+    Returns:
+    --------
+    Value
     """
     counter = Value(c_int)
     counter.value = default
@@ -62,5 +74,9 @@ def setup_counter(default):
 def setup_lock():
     """
     Setup a lock.
+
+    Returns:
+    --------
+    Lock
     """
     return Lock()

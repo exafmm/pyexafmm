@@ -15,19 +15,11 @@ from fmm.octree import Octree
 import fmm.operator as operator
 import utils.data as data
 import utils.multiproc as multiproc
+import utils.time
 
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
-
-
-def seconds_to_minutes(seconds):
-    """
-    Convert seconds to minutes and seconds.
-    """
-    seconds_left = seconds % 60
-    minutes_left = seconds // 60
-    return minutes_left, seconds_left
 
 
 # Setup a global variable for M2L counter
@@ -196,7 +188,7 @@ def main(**config):
             alpha=config['alpha_outer']
         )
 
-        uc2e_v, uc2e_u,= operator.compute_check_to_equivalent_inverse(
+        uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
             kernel_function=kernel,
             check_surface=upward_check_surface,
             equivalent_surface=upward_equivalent_surface,
@@ -211,13 +203,13 @@ def main(**config):
         )
 
         # Save matrices
-        print("Saving SVD Decompositions")
+        print("Saving Inverse of Check To Equivalent Matrices")
         data.save_array_to_hdf5(operator_dirpath, 'uc2e_v', uc2e_v)
         data.save_array_to_hdf5(operator_dirpath, 'uc2e_u', uc2e_u)
         data.save_array_to_hdf5(operator_dirpath, 'dc2e_v', dc2e_v)
         data.save_array_to_hdf5(operator_dirpath, 'dc2e_u', dc2e_u)
 
-    # Compute M2M/L2L operators
+    # Step 3: Compute M2M/L2L operators
     if (
             data.file_in_directory('m2m', operator_dirpath)
             and data.file_in_directory('l2l', operator_dirpath)
@@ -273,7 +265,6 @@ def main(**config):
             m2m.append(np.matmul(uc2e_v, tmp))
 
             # Compute L2L operator for this octant
-            # cc2pe = pc2ce.T
             cc2pe = operator.gram_matrix(
                 kernel_function=kernel,
                 targets=child_upward_equivalent_surface,
@@ -290,7 +281,7 @@ def main(**config):
         data.save_array_to_hdf5(operator_dirpath, 'm2m', m2m)
         data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
 
-    # Compute M2L operators
+    # Step 4: Compute M2L operators
 
     # Create sub-directory to store m2l computations
     m2l_dirpath = operator_dirpath
@@ -329,12 +320,10 @@ def main(**config):
 
             index_to_key_filename = f'index_to_key_level_{current_level}'
 
-            ####################################################################
-            # Parallelize the following
-            ####################################################################
-
             args = []
 
+            # Gather arguments needed to send out to processes, and create index
+            # mapping
             for target_idx, target in enumerate(leaves):
 
                 loading += 1
@@ -358,15 +347,16 @@ def main(**config):
                 # Create index mapping for looking up the m2l operator
                 index_to_key[target_idx] = interaction_list
 
-                ## Add arg to args
+                # Add arg to args for parallel mapping
                 arg = (kernel, surface, octree.center, octree.radius, dc2e_v,
                         dc2e_u, current_level, interaction_list, target_check_surface)
+
                 args.append(arg)
 
+            # Submit tasks to process pool
             m2l = pool.starmap(compute_m2l_matrices, args)
 
-            ####################################################################
-
+            # Convert results to matrix
             m2l = np.array([np.array(l) for l in m2l])
 
             print(f"Saving M2L Operators for level {current_level}")
@@ -381,7 +371,7 @@ def main(**config):
         current_level += 1
         already_computed = False
 
-    minutes, seconds = seconds_to_minutes(time.time() - start)
+    minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
     print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
 
 
