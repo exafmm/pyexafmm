@@ -23,7 +23,7 @@ PARENT = HERE.parent
 
 
 # Setup a global variable for M2L counter
-M2L_COUNTER = multiproc.setup_counter(default=8)
+M2L_COUNTER = multiproc.setup_counter(default=9)
 M2L_LOCK = multiproc.setup_lock()
 
 
@@ -36,24 +36,74 @@ def increment_m2l_counter():
         M2L_COUNTER.value += 1
 
 
+def log_m2l_progress(counter_value, level):
+    """
+    Log M2L progress to stdout.
+    """
+    max_calculations = sum([8**(level) for level in range(0, level)])
+    calculation_number = counter_value - max_calculations
+
+    print(f"Computed {calculation_number}/{8**level} M2L Operators")
+
+
 def compute_m2l_matrices(
-    kernel, surface, x0, r0, dc2e_v, dc2e_u, current_level,
-    interaction_list, target_check_surface,
+        target, kernel, surface, alpha_inner, x0, r0, dc2e_v, dc2e_u, interaction_list,
     ):
     """
-    Compute all M2L matrices for a given target
+    Data has to be passed to each process in order to compute the m2l matrices
+        associated with a given target key. This method takes the required data
+        and computes all the m2l matrices for a given target.
+
+    Parameters:
+    -----------
+    target : np.int64
+        Target Hilbert Key.
+    kernel : function
+    surface : np.array(shape=(n, 3), dtype=np.float64)
+    alpha_inner : np.float64
+        Ratio between side length of shifted/scaled node and original node.
+    x0 : np.array(shape=(1, 3), dtype=np.float64)
+        Center of Octree's root node.
+    r0 : np.float64
+        Half side length of Octree's root node.
+    dc2e_v : np.array(shape=(n, n))
+        First component of the inverse of the downward-check-to-equivalent
+        Gram matrix at level 0.
+    dc2e_v : np.array(shape=(n, n))
+        Second component of the inverse of the downward-check-to-equivalent
+        Gram matrix at level 0.
+
+    Returns:
+    --------
+    list[np.array(shape=(n, n))]
+        List of all m2l matrices associated with this target.
     """
+    # Get level
+    level = hilbert.get_level(target)
+
+    # Container for results
     m2l_matrices = []
 
     # Increment counter, and print progress
     increment_m2l_counter()
+    log_m2l_progress(M2L_COUNTER.value, level)
 
-    max_number = sum([8**(level) for level in range(0, current_level)])
-    matrix_number = M2L_COUNTER.value - max_number
+    # Compute target check surface
+    target_center = hilbert.get_center_from_key(
+        key=target,
+        x0=x0,
+        r0=r0
+    )
 
-    print(f"Computed {matrix_number}/{8**current_level} M2L Operators")
+    target_check_surface = operator.scale_surface(
+        surface=surface,
+        radius=r0,
+        level=level,
+        center=target_center,
+        alpha=alpha_inner
+    )
 
-    # Compute Task
+    # Compute m2l matrices
     for source in interaction_list:
 
         source_center = hilbert.get_center_from_key(
@@ -65,9 +115,9 @@ def compute_m2l_matrices(
         source_equivalent_surface = operator.scale_surface(
             surface=surface,
             radius=r0,
-            level=current_level,
+            level=level,
             center=source_center,
-            alpha=config['alpha_inner']
+            alpha=alpha_inner
         )
 
         se2tc = operator.gram_matrix(
@@ -76,7 +126,7 @@ def compute_m2l_matrices(
             targets=target_check_surface
         )
 
-        scale = (1/kernel.scale)**(current_level)
+        scale = (1/kernel.scale)**(level)
 
         tmp = np.matmul(dc2e_u, se2tc)
 
@@ -326,30 +376,16 @@ def main(**config):
             # mapping
             for target_idx, target in enumerate(leaves):
 
-                loading += 1
-
                 interaction_list = hilbert.get_interaction_list(target)
-
-                target_center = hilbert.get_center_from_key(
-                    key=target,
-                    x0=octree.center,
-                    r0=octree.radius
-                )
-
-                target_check_surface = operator.scale_surface(
-                    surface=surface,
-                    radius=octree.radius,
-                    level=current_level,
-                    center=target_center,
-                    alpha=config['alpha_inner']
-                )
 
                 # Create index mapping for looking up the m2l operator
                 index_to_key[target_idx] = interaction_list
 
                 # Add arg to args for parallel mapping
-                arg = (kernel, surface, octree.center, octree.radius, dc2e_v,
-                        dc2e_u, current_level, interaction_list, target_check_surface)
+                arg = (
+                    target, kernel, surface, config['alpha_inner'],
+                    octree.center, octree.radius, dc2e_v, dc2e_u, interaction_list
+                    )
 
                 args.append(arg)
 
