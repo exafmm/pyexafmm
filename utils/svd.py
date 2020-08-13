@@ -22,15 +22,19 @@ def dense_compress(matrix, tol=1e-5):
     """
     u, s, vh = scipy.linalg.svd(matrix)
 
+    sort_idxs = np.argsort(s)
+
     # Reconstruct approximation of matrix
     appx = None
 
-    for i, sv in enumerate(s):
-        if sv > tol:
+    for i, sv in enumerate(s[sort_idxs]):
+        if sv < tol:
+            pass
+        else:
             if appx is None:
-                appx = sv*np.outer(u[i].T, vh[i])
+                appx = sv*np.outer(u[sort_idxs][i].T, vh[sort_idxs][i])
             else:
-                appx += sv*np.outer(u[i].T, vh[i])
+                appx += sv*np.outer(u[sort_idxs][i].T, vh[sort_idxs][i])
 
     return appx
 
