@@ -223,19 +223,3 @@ def test_p2p(kernel_function, sources, targets):
         expected += kernel_function(source, targets[target_idx])
 
     assert expected == potential_density[target_idx]
-
-
-def test_m2l(m2l):
-    assert list(m2l.operators.keys()) == [2, CONFIG['octree_max_level']]
-    assert list(m2l.index_to_key.keys()) == [2, CONFIG['octree_max_level']]
-
-
-@pytest.mark.parametrize(
-    "filename, expected",
-    [
-        ("m2l_level_42.pkl", 42)
-    ]
-)
-def test_m2l_get_level(m2l, filename, expected):
-    result = m2l.get_level(filename)
-    assert result == expected
