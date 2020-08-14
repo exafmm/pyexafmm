@@ -42,17 +42,22 @@ def test_fmm(fmm):
     fmm.upward_pass()
     fmm.downward_pass()
 
-    # direct = operator.p2p(
-    #     kernel_function=fmm.kernel_function,
-    #     targets=fmm.targets,
-    #     sources=fmm.sources,
-    #     source_densities=fmm.source_densities
-    # ).density
+    direct = operator.p2p(
+        kernel_function=fmm.kernel_function,
+        targets=fmm.targets,
+        sources=fmm.sources,
+        source_densities=fmm.source_densities
+    ).density
 
-    # fmm_results = np.array([result.density for result in fmm.result_data]).flatten()
+    fmm_results = np.array([result.density for result in fmm.result_data]).flatten()
 
-    # percentage_error = 100*(fmm_results - direct)/direct
+    percentage_error = 100*(abs(fmm_results - direct))/direct
 
-    # average_percentage_error = sum(percentage_error)/len(percentage_error)
+    average_percentage_error = sum(percentage_error)/len(percentage_error)
 
-    # assert average_percentage_error < 2
+    assert average_percentage_error < 7.5
+
+    print(average_percentage_error)
+    print(fmm_results[:10])
+    print(direct[:10])
+    assert False

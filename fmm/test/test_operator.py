@@ -71,11 +71,6 @@ def gram_matrix(upward_check_surface, upward_equivalent_surface):
     )
 
 
-@pytest.fixture
-def m2l():
-    return operator.M2L(config_filename='test_config.json')
-
-
 @pytest.mark.parametrize(
     "order",
     [

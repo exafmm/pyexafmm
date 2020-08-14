@@ -3,13 +3,13 @@ Compress a given set of m2l operators.
 """
 import os
 import pathlib
+import re
 import sys
 
 import numpy as np
 
 import fmm.hilbert as hilbert
 from fmm.octree import Octree
-import fmm.operator as operator
 import utils.data as data
 import utils.svd as svd
 
@@ -18,9 +18,40 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
+def get_level(filename):
+    """Get level from the m2l operator's filename"""
+    pattern = '(?<=level_)(.*)(?=.pkl)'
+    prog = re.compile(pattern)
+    level = int(prog.search(filename).group())
+    return level
+
+
 def main(**config):
     data_dirpath = PARENT / f"{config['data_dirname']}/"
     m2l_dirpath = PARENT / f"{config['operator_dirname']}/"
+
+    operator_files = m2l_dirpath.glob('m2l_level*')
+    index_to_key_files = m2l_dirpath.glob('index*')
+
+    m2l_operators = {
+        level: None for level in range(2, config['octree_max_level']+1)
+    }
+
+    m2l_index_to_key = {
+        level: None for level in range(2, config['octree_max_level']+1)
+    }
+
+    for filename in operator_files:
+        level = get_level(str(filename))
+        m2l_operators[level] = data.load_pickle(
+            f'm2l_level_{level}', m2l_dirpath
+        )
+
+    for filename in index_to_key_files:
+        level = get_level(str(filename))
+        m2l_index_to_key[level] = data.load_pickle(
+            f'index_to_key_level_{level}', m2l_dirpath
+        )
 
     # Step 0: Construct Octree and load Python config objs
     print("source filename", data_dirpath)
@@ -49,8 +80,6 @@ def main(**config):
 
     m2l_compressed = {k: None for k in octree.non_empty_target_nodes}
 
-    m2l_obj = operator.M2L(config_filepath)
-
     for level in range(2, 1 + octree.maximum_level):
         for target in octree.non_empty_target_nodes_by_level[level]:
             index = octree.target_node_to_index[target]
@@ -63,12 +92,12 @@ def main(**config):
 
                         target_index = hilbert.remove_level_offset(target)
 
-                        index_to_key = m2l_obj.index_to_key[level][target_index]
+                        index_to_key = m2l_index_to_key[level][target_index]
                         source_index = np.where(source == index_to_key)[0][0]
 
-                        m2l_matrix = m2l_obj.operators[level][target_index][source_index]
+                        matrix = m2l_operators[level][target_index][source_index]
 
-                        m2l.append(m2l_matrix)
+                        m2l.append(matrix)
 
             # Run Compression
             m2l = np.bmat(m2l)
