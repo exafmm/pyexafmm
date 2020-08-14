@@ -199,31 +199,6 @@ def test_compute_pseudo_inverse(K, alpha):
     assert np.all(np.isclose(result, expected, rtol=0.001))
 
 
-# def test_compute_pseudo_inverse_transpose():
-
-#     K = operator.gram_matrix(
-#             kernel_function=KERNELS['laplace'](),
-#             sources=upward_equivalent_surface(surface()),
-#             targets=upward_check_surface(surface())
-#         )
-
-#     KT = operator.gram_matrix(
-#             kernel_function=KERNELS['laplace'](),
-#             targets=upward_equivalent_surface(surface()),
-#             sources=upward_check_surface(surface())
-#         )
-
-#     _, _, bv, bu = operator.compute_pseudo_inverse(K)
-
-#     av, au, _, _ = operator.compute_pseudo_inverse(KT)
-
-#     expected = np.matmul(bv, bu)
-#     result = np.matmul(av, au)
-
-#     assert np.all(np.isclose(result, expected, rtol=0.01))
-
-
-
 @pytest.mark.parametrize(
     "kernel_function",
     [

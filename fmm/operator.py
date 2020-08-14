@@ -3,12 +3,10 @@ Operator helper methods.
 """
 import os
 import pathlib
-import re
 
 import numpy as np
 
 from fmm.density import Potential
-import utils.data as data
 
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
