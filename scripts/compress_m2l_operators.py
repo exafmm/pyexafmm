@@ -27,93 +27,110 @@ def get_level(filename):
 
 
 def main(**config):
+    """
+    Main script, configure using config.json file in module root.
+    """
+
     data_dirpath = PARENT / f"{config['data_dirname']}/"
     m2l_dirpath = PARENT / f"{config['operator_dirname']}/"
 
-    operator_files = m2l_dirpath.glob('m2l_level*')
-    index_to_key_files = m2l_dirpath.glob('index*')
+    # Check if compression already computed
+    if data.file_in_directory('m2l_compressed', m2l_dirpath, ext='pkl'):
+        print("Already Compressed M2L Operators for this configuration.")
 
-    m2l_operators = {
-        level: None for level in range(2, config['octree_max_level']+1)
-    }
+    else:
 
-    m2l_index_to_key = {
-        level: None for level in range(2, config['octree_max_level']+1)
-    }
+        # Load all M2L operators calculated, and their lookup tables into containers
+        operator_files = m2l_dirpath.glob('m2l_level*')
+        index_to_key_files = m2l_dirpath.glob('index*')
 
-    for filename in operator_files:
-        level = get_level(str(filename))
-        m2l_operators[level] = data.load_pickle(
-            f'm2l_level_{level}', m2l_dirpath
-        )
+        m2l_operators = {
+            level: None for level in range(2, config['octree_max_level']+1)
+        }
 
-    for filename in index_to_key_files:
-        level = get_level(str(filename))
-        m2l_index_to_key[level] = data.load_pickle(
-            f'index_to_key_level_{level}', m2l_dirpath
-        )
+        m2l_index_to_key = {
+            level: None for level in range(2, config['octree_max_level']+1)
+        }
 
-    # Step 0: Construct Octree and load Python config objs
-    print("source filename", data_dirpath)
+        for filename in operator_files:
+            level = get_level(str(filename))
+            m2l_operators[level] = data.load_pickle(
+                f'm2l_level_{level}', m2l_dirpath
+            )
 
-    sources = data.load_hdf5_to_array(
-        config['source_filename'],
-        config['source_filename'],
-        data_dirpath
-        )
+        for filename in index_to_key_files:
+            level = get_level(str(filename))
+            m2l_index_to_key[level] = data.load_pickle(
+                f'index_to_key_level_{level}', m2l_dirpath
+            )
 
-    targets = data.load_hdf5_to_array(
-        config['target_filename'],
-        config['target_filename'],
-        data_dirpath
-        )
+        # Instantiate Octree, for ease of Hilbert method access
+        sources = data.load_hdf5_to_array(
+            config['source_filename'],
+            config['source_filename'],
+            data_dirpath
+            )
 
-    source_densities = data.load_hdf5_to_array(
-        config['source_densities_filename'],
-        config['source_densities_filename'],
-        data_dirpath
-        )
+        targets = data.load_hdf5_to_array(
+            config['target_filename'],
+            config['target_filename'],
+            data_dirpath
+            )
 
-    octree = Octree(
-        sources, targets, config['octree_max_level'], source_densities
-        )
+        source_densities = data.load_hdf5_to_array(
+            config['source_densities_filename'],
+            config['source_densities_filename'],
+            data_dirpath
+            )
 
-    m2l_compressed = {k: None for k in octree.non_empty_target_nodes}
+        octree = Octree(
+            sources, targets, config['octree_max_level'], source_densities
+            )
 
-    for level in range(2, 1 + octree.maximum_level):
-        for target in octree.non_empty_target_nodes_by_level[level]:
-            index = octree.target_node_to_index[target]
 
-            m2l = []
-            for neighbor_list in octree.interaction_list[index]:
+        # Container to store compressed operators
+        m2l_compressed = {k: None for k in octree.non_empty_target_nodes}
 
-                for source in neighbor_list:
-                    if source != -1:
+        # Pre-order traversal of tree, collating a list of m2l operators for
+        # each target.
+        for level in range(2, 1 + octree.maximum_level):
+            for target in octree.non_empty_target_nodes_by_level[level]:
+                index = octree.target_node_to_index[target]
 
-                        target_index = hilbert.remove_level_offset(target)
+                # Container for collated m2l operators
+                m2l = []
+                for neighbor_list in octree.interaction_list[index]:
 
-                        index_to_key = m2l_index_to_key[level][target_index]
-                        source_index = np.where(source == index_to_key)[0][0]
+                    for source in neighbor_list:
+                        if source != -1:
 
-                        matrix = m2l_operators[level][target_index][source_index]
+                            # Lookup required operators from dense calculated
+                            # m2l operators.
+                            target_index = hilbert.remove_level_offset(target)
 
-                        m2l.append(matrix)
+                            index_to_key = m2l_index_to_key[level][target_index]
+                            source_index = np.where(source == index_to_key)[0][0]
 
-            # Run Compression
-            m2l = np.bmat(m2l)
-            m2l_compressed[target] = svd.compress(m2l)
+                            operator = m2l_operators[level][target_index][source_index]
 
-    # Save results
-    print("Saving Compressed M2L Operators")
-    # Filter out keys without associated m2l operators
+                            m2l.append(operator)
 
-    m2l_compressed = {
-        k: v
-        for k, v in m2l_compressed.items()
-        if v is not None
-    }
+                # Run Compression, with configured tolerance.
+                m2l = np.bmat(m2l)
+                m2l_compressed[target] = svd.compress(m2l, tol=config['singular_value_tolerance'])
 
-    data.save_pickle(m2l_compressed, 'm2l_compressed', m2l_dirpath)
+            print(f"Compressed M2L Operators for target nodes at level {level}")
+
+
+        # Filter out keys without associated m2l operators, and save
+        m2l_compressed = {
+            k: v
+            for k, v in m2l_compressed.items()
+            if v is not None
+        }
+
+        print("Saving All Compressed M2L Operators")
+        data.save_pickle(m2l_compressed, config['m2l_compressed_filename'], m2l_dirpath)
 
 
 if __name__ == "__main__":
