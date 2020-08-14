@@ -39,21 +39,3 @@ def compress(matrix, tol=0):
     sk = np.array(sk)
 
     return uk, sk, vhk
-
-
-if __name__ == "__main__":
-    matrix = np.array([
-        [1, 10, 21],
-        [2, 12, 32],
-        [22, 413, 2],
-     ])
-
-    uk, sk, vhk = compress(matrix, tol=1)
-    res = np.matmul(uk, np.matmul(np.diag(sk), vhk))
-    print(res)
-    print("reconstructed", res.shape)
-    print(matrix.shape)
-
-
-    print()
-    print(matrix[:, 0].T)
