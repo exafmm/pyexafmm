@@ -93,9 +93,22 @@ def generate_test_data(npoints, dtype):
     ])
 
 
+
+@click.command(
+    help='Compress pre-computed M2L operators using defualt config'
+)
+def compress_m2l():
+    click.echo('Compressing M2L operators')
+    subprocess.run([
+        'python',
+        HERE.parent / 'scripts/compress_m2l_operators.py',
+        HERE.parent / 'config.json'
+    ])
+
 cli.add_command(build)
 cli.add_command(test)
 cli.add_command(lint)
 cli.add_command(compute_operators)
 cli.add_command(generate_test_data)
 cli.add_command(recompute_operators)
+cli.add_command(compress_m2l)

@@ -359,11 +359,10 @@ def main(**config):
             # Convert results to matrix
             m2l = np.array([np.array(l) for l in m2l])
 
-            print(f"Saving M2L Operators for level {current_level}")
+            print(f"Saving Dense M2L Operators for level {current_level}")
             data.save_pickle(
                 m2l, m2l_filename, m2l_dirpath
             )
-
             data.save_pickle(
                 index_to_key, index_to_key_filename, m2l_dirpath
             )
