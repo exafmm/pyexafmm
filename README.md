@@ -81,3 +81,5 @@ ci [OPTIONS] COMMAND [ARGS]
 | `compute-operators` | Run operator pre-computations |
 | `generate-test-data [npoints] [dtype]` | Generate `npoints` random sources & targets `dtype = random or separated`|
 | `recompute-operators` | Clear cache of computed operators, and recalculate with current the config |
+| `compress-m2l` | Compress M2L Operators computed via `compute-operators` |
+| `recompress-m2l` | Clear cache, and re-compress M2L operators |

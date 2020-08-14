@@ -21,8 +21,6 @@ class Timer:
         self.end = time.time()
         self.interval = self.end - self.start
 
-
-
 def seconds_to_minutes(seconds):
     """
     Convert seconds to minutes and seconds.

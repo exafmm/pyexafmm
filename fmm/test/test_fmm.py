@@ -51,7 +51,7 @@ def test_fmm(fmm):
 
     fmm_results = np.array([result.density for result in fmm.result_data]).flatten()
 
-    percentage_error = 100*(fmm_results - direct)/direct
+    percentage_error = 100*(abs(fmm_results - direct))/direct
 
     average_percentage_error = sum(percentage_error)/len(percentage_error)
 

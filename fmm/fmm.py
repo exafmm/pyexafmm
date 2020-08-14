@@ -31,7 +31,6 @@ class Fmm:
         else:
             config_filepath = PARENT / "config.json"
 
-
         self.config = data.load_json(config_filepath)
 
         data_dirpath = PARENT / self.config["data_dirname"]
@@ -53,7 +52,7 @@ class Fmm:
         self.uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
         self.m2m = data.load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
         self.l2l = data.load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
-        self.m2l = operator.M2L(config_filename)
+        self.m2l = data.load_pickle('m2l_compressed', operator_dirpath)
 
         # Load configuration properties
         self.maximum_level = self.config['octree_max_level']
@@ -102,24 +101,15 @@ class Fmm:
         # Pre-order traversal of octree
         for level in range(2, 1 + self.octree.maximum_level):
 
-            for key in self.octree.non_empty_target_nodes_by_level[level]:
-
-                # Translating mutlipole expansion in far field to a local
-                # expansion at currently examined node.
-                index = self.octree.target_node_to_index[key]
-                for neighbor_list in self.octree.interaction_list[index]:
-
-                    for child in neighbor_list:
-                        if child != -1:
-
-                            self.multipole_to_local(
-                                source_key=child,
-                                target_key=key
-                                )
+            for target in self.octree.non_empty_target_nodes_by_level[level]:
+                # Translate multipole expansions from non-empty source nodes
+                # in this target's interaction list to a local expansion about
+                # the target.
+                self.multipole_to_local(target)
 
                 # Translate local expansion to the node's children
                 if level < self.octree.maximum_level:
-                    self.local_to_local(key)
+                    self.local_to_local(target)
 
         # Treat local expansion as charge density, and evaluate at each particle
         # at leaf node, compute near field.
@@ -128,7 +118,7 @@ class Fmm:
             self.compute_near_field(leaf_node_index)
 
     def particle_to_multipole(self, leaf_node_index):
-        """Compute particle to multipole interactions in leaf."""
+        """Compute multipole expansions from leaf particles."""
 
         # Source indices in a given leaf
         source_indices = self.octree.sources_by_leafs[
@@ -176,7 +166,10 @@ class Fmm:
         self.source_data[leaf_key].expansion = upward_equivalent_density
 
     def multipole_to_multipole(self, key):
-        """Combine children expansions of node into node expansion."""
+        """
+        Combine multipole expansions of a node's children to approximate its
+            own multipole expansion.
+        """
 
         for child in hilbert.get_children(key):
             # Only going through non-empty child nodes
@@ -200,30 +193,45 @@ class Fmm:
                 # Add to source data
                 self.source_data[key].expansion += parent_equivalent_density
 
-    def multipole_to_local(self, source_key, target_key):
+    def multipole_to_local(self, target_key):
         """
-        Translate multipole expansions in target's interaction list to local
-        expansions about the target.
+        Translate all multipole expansions of source nodes in target node's
+            interaction list into a local expansion about the target node.
         """
 
-        # Updating indices
-        self.target_data[target_key].indices.update(
-            self.source_data[source_key].indices
-        )
+        # Lookup all non-empty source nodes in target's interaction list, and
+        # vstack their equivalent densities
 
-        source_equivalent_density = self.source_data[source_key].expansion
+        target_index = self.octree.target_node_to_index[target_key]
 
-        level = hilbert.get_level(source_key)
+        source_equivalent_density = None
+        for neighbor_list in self.octree.interaction_list[target_index]:
 
-        # Lookup correct m2l operator
-        target_index = hilbert.remove_level_offset(target_key)
+            for source_key in neighbor_list:
+                if source_key != -1:
 
-        index_to_key = self.m2l.index_to_key[level][target_index]
-        source_index = np.where(source_key == index_to_key)[0][0]
+                    if source_equivalent_density is None:
+                        source_equivalent_density = self.source_data[source_key].expansion
+                    else:
 
-        m2l_matrix = self.m2l.operators[level][target_index][source_index]
+                        source_equivalent_density = np.vstack(
+                                (
+                                    source_equivalent_density,
+                                    self.source_data[source_key].expansion
+                                )
+                            )
+        source_equivalent_density = np.ravel(source_equivalent_density)
 
-        target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+        # Lookup (compressed) m2l operator
+        m2l_operator = self.m2l[target_key]
+
+        # M2L operator stored in terms of its SVD components
+        u, s, vt = m2l_operator
+
+        # Calculate target equivalent density
+        target_equivalent_density = np.matmul(vt, source_equivalent_density)
+        target_equivalent_density = np.matmul(np.diag(s), target_equivalent_density)
+        target_equivalent_density = np.matmul(u, target_equivalent_density)
 
         self.target_data[target_key].expansion += target_equivalent_density
 
@@ -252,7 +260,7 @@ class Fmm:
     def local_to_particle(self, leaf_index):
         """
         Directly evaluate potential at particles in a leaf node, treating the
-        local expansion points as sources.
+            local expansion points as sources.
         """
 
         target_indices = self.octree.targets_by_leafs[

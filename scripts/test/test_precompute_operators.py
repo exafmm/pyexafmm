@@ -2,6 +2,7 @@
 Test the precomputed operators
 """
 import os
+import re
 import pathlib
 
 import numpy as np
@@ -15,6 +16,7 @@ import utils.data as data
 
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
+ROOT = HERE.parent.parent
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
 CONFIG = data.load_json(CONFIG_FILEPATH)
 
@@ -48,9 +50,59 @@ def l2l():
     return data.load_hdf5_to_array('l2l', 'l2l', OPERATOR_DIRPATH)
 
 
+class M2L:
+    """
+    Test Class to bundle precomputed M2L operators with their respective lookup table
+        to translate from Hilbert key to index within the precomputed datastructure
+        containing all M2L operators.
+    """
+    def __init__(self, config_filepath):
+        """
+        Parameters:
+        -----------
+        config_filename : None/str
+            Defaults to project config: config.json.
+        """
+
+        self.config = data.load_json(config_filepath)
+        self.m2l_dirpath = ROOT / self.config["operator_dirname"]
+
+        # Load operators and key2index lookup tables
+        operator_files = self.m2l_dirpath.glob('m2l_level*')
+        index_to_key_files = self.m2l_dirpath.glob('index*')
+
+        self.operators = {
+            level: None for level in range(2, self.config['octree_max_level']+1)
+        }
+
+        self.index_to_key = {
+            level: None for level in range(2, self.config['octree_max_level']+1)
+        }
+
+        for filename in operator_files:
+            level = self.get_level(str(filename))
+            self.operators[level] = data.load_pickle(
+                f'm2l_level_{level}', self.m2l_dirpath
+            )
+
+        for filename in index_to_key_files:
+            level = self.get_level(str(filename))
+            self.index_to_key[level] = data.load_pickle(
+                f'index_to_key_level_{level}', self.m2l_dirpath
+            )
+
+    @staticmethod
+    def get_level(filename):
+        """Get level from the m2l operator's filename"""
+        pattern = '(?<=level_)(.*)(?=.pkl)'
+        prog = re.compile(pattern)
+        level = int(prog.search(filename).group())
+        return level
+
+
 @pytest.fixture
 def m2l_operators():
-    return operator.M2L(CONFIG_FILEPATH)
+    return M2L(CONFIG_FILEPATH)
 
 
 @pytest.fixture
@@ -225,7 +277,7 @@ def test_m2l(npoints, octree, m2l_operators):
 
     # place unit densities on source box
     # source_equivalent_density = np.ones(shape=(npoints))
-    source_equivalent_density =  np.random.rand(npoints)
+    source_equivalent_density = np.random.rand(npoints)
 
     source_equivalent_surface = operator.scale_surface(
         surface=SURFACE,

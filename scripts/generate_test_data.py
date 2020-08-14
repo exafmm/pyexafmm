@@ -9,8 +9,6 @@ import sys
 
 import numpy as np
 
-from fmm.kernel import Laplace
-import fmm.operator as operator
 import utils.data as data
 
 
@@ -114,4 +112,3 @@ if __name__ == "__main__":
         config['npoints'] = int(npoints)
         config['dtype'] = dtype
         main(**config)
-
