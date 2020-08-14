@@ -55,4 +55,5 @@ def test_fmm(fmm):
 
     average_percentage_error = sum(percentage_error)/len(percentage_error)
 
-    assert average_percentage_error < 7.5
+    # Tested with order 2, so not very accurate
+    assert abs(average_percentage_error) < 7.5
