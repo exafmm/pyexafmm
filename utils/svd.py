@@ -30,23 +30,12 @@ def compress(matrix, tol=0):
         if sv < tol:
             break
         else:
-            uk.append(u[i])
-            vhk.append(vh[i])
+            uk.append(u[:, i])
+            vhk.append(vh[i, :])
             sk.append(sv)
 
-    uk = np.array(uk)
+    uk = np.array(uk).T
     vhk = np.array(vhk)
     sk = np.array(sk)
 
     return uk, sk, vhk
-
-
-if __name__ == "__main__":
-    matrix = np.array([
-        [1, 10, 21],
-        [2, 12, 32],
-     ])
-
-    uk, sk, vhk = compress(matrix)
-
-    print("reconstructed", np.matmul(uk, np.matmul(np.diag(sk), vhk)))
