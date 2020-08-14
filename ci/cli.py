@@ -105,6 +105,25 @@ def compress_m2l():
         HERE.parent / 'config.json'
     ])
 
+
+@click.command(
+    help='Re-compress pre-computed M2L operators using defualt config'
+)
+def recompress_m2l():
+    click.echo('Re-compressing M2L operators')
+
+    subprocess.call([
+        'rm',
+        HERE.parent / CONFIG['operator_dirname'] / f"{CONFIG['m2l_compressed_filename']}.pkl",
+    ])
+
+    subprocess.run([
+        'python',
+        HERE.parent / 'scripts/compress_m2l_operators.py',
+        HERE.parent / 'config.json'
+    ])
+
+
 cli.add_command(build)
 cli.add_command(test)
 cli.add_command(lint)
@@ -112,3 +131,4 @@ cli.add_command(compute_operators)
 cli.add_command(generate_test_data)
 cli.add_command(recompute_operators)
 cli.add_command(compress_m2l)
+cli.add_command(recompress_m2l)
