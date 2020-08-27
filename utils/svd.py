@@ -32,12 +32,12 @@ def compress(matrix, target_rank=None):
         target_rank = full_rank
 
     for i, sv in enumerate(s):
-        if i <= target_rank:
-            break
-        else:
+        if i < target_rank:
             uk.append(u[:, i])
             vhk.append(vh[i, :])
             sk.append(sv)
+        else:
+            break
 
     uk = np.array(uk).T
     vhk = np.array(vhk)

@@ -10,6 +10,6 @@
     "target_filename": "targets",
     "source_densities_filename": "source_densities",
     "octree_max_level": 3,
-    "target_rank": 1,
+    "target_rank": 3,
     "m2l_compressed_filename": "m2l_compressed"
 }
