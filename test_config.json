@@ -1,6 +1,6 @@
 {
-    "order": 2,
-    "operator_dirname": "precomputed_operators_order_2_test",
+    "order": 3,
+    "operator_dirname": "precomputed_operators_order_3_test",
     "surface_filename": "surface",
     "kernel": "laplace",
     "alpha_inner": 1.05,
@@ -10,6 +10,6 @@
     "target_filename": "targets",
     "source_densities_filename": "source_densities",
     "octree_max_level": 3,
-    "singular_value_tolerance": 1e-1,
+    "target_rank": 1,
     "m2l_compressed_filename": "m2l_compressed"
 }
