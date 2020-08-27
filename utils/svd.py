@@ -32,7 +32,7 @@ def compress(matrix, target_rank=None):
         target_rank = full_rank
 
     for i, sv in enumerate(s):
-        if i > target_rank:
+        if i <= target_rank:
             break
         else:
             uk.append(u[:, i])
