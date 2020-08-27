@@ -5,7 +5,7 @@ import numpy as np
 import scipy.linalg
 
 
-def compress(matrix, tol=0):
+def compress(matrix, target_rank=None):
     """
     Create a low rank approximation of a matrix by cutting off terms in the SVD
         sum whose singular values are lower than a specified tolerance.
@@ -26,8 +26,13 @@ def compress(matrix, tol=0):
     vhk = []
     sk = []
 
+    full_rank = len(s)
+
+    if target_rank > full_rank or target_rank is None:
+        target_rank = full_rank
+
     for i, sv in enumerate(s):
-        if sv < tol:
+        if i > target_rank:
             break
         else:
             uk.append(u[:, i])
