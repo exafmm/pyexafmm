@@ -28,7 +28,7 @@ def compress(matrix, target_rank=None):
 
     full_rank = len(s)
 
-    if target_rank > full_rank or target_rank is None:
+    if target_rank is None or target_rank > full_rank:
         target_rank = full_rank
 
     for i, sv in enumerate(s):

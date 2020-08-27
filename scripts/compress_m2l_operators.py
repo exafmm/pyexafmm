@@ -117,6 +117,7 @@ def main(**config):
 
                 # Run Compression, with configured tolerance.
                 m2l = np.bmat(m2l)
+
                 m2l_compressed[target] = svd.compress(m2l, target_rank=config['target_rank'])
 
             print(f"Compressed M2L Operators for target nodes at level {level}")
