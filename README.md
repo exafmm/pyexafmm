@@ -51,20 +51,36 @@ Make sure to configure the FMM simulation using the `config.json` file.
 ```json
 {
     "order": 3,
-    "operator_dirname": "precomputed_operators_order_3",
+    "operator_dirname": "precomputed_operators_order_3_test",
     "surface_filename": "surface",
     "kernel": "laplace",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
-    "data_dirname": "data",
-    "source_filename": "random_sources",
-    "target_filename": "random_targets",
+    "data_dirname": "data_1k_random_test",
+    "source_filename": "sources",
+    "target_filename": "targets",
     "source_densities_filename": "source_densities",
-    "octree_max_level": 4
+    "octree_max_level": 3,
+    "target_rank": 3,
+    "m2l_compressed_filename": "m2l_compressed"
 }
 ```
 
-The operators are calculated from an Octree that is data dependent.
+|Parameter    | Description |
+|---	    |---	 |
+| `order`	| Order of local and multipole expansions. |
+| `operator_dirname`	| Directory in which to store operator precomputations. |	|
+| `surface_filename`	| Filename to use for cached surface. |
+| `kernel` | Kernel function to use. |
+| `alpha_inner`	| Relative size of inner surface's radius. |	|
+| `alpha_outer`	| Relative size of outer surface's radius. |
+| `data_dirname` | Directory in which to store particle data. |
+| `source_filename` | Filename to use for source particles generated. |
+| `target_filename` | Filename to use for target particles generated. |
+| `source_densities_filename` | Filename to use for source densities generated. |
+| `octree_max_level` | Depth of octree to use in simulations. |
+| `target_rank` | Target rank in low-rank compression of M2L matrix. |
+| `m2l_compressed_filename` | Filename to use for compressed M2L matrix. |
 
 
 ## CLI
