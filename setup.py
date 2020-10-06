@@ -3,10 +3,10 @@ import os
 from setuptools import setup, find_packages
 
 HERE = os.path.abspath(os.path.dirname(__file__))
-PATH_VERSION = os.path.join(HERE, 'fmm', '__version__.py')
+VERSION_PATH = os.path.join(HERE, 'fmm', '__version__.py')
 
 ABOUT = {}
-with open(PATH_VERSION, mode='r', encoding='utf-8') as f:
+with open(VERSION_PATH, mode='r', encoding='utf-8') as f:
     exec(f.read(), ABOUT)
 
 
