@@ -2,18 +2,11 @@
 PyExaFMM
 </h1>
 
-The goal of PyExaFMM is to develop a version of ExaFMM that is written in Python as much as possible without sacrificing performance.
-
-It is envisioned that the library mainly uses Numpy, Numba, Numexpr, and Multiprocessing to achieve high performance. For offloading onto heterogenous
-devices PyOpenCL and PyCuda may also be added.
-
-## Milestones
-
-1) Availability of all basic tree data structures in Python
-1) Basic non-optimised KI FMM on Python level
-1) Analysis of potential performance bottlenecks and further optimisations using PyOpenCL
-1) Support for distributed compute devices
-1) Offloading on Nvidia GPUs with PyCuda
+The goal of PyExaFMM is to develop a highly performant implementation of the
+particle FMM that is written in Python. The utility of FMM algorithms are hindered
+by their relatively complex implementation, especially for achieving high-performance.
+PyExaFMM is particle KIFMM [1], written in pure Python with some extensions.
+Representing a compromise between portability, east of use, and performance.
 
 ## Install
 
@@ -99,3 +92,8 @@ ci [OPTIONS] COMMAND [ARGS]
 | `recompute-operators` | Clear cache of computed operators, and recalculate with current the config |
 | `compress-m2l` | Compress M2L Operators computed via `compute-operators` |
 | `recompress-m2l` | Clear cache, and re-compress M2L operators |
+
+
+## References
+
+[1] Ying, L., Biros, G., & Zorin, D. (2004). A kernel-independent adaptive fast multipole algorithm in two and three dimensions. Journal of Computational Physics, 196(2), 591-626.
