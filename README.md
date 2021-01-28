@@ -5,12 +5,16 @@ PyExaFMM
 The goal of PyExaFMM is to develop a highly performant implementation of the
 particle FMM that is written in Python. The utility of FMM algorithms are hindered
 by their relatively complex implementation, especially for achieving high-performance.
-PyExaFMM is particle KIFMM [1], written in pure Python with some extensions.
-Representing a compromise between portability, east of use, and performance.
+PyExaFMM is a particle kernel-independent FMM based on [1], written in pure Python
+with some extensions. Representing a compromise between portability, east of use,
+and performance. Optimisations are currently implemented  using Numba, Numpy, and
+Multiprocessing. However the vision of the project is to eventually provide
+optimisations taking advantage distributed and heterogenous computing environments,
+and to scale from desktops to HPC clusters.
 
 ## Install
 
-Build from source, and install locally insta a Conda/Miniconda environment
+Build from source, and install locally into a Conda/Miniconda environment
 
 ```bash
 # Clone repository
