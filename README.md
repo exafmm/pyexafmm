@@ -10,22 +10,20 @@ Representing a compromise between portability, east of use, and performance.
 
 ## Install
 
-We use Anaconda for environment management
-
-1) Create an environment:
+Build from source, and install locally insta a Conda/Miniconda environment
 
 ```bash
+# Clone repository
+git clone git@github.com:exafmm/pyexafmm.git
+cd pyexafmm
 
-# Create exafmm environement
-conda env create -f environment.yml
+# Build Conda package
+conda build conda.recipe
 
-# Activate environment
-conda activate exafmm
+# Install conda package
+conda install --use-local pyexafmm
 
-# Install PyExaFMM module
-python setup.py install
-
-# (Optional) For installation of CI module for developers
+# Activate CLI (optional)
 conda develop .
 ```
 
@@ -36,7 +34,7 @@ After installation, use provided scripts to precompute and cache FMM operators,
 e.g.
 
 ```bash
-ci compute-operators
+exafmm compute-operators
 ```
 
 Make sure to configure the FMM simulation using the `config.json` file.
@@ -79,7 +77,7 @@ Make sure to configure the FMM simulation using the `config.json` file.
 ## CLI
 
 ```bash
-ci [OPTIONS] COMMAND [ARGS]
+exafmm [OPTIONS] COMMAND [ARGS]
 ```
 
 |Command    | Action |
