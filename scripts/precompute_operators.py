@@ -1,4 +1,6 @@
 """
+<< DEPRECATED >>
+
 Script to precompute and store M2M/L2L and M2L operators. M2L computation
 accellerated via multiprocessing.
 """

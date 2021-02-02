@@ -4,6 +4,7 @@ Operator helper methods.
 import os
 import pathlib
 
+import numba
 import numpy as np
 
 from fmm.density import Potential
@@ -13,6 +14,7 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
+@numba.njit(cache=True)
 def compute_surface(order):
     """
     Compute surface to a specified order.
@@ -60,6 +62,7 @@ def compute_surface(order):
     return surf
 
 
+@numba.njit(cache=True)
 def scale_surface(surface, radius, level, center, alpha):
     """
     Shift and scale a given surface to a new center, and radius relative to the
@@ -99,6 +102,7 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
+@numba.njit(cache=True)
 def gram_matrix(kernel_function, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
@@ -119,10 +123,15 @@ def gram_matrix(kernel_function, sources, targets):
         The Gram matrix.
     """
 
-    matrix = np.zeros(shape=(len(targets), len(sources)))
+    n_targets = len(targets)
+    n_sources = len(sources)
 
-    for row_idx, target in enumerate(targets):
-        for col_idx, source in enumerate(sources):
+    matrix = np.zeros(shape=(n_targets, n_sources))
+
+    for row_idx in range(n_targets):
+        target = targets[row_idx]
+        for col_idx in range(n_sources):
+            source = sources[col_idx]
             matrix[row_idx][col_idx] = kernel_function(target, source)
 
     return matrix
