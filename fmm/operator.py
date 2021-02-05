@@ -4,6 +4,7 @@ Operator helper methods.
 import os
 import pathlib
 
+import numba
 import numpy as np
 
 from fmm.density import Potential
@@ -13,6 +14,7 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
+@numba.njit(cache=True)
 def compute_surface(order):
     """
     Compute surface to a specified order.
@@ -60,6 +62,7 @@ def compute_surface(order):
     return surf
 
 
+@numba.njit(cache=True)
 def scale_surface(surface, radius, level, center, alpha):
     """
     Shift and scale a given surface to a new center, and radius relative to the

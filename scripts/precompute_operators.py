@@ -201,61 +201,57 @@ def compute_octree(config, db):
 
 def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
-    if 'uc2e' in db.keys():
-        if str(config['order']) in db['uc2e'].keys():
-            print(f"Loading Computed Inverse of Check To Equivalent Kernel of Order {config['order']}")
-            
-            uc2e_u = db['uc2e'][f"{config['order']}"]['u']
-            uc2e_v = db['uc2e'][f"{config['order']}"]['v']
-            dc2e_u = db['dc2e'][f"{config['order']}"]['u']
-            dc2e_v = db['dc2e'][f"{config['order']}"]['v']
+    print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
+    
+    upward_equivalent_surface = operator.scale_surface(
+        surface=surface,
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_inner']
+    )
+
+    upward_check_surface = operator.scale_surface(
+        surface=surface,
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_outer']
+    )
+
+    uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
+        kernel_function=kernel,
+        check_surface=upward_check_surface,
+        equivalent_surface=upward_equivalent_surface,
+        cond=None
+    )
+
+    dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
+        kernel_function=kernel,
+        check_surface=upward_equivalent_surface,
+        equivalent_surface=upward_check_surface,
+        cond=None
+    )
+
+    if 'uc2e' in db.keys() and 'dc2e' in db.keys():
+
+        del db['uc2e']
+        del db['dc2e']
+
+        db['uc2e']['u'] = uc2e_u
+        db['uc2e']['v'] = uc2e_v
+        db['dc2e']['u'] = dc2e_u
+        db['dc2e']['v'] = dc2e_v
 
     else:
-        print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
 
-        # Compute upward check surface and upward equivalent surface
-        # These are computed in a decomposed from the SVD of the Gram matrix
-        # of these two surfaces
+        db.create_group(f"uc2e")
+        db.create_group(f"dc2e")
 
-        upward_equivalent_surface = operator.scale_surface(
-            surface=surface,
-            radius=r0,
-            level=0,
-            center=x0,
-            alpha=config['alpha_inner']
-        )
-
-        upward_check_surface = operator.scale_surface(
-            surface=surface,
-            radius=r0,
-            level=0,
-            center=x0,
-            alpha=config['alpha_outer']
-        )
-
-        uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
-            kernel_function=kernel,
-            check_surface=upward_check_surface,
-            equivalent_surface=upward_equivalent_surface,
-            cond=None
-        )
-
-        dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
-            kernel_function=kernel,
-            check_surface=upward_equivalent_surface,
-            equivalent_surface=upward_check_surface,
-            cond=None
-        )
-
-        # Save matrices
-        print("Saving Inverse of Check To Equivalent Matrices")
-        db.create_group(f"uc2e/{config['order']}")
-        db.create_group(f"dc2e/{config['order']}")
-
-        db['uc2e'][f"{config['order']}"]['u'] = uc2e_u
-        db['uc2e'][f"{config['order']}"]['v'] = uc2e_v
-        db['dc2e'][f"{config['order']}"]['u'] = dc2e_u
-        db['dc2e'][f"{config['order']}"]['v'] = dc2e_v
+        db['uc2e']['u'] = uc2e_u
+        db['uc2e']['v'] = uc2e_v
+        db['dc2e']['u'] = dc2e_u
+        db['dc2e']['v'] = dc2e_v
 
     return uc2e_u, uc2e_v, dc2e_u, dc2e_v
 
@@ -282,7 +278,7 @@ def main(**config):
 
     # # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # # This is a useful quantity that will form the basis of most operators.
-    # compute_inv_c2e(config, db, kernel, surface, x0, r0)
+    uc2e_u, uc2e_v, dc2e_u, dc2e_v = compute_inv_c2e(config, db, kernel, surface, x0, r0)
 
     # # Step 3: Compute M2M/L2L operators
     # if (
