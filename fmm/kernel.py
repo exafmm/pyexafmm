@@ -6,6 +6,20 @@ import abc
 import numpy as np
 
 
+class SingletonDecorator:
+    """
+    Decorate instance to enforce Singleton
+    """
+    def __init__(self, klass):
+        self.klass = klass
+        self.instance = None
+
+    def __call__(self, *args, **kwargs):
+        if self.instance == None:
+            self.instance = self.klass(*args, **kwargs)
+        return self.instance
+
+
 class Kernel(abc.ABC):
     """
     Abstract callable Kernel Class
@@ -24,8 +38,8 @@ class Kernel(abc.ABC):
         Operator value (scaled by 4pi) between points x and y.
     """
 
-    @abc.abstractproperty
-    def scale(self):
+    @abc.abstractstaticmethod
+    def scale(level):
         """Implement level dependent scale.
         """
         raise NotImplementedError
@@ -45,9 +59,9 @@ class Identity(Kernel):
     """Identity operation
     """
 
-    @property
-    def scale(self):
-        return 1
+    @staticmethod
+    def scale(level):
+        return level
 
     @staticmethod
     def kernel_function(x, y):
@@ -61,9 +75,9 @@ class Laplace(Kernel):
     """Single layer Laplace kernel
     """
 
-    @property
-    def scale(self):
-        return 2
+    @staticmethod
+    def scale(level):
+        return 1/(2**level)
 
     @staticmethod
     def kernel_function(x, y):
