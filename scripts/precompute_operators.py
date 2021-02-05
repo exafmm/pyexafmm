@@ -9,6 +9,9 @@ import time
 
 import numpy as np
 
+import adaptoctree.morton as morton
+import adaptoctree.tree as tree
+
 import fmm.hilbert as hilbert
 from fmm.kernel import KERNELS
 from fmm.octree import Octree
@@ -137,83 +140,75 @@ def compute_m2l_matrices(
     return m2l_matrices
 
 
-def main(**config):
-    """
-    Main script, configure using config.json file in module root.
-    """
-    start = time.time()
+def compute_surface(config, db):
+    
+    order = config['order']
+    surface = operator.compute_surface(order)
+    
+    print(f"Computing Surface of Order {order}")
 
-    # Setup Multiproc
-    processes = os.cpu_count()
-    pool = multiproc.setup_pool(processes=processes)
-
-    data_dirpath = PARENT / f"{config['data_dirname']}/"
-    operator_dirpath = PARENT / f"{config['operator_dirname']}/"
-
-    # Step 0: Construct Octree and load Python config objs
-    print("source filename", data_dirpath)
-
-    sources = data.load_hdf5_to_array(
-        config['source_filename'],
-        config['source_filename'],
-        data_dirpath
-        )
-
-    targets = data.load_hdf5_to_array(
-        config['target_filename'],
-        config['target_filename'],
-        data_dirpath
-        )
-
-    source_densities = data.load_hdf5_to_array(
-        config['source_densities_filename'],
-        config['source_densities_filename'],
-        data_dirpath
-        )
-
-    octree = Octree(
-        sources, targets, config['octree_max_level'], source_densities
-        )
-
-    # Load required Python objects
-    kernel = KERNELS[config['kernel']]()
-
-    # Step 1: Compute a surface of a given order
-    # Check if surface already exists
-    if data.file_in_directory(config['surface_filename'], operator_dirpath):
-        print(f"Already Computed Surface of Order {config['order']}")
-        print(f"Loading ...")
-        surface = data.load_hdf5_to_array(
-            config['surface_filename'],
-            config['surface_filename'],
-            operator_dirpath
-            )
+    if 'surface' in db.keys():
+        del db['surface']
+        db['surface'] = surface
 
     else:
-        print(f"Computing Surface of Order {config['order']}")
-        surface = operator.compute_surface(config['order'])
+        db['surface'] = surface
 
-        print("Saving Surface to HDF5")
-        data.save_array_to_hdf5(
-            operator_dirpath,
-            config['surface_filename'],
-            surface
-            )
+    return surface
 
-    # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
-    # This is a useful quantity that will form the basis of most operators.
 
-    if data.file_in_directory('uc2e_u', operator_dirpath):
-        print(f"Already Computed Inverse of Check To Equivalent Kernel of Order {config['order']}")
-        print("Loading...")
+def compute_octree(config, db):
 
-        # Upward check to upward equivalent
-        uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
-        uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
+    max_level = config['max_level']
+    max_points = config['max_points']
+    start_level = 1
 
-        # Downward check to downward equivalent
-        dc2e_u = data.load_hdf5_to_array('dc2e_u', 'dc2e_u', operator_dirpath)
-        dc2e_v = data.load_hdf5_to_array('dc2e_v', 'dc2e_v', operator_dirpath)
+    sources = db['particle_data']['sources'][...]
+    targets = db['particle_data']['targets'][...]
+    points = np.vstack((sources, targets))
+    
+    # Compute Octree 
+    max_bound, min_bound = morton.find_bounds(points)
+    x0 = morton.find_center(max_bound, min_bound)
+    r0 = morton.find_radius(x0, max_bound, min_bound)
+    
+    unbalanced = tree.build(targets, max_level, max_points, start_level)
+    u_depth = tree.find_depth(unbalanced)
+    octree = tree.balance(unbalanced, u_depth)
+    depth = tree.find_depth(octree)
+    
+    if 'octree' in db.keys():
+        del db['octree']['keys']
+        del db['octree']['depth']
+        del db['octree']['x0']
+        del db['octree']['r0']
+
+        db['octree']['keys'] = octree
+        db['octree']['depth'] = np.array([depth], np.int64)
+        db['octree']['x0'] = np.array([x0], np.float64)
+        db['octree']['r0'] = np.array([r0], np.float64)
+
+    else:
+        db.create_group('octree')
+
+        db['octree']['keys'] = octree
+        db['octree']['depth'] = np.array([depth], np.int64)
+        db['octree']['x0'] = np.array([x0], np.float64)
+        db['octree']['r0'] = np.array([r0], np.float64)
+
+    return x0, r0, depth, octree
+
+
+def compute_inv_c2e(config, db, kernel, surface, x0, r0):
+
+    if 'uc2e' in db.keys():
+        if str(config['order']) in db['uc2e'].keys():
+            print(f"Loading Computed Inverse of Check To Equivalent Kernel of Order {config['order']}")
+            
+            uc2e_u = db['uc2e'][f"{config['order']}"]['u']
+            uc2e_v = db['uc2e'][f"{config['order']}"]['v']
+            dc2e_u = db['dc2e'][f"{config['order']}"]['u']
+            dc2e_v = db['dc2e'][f"{config['order']}"]['v']
 
     else:
         print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
@@ -224,17 +219,17 @@ def main(**config):
 
         upward_equivalent_surface = operator.scale_surface(
             surface=surface,
-            radius=octree.radius,
+            radius=r0,
             level=0,
-            center=octree.center,
+            center=x0,
             alpha=config['alpha_inner']
         )
 
         upward_check_surface = operator.scale_surface(
             surface=surface,
-            radius=octree.radius,
+            radius=r0,
             level=0,
-            center=octree.center,
+            center=x0,
             alpha=config['alpha_outer']
         )
 
@@ -254,160 +249,190 @@ def main(**config):
 
         # Save matrices
         print("Saving Inverse of Check To Equivalent Matrices")
-        data.save_array_to_hdf5(operator_dirpath, 'uc2e_v', uc2e_v)
-        data.save_array_to_hdf5(operator_dirpath, 'uc2e_u', uc2e_u)
-        data.save_array_to_hdf5(operator_dirpath, 'dc2e_v', dc2e_v)
-        data.save_array_to_hdf5(operator_dirpath, 'dc2e_u', dc2e_u)
+        db.create_group(f"uc2e/{config['order']}")
+        db.create_group(f"dc2e/{config['order']}")
 
-    # Step 3: Compute M2M/L2L operators
-    if (
-            data.file_in_directory('m2m', operator_dirpath)
-            and data.file_in_directory('l2l', operator_dirpath)
-       ):
-        print(f"Already Computed M2M & L2L Operators of Order {config['order']}")
+        db['uc2e'][f"{config['order']}"]['u'] = uc2e_u
+        db['uc2e'][f"{config['order']}"]['v'] = uc2e_v
+        db['dc2e'][f"{config['order']}"]['u'] = dc2e_u
+        db['dc2e'][f"{config['order']}"]['v'] = dc2e_v
 
-    else:
-        parent_center = octree.center
-        parent_radius = octree.radius
-        parent_level = 0
-        child_level = 1
+    return uc2e_u, uc2e_v, dc2e_u, dc2e_v
 
-        child_centers = [
-            hilbert.get_center_from_key(child, parent_center, parent_radius)
-            for child in hilbert.get_children(0)
-        ]
 
-        parent_upward_check_surface = operator.scale_surface(
-            surface=surface,
-            radius=octree.radius,
-            level=parent_level,
-            center=octree.center,
-            alpha=config['alpha_outer']
-            )
+def main(**config):
+    """
+    Main script, configure using config.json file in module root.
+    """
+    start = time.time()
 
-        m2m = []
-        l2l = []
+    # Setup Multiproc
+    processes = os.cpu_count()
+    pool = multiproc.setup_pool(processes=processes)
 
-        loading = len(child_centers)
+    # Step 0: Construct Octree and load Python config objs
+    db = data.load_hdf5(config['experiment'], PARENT, 'a')
+    x0, r0, depth, octree = compute_octree(config, db)
 
-        scale = (1/kernel.scale)**(child_level)
+    # Load required Python objects
+    kernel = KERNELS[config['kernel']]()
 
-        print(f"Computing M2M & L2L Operators of Order {config['order']}")
-        for child_idx, child_center in enumerate(child_centers):
-            print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
+    # Step 1: Compute a surface of a given order
+    surface = compute_surface(config, db)
 
-            child_upward_equivalent_surface = operator.scale_surface(
-                surface=surface,
-                radius=octree.radius,
-                level=child_level,
-                center=child_center,
-                alpha=config['alpha_inner']
-            )
+    # # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
+    # # This is a useful quantity that will form the basis of most operators.
+    # compute_inv_c2e(config, db, kernel, surface, x0, r0)
 
-            pc2ce = operator.gram_matrix(
-                kernel_function=kernel,
-                targets=parent_upward_check_surface,
-                sources=child_upward_equivalent_surface,
-            )
+    # # Step 3: Compute M2M/L2L operators
+    # if (
+    #         data.file_in_directory('m2m', operator_dirpath)
+    #         and data.file_in_directory('l2l', operator_dirpath)
+    #    ):
+    #     print(f"Already Computed M2M & L2L Operators of Order {config['order']}")
 
-            # Compute M2M operator for this octant
-            tmp = np.matmul(uc2e_u, pc2ce)
-            m2m.append(np.matmul(uc2e_v, tmp))
+    # else:
+    #     parent_center = octree.center
+    #     parent_radius = octree.radius
+    #     parent_level = 0
+    #     child_level = 1
 
-            # Compute L2L operator for this octant
-            cc2pe = operator.gram_matrix(
-                kernel_function=kernel,
-                targets=child_upward_equivalent_surface,
-                sources=parent_upward_check_surface
-            )
+    #     child_centers = [
+    #         hilbert.get_center_from_key(child, parent_center, parent_radius)
+    #         for child in hilbert.get_children(0)
+    #     ]
 
-            tmp = np.matmul(dc2e_u, cc2pe)
-            l2l.append(np.matmul(scale*dc2e_v, tmp))
+    #     parent_upward_check_surface = operator.scale_surface(
+    #         surface=surface,
+    #         radius=octree.radius,
+    #         level=parent_level,
+    #         center=octree.center,
+    #         alpha=config['alpha_outer']
+    #         )
 
-        # Save m2m & l2l operators, index is equivalent to their Hilbert key
-        m2m = np.array(m2m)
-        l2l = np.array(l2l)
-        print("Saving M2M & L2L Operators")
-        data.save_array_to_hdf5(operator_dirpath, 'm2m', m2m)
-        data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
+    #     m2m = []
+    #     l2l = []
 
-    # Step 4: Compute M2L operators
+    #     loading = len(child_centers)
 
-    # Create sub-directory to store m2l computations
-    m2l_dirpath = operator_dirpath
-    current_level = 2
+    #     scale = (1/kernel.scale)**(child_level)
 
-    already_computed = False
+    #     print(f"Computing M2M & L2L Operators of Order {config['order']}")
+    #     for child_idx, child_center in enumerate(child_centers):
+    #         print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
 
-    while current_level <= config['octree_max_level']:
+    #         child_upward_equivalent_surface = operator.scale_surface(
+    #             surface=surface,
+    #             radius=octree.radius,
+    #             level=child_level,
+    #             center=child_center,
+    #             alpha=config['alpha_inner']
+    #         )
 
-        m2l_filename = f'm2l_level_{current_level}'
+    #         pc2ce = operator.gram_matrix(
+    #             kernel_function=kernel,
+    #             targets=parent_upward_check_surface,
+    #             sources=child_upward_equivalent_surface,
+    #         )
 
-        if data.file_in_directory(m2l_filename, operator_dirpath, ext='pkl'):
-            already_computed = True
+    #         # Compute M2M operator for this octant
+    #         tmp = np.matmul(uc2e_u, pc2ce)
+    #         m2m.append(np.matmul(uc2e_v, tmp))
 
-        if already_computed:
-            print(f"Already Computed M2L operators for level {current_level}")
+    #         # Compute L2L operator for this octant
+    #         cc2pe = operator.gram_matrix(
+    #             kernel_function=kernel,
+    #             targets=child_upward_equivalent_surface,
+    #             sources=parent_upward_check_surface
+    #         )
 
-        else:
+    #         tmp = np.matmul(dc2e_u, cc2pe)
+    #         l2l.append(np.matmul(scale*dc2e_v, tmp))
 
-            print(f"Computing M2L Operators for Level {current_level}")
+    #     # Save m2m & l2l operators, index is equivalent to their Hilbert key
+    #     m2m = np.array(m2m)
+    #     l2l = np.array(l2l)
+    #     print("Saving M2M & L2L Operators")
+    #     data.save_array_to_hdf5(operator_dirpath, 'm2m', m2m)
+    #     data.save_array_to_hdf5(operator_dirpath, 'l2l', l2l)
 
-            leaves = np.arange(
-                hilbert.get_level_offset(current_level),
-                hilbert.get_level_offset(current_level+1)
-                )
+    # # Step 4: Compute M2L operators
 
-            loading = 0
+    # # Create sub-directory to store m2l computations
+    # m2l_dirpath = operator_dirpath
+    # current_level = 2
 
-            m2l = [
-                [] for leaf in range(len(leaves))
-            ]
+    # already_computed = False
 
-            index_to_key = [
-                None for leaf in range(len(leaves))
-            ]
+    # while current_level <= config['octree_max_level']:
 
-            index_to_key_filename = f'index_to_key_level_{current_level}'
+    #     m2l_filename = f'm2l_level_{current_level}'
 
-            args = []
+    #     if data.file_in_directory(m2l_filename, operator_dirpath, ext='pkl'):
+    #         already_computed = True
 
-            # Gather arguments needed to send out to processes, and create index
-            # mapping
-            for target_idx, target in enumerate(leaves):
+    #     if already_computed:
+    #         print(f"Already Computed M2L operators for level {current_level}")
 
-                interaction_list = hilbert.get_interaction_list(target)
+    #     else:
 
-                # Create index mapping for looking up the m2l operator
-                index_to_key[target_idx] = interaction_list
+    #         print(f"Computing M2L Operators for Level {current_level}")
 
-                # Add arg to args for parallel mapping
-                arg = (
-                    target, kernel, surface, config['alpha_inner'],
-                    octree.center, octree.radius, dc2e_v, dc2e_u, interaction_list
-                    )
+    #         leaves = np.arange(
+    #             hilbert.get_level_offset(current_level),
+    #             hilbert.get_level_offset(current_level+1)
+    #             )
 
-                args.append(arg)
+    #         loading = 0
 
-            # Submit tasks to process pool
-            m2l = pool.starmap(compute_m2l_matrices, args)
+    #         m2l = [
+    #             [] for leaf in range(len(leaves))
+    #         ]
 
-            # Convert results to matrix
-            m2l = np.array([np.array(l) for l in m2l])
+    #         index_to_key = [
+    #             None for leaf in range(len(leaves))
+    #         ]
 
-            print(f"Saving Dense M2L Operators for level {current_level}")
-            data.save_pickle(
-                m2l, m2l_filename, m2l_dirpath
-            )
-            data.save_pickle(
-                index_to_key, index_to_key_filename, m2l_dirpath
-            )
+    #         index_to_key_filename = f'index_to_key_level_{current_level}'
 
-        current_level += 1
-        already_computed = False
+    #         args = []
 
-    minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
-    print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
+    #         # Gather arguments needed to send out to processes, and create index
+    #         # mapping
+    #         for target_idx, target in enumerate(leaves):
+
+    #             interaction_list = hilbert.get_interaction_list(target)
+
+    #             # Create index mapping for looking up the m2l operator
+    #             index_to_key[target_idx] = interaction_list
+
+    #             # Add arg to args for parallel mapping
+    #             arg = (
+    #                 target, kernel, surface, config['alpha_inner'],
+    #                 octree.center, octree.radius, dc2e_v, dc2e_u, interaction_list
+    #                 )
+
+    #             args.append(arg)
+
+    #         # Submit tasks to process pool
+    #         m2l = pool.starmap(compute_m2l_matrices, args)
+
+    #         # Convert results to matrix
+    #         m2l = np.array([np.array(l) for l in m2l])
+
+    #         print(f"Saving Dense M2L Operators for level {current_level}")
+    #         data.save_pickle(
+    #             m2l, m2l_filename, m2l_dirpath
+    #         )
+    #         data.save_pickle(
+    #             index_to_key, index_to_key_filename, m2l_dirpath
+    #         )
+
+    #     current_level += 1
+    #     already_computed = False
+
+    # minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
+    # print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
 
 
 if __name__ == "__main__":

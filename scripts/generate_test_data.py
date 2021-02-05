@@ -67,7 +67,7 @@ def well_separated_data(npoints):
     return (targets, sources, source_densities)
 
 
-DATA = {
+DATA_FUNCTIONS = {
     'random': random_data,
     'separated': well_separated_data
 }
@@ -75,40 +75,50 @@ DATA = {
 
 def main(**config):
 
-    data_dirpath = PARENT / f"{config['data_dirname']}/"
     npoints = config['npoints']
     dtype = config['dtype']
 
-    if os.path.isdir(data_dirpath):
-        shutil.rmtree(data_dirpath)
+    data_function = DATA_FUNCTIONS[dtype]
 
-    data_func = DATA[dtype]
+    sources, targets, source_densities = data_function(npoints)
 
-    sources, targets, source_densities = data_func(npoints)
+    db = data.load_hdf5(config['experiment'], PARENT, 'a')
 
-    data.save_array_to_hdf5(data_dirpath, 'sources', sources)
-    data.save_array_to_hdf5(data_dirpath, 'targets', targets)
-    data.save_array_to_hdf5(data_dirpath, 'source_densities', source_densities)
+    if f'particle_data' in db.keys():
+        del db[f'particle_data']['sources']
+        del db[f'particle_data']['targets']
+        del db[f'particle_data']['source_densities']
+        
+        db[f'particle_data']['sources'] = sources
+        db[f'particle_data']['targets'] = targets
+        db[f'particle_data']['source_densities'] = source_densities 
+
+    else:
+        db.create_group(f'particle_data')
+
+        db[f'particle_data']['sources'] = sources
+        db[f'particle_data']['targets'] = targets
+        db[f'particle_data']['source_densities'] = source_densities 
+    
+    db.close()
 
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 3:
         raise ValueError(
-            f'Must Specify Config Filepath number of points and data type!\
-                e.g. `python generate_test_data.py /path/to/config.json 100 random`'
+            f'Must Specify Config Filepath and data type!\
+                e.g. `python generate_test_data.py /path/to/config.json random`'
                 )
 
-    elif sys.argv[3] not in DATA.keys():
+    elif sys.argv[2] not in DATA_FUNCTIONS.keys():
         raise ValueError(
-            f'Data type `{sys.argv[3]}` not valid. Must be either`separated` or `random`'
+            f'Data type `{sys.argv[2]}` not valid. Must be either`separated` or `random`'
              )
 
     else:
         config_filepath = sys.argv[1]
-        npoints = sys.argv[2]
-        dtype = sys.argv[3]
+        dtype = sys.argv[2]
         config = data.load_json(config_filepath)
-        config['npoints'] = int(npoints)
         config['dtype'] = dtype
         main(**config)

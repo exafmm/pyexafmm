@@ -78,18 +78,16 @@ def recompute_operators():
 
 
 @click.command(
-    help='Generate random targets and sources with unit density'
+    help='Generate targets and sources with unit density'
 )
-@click.argument('npoints')
-@click.argument('dtype')
-def generate_test_data(npoints, dtype):
-    click.echo(f'Generating {npoints} {dtype} sources & targets')
+def generate_test_data():
+    data_type = CONFIG['data_type']
+    click.echo(f'Generating {data_type} sources & targets')
     subprocess.run([
         'python',
         HERE.parent/ 'scripts/generate_test_data.py',
         HERE.parent / 'config.json',
-        npoints,
-        dtype
+        data_type
     ])
 
 

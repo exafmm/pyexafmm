@@ -71,7 +71,7 @@ def load_pickle(filename, dirpath):
     return obj
 
 
-def load_hdf5(filename, dirpath):
+def load_hdf5(filename, dirpath, mode='a'):
     """
     Load HDF5 file from disk.
 
@@ -87,7 +87,7 @@ def load_hdf5(filename, dirpath):
     dirpath = pathlib.Path(dirpath)
     filepath = dirpath / f'{filename}.hdf5'
 
-    return h5py.File(filepath, 'r')
+    return h5py.File(filepath, mode)
 
 
 def load_hdf5_to_array(dataname, filename, dirpath):
