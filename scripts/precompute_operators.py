@@ -174,27 +174,58 @@ def compute_octree(config, db):
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
     depth = tree.find_depth(octree)
-    
+    complete = tree.complete_tree(octree)
+    u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
+
     if 'octree' in db.keys():
         del db['octree']['keys']
         del db['octree']['depth']
         del db['octree']['x0']
         del db['octree']['r0']
+        del db['octree']['complete']
 
         db['octree']['keys'] = octree
         db['octree']['depth'] = np.array([depth], np.int64)
         db['octree']['x0'] = np.array([x0], np.float64)
         db['octree']['r0'] = np.array([r0], np.float64)
+        db['octree']['complete'] = complete
+
+        for i in range(len(complete)):
+            node = str(complete[i])
+            del db['key_to_index'][node]
+            db['key_to_index'][node] = np.array([i])
+
+        del db['interaction_lists']['u']
+        del db['interaction_lists']['x']
+        del db['interaction_lists']['v']
+        del db['interaction_lists']['w']
+            
+        db['interaction_lists']['u'] = u
+        db['interaction_lists']['x'] = x
+        db['interaction_lists']['v'] = v
+        db['interaction_lists']['w'] = w
 
     else:
         db.create_group('octree')
+        db.create_group('interaction_lists')
+        db.create_group('key_to_index')
 
         db['octree']['keys'] = octree
         db['octree']['depth'] = np.array([depth], np.int64)
         db['octree']['x0'] = np.array([x0], np.float64)
         db['octree']['r0'] = np.array([r0], np.float64)
+        db['octree']['complete'] = complete
+        
+        for i in range(len(complete)):
+            node = str(complete[i])
+            db['key_to_index'][node] = np.array([i])
+        
+        db['interaction_lists']['u'] = u
+        db['interaction_lists']['x'] = x
+        db['interaction_lists']['v'] = v
+        db['interaction_lists']['w'] = w
 
-    return x0, r0, depth, octree
+    return x0, r0, depth, octree, complete, u, x, v, w
 
 
 def compute_inv_c2e(config, db, kernel, surface, x0, r0):
@@ -233,11 +264,11 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
     if 'uc2e' in db.keys() and 'dc2e' in db.keys():
 
-        del db['uc2e/u']
-        del db['dc2e/u']
-        del db['uc2e/v']
-        del db['dc2e/v']
-        
+        del db['uc2e']['u']
+        del db['dc2e']['u']
+        del db['uc2e']['v']
+        del db['dc2e']['v']
+
         db['uc2e']['u'] = uc2e_u
         db['uc2e']['v'] = uc2e_v
         db['dc2e']['u'] = dc2e_u
@@ -245,10 +276,8 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
     else:
 
-        db.create_group('uc2e/u')
-        db.create_group('dc2e/u')
-        db.create_group('uc2e/v')
-        db.create_group('dc2e/v')
+        db.create_group('uc2e')
+        db.create_group('dc2e')
 
         db['uc2e']['u'] = uc2e_u
         db['uc2e']['v'] = uc2e_v
@@ -331,17 +360,14 @@ def compute_m2m_and_l2l(
         db['l2l'] = l2l
 
     else:
-        db.create_group('m2m')
-        db.create_group('l2l')
-
         db['m2m'] = m2m
         db['l2l'] = l2l
 
 
-def compute_m2l(config, db, depth):
+def compute_m2l(config, db, depth, complete, v_list):
 
     current_level = 2
-
+    
     while current_level <= depth:
 
         print(f"Computing M2L Operators for Level {current_level}")
@@ -412,7 +438,7 @@ def main(**config):
 
     # Step 0: Construct Octree and load Python config objs
     db = data.load_hdf5(config['experiment'], PARENT, 'a')
-    x0, r0, depth, octree = compute_octree(config, db)
+    x0, r0, depth, octree, complete, u, x, v, w = compute_octree(config, db)
 
     # Load required Python objects
     kernel = KERNELS[config['kernel']]()
@@ -424,14 +450,14 @@ def main(**config):
     # # This is a useful quantity that will form the basis of most operators.
     uc2e_u, uc2e_v, dc2e_u, dc2e_v = compute_inv_c2e(config, db, kernel, surface, x0, r0)
 
-    # # Step 3: Compute M2M/L2L operators
+    # Step 3: Compute M2M/L2L operators
     compute_m2m_and_l2l(
         config, db, surface, kernel, uc2e_u, uc2e_v, dc2e_u, dc2e_v,
         x0, r0        
         )
 
-    # # Step 4: Compute M2L operators
-    compute_m2l(config, db)
+    # Step 4: Compute M2L operators
+    # compute_m2l(config, db, depth, complete, v)
 
     minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
     print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
