@@ -102,6 +102,7 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
+# @numba.njit(cache=True)
 def gram_matrix(kernel_function, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
@@ -121,11 +122,15 @@ def gram_matrix(kernel_function, sources, targets):
     np.array(shape=(n, m))
         The Gram matrix.
     """
+    n_sources = len(sources)
+    n_targets = len(targets)
 
-    matrix = np.zeros(shape=(len(targets), len(sources)))
+    matrix = np.zeros(shape=(n_targets, n_sources))
 
-    for row_idx, target in enumerate(targets):
-        for col_idx, source in enumerate(sources):
+    for row_idx in range(n_targets):
+        target = targets[row_idx]
+        for col_idx in range(n_sources):
+            source = sources[col_idx]
             matrix[row_idx][col_idx] = kernel_function(target, source)
 
     return matrix
@@ -168,7 +173,7 @@ def compute_pseudo_inverse(matrix, cond=None):
 
     s = np.matmul(np.diag(a), np.diag(s))
 
-    # Compnents of the inverse of the matrix
+    # Components of the inverse of the matrix
     av = np.matmul(v_t.T, s)
     au = u.T
 

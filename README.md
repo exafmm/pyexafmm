@@ -27,8 +27,8 @@ conda build conda.recipe
 # Install conda package
 conda install --use-local pyexafmm
 
-# Activate CLI (optional)
-conda develop .
+# (For developers) Install in editable mode
+pip3 install -e .
 ```
 
 ## Configure

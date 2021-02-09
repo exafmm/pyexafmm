@@ -3,21 +3,8 @@ Kernel class
 """
 import abc
 
+import numba
 import numpy as np
-
-
-class SingletonDecorator:
-    """
-    Decorate instance to enforce Singleton
-    """
-    def __init__(self, klass):
-        self.klass = klass
-        self.instance = None
-
-    def __call__(self, *args, **kwargs):
-        if self.instance == None:
-            self.instance = self.klass(*args, **kwargs)
-        return self.instance
 
 
 class Kernel(abc.ABC):
@@ -45,7 +32,7 @@ class Kernel(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractstaticmethod
-    def kernel_function(x, y):
+    def eval(x, y):
         """ Implement static kernel function.
         """
         raise NotImplementedError
@@ -64,11 +51,11 @@ class Identity(Kernel):
         return level
 
     @staticmethod
-    def kernel_function(x, y):
+    def eval(x, y):
         return np.dot(x, y)
 
     def __call__(self, x, y):
-        return self.kernel_function(x, y)
+        return self.eval(x, y)
 
 
 class Laplace(Kernel):
@@ -80,16 +67,21 @@ class Laplace(Kernel):
         return 1/(2**level)
 
     @staticmethod
-    def kernel_function(x, y):
-        r = np.linalg.norm(x-y)
+    @numba.njit(cache=True)
+    def eval(x, y):
+        diff = x-y
+        diff2 = diff*diff
+        tol = np.float64(1e-6)
 
-        if np.isclose(r, 0, rtol=1e-12):
-            return 0
-
-        return 1/(4*np.pi*r)
+        if np.all(diff2 < tol):
+            return np.float64(0)
+        
+        diff2 = np.sqrt(np.sum(diff2))
+        
+        return np.reciprocal(4*np.pi*diff2)
 
     def __call__(self, x, y):
-        return self.kernel_function(x, y)
+        return self.eval(x, y)
 
 
 KERNELS = {
