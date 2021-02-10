@@ -7,6 +7,7 @@ import pathlib
 import sys
 import time
 
+import cupy as cp
 import numpy as np
 
 import adaptoctree.morton as morton
@@ -23,134 +24,131 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
-# Setup a global variable for M2L counter
-M2L_COUNTER = multiproc.setup_counter(default=9)
-M2L_LOCK = multiproc.setup_lock()
-
-
-# Incremeneter for M2L counter
-def increment_m2l_counter():
+def compute_dense_m2l(
+        target, kernel, surface, alpha_inner, x0, r0,
+        dc2e_v, dc2e_u, interaction_list,
+    ):
     """
-    Increment the M2L counter.
+    Data has to be passed to each process in order to compute the m2l matrices
+        associated with a given target key. This method takes the required data
+        and computes all the m2l matrices for a given target.
+
+    Parameters:
+    -----------
+    target : np.int64
+        Target Hilbert Key.
+    kernel : function
+    surface : np.array(shape=(n, 3), dtype=np.float64)
+    alpha_inner : np.float64
+        Ratio between side length of shifted/scaled node and original node.
+    x0 : np.array(shape=(1, 3), dtype=np.float64)
+        Center of Octree's root node.
+    r0 : np.float64
+        Half side length of Octree's root node.
+    dc2e_v : np.array(shape=(n, n))
+        First component of the inverse of the downward-check-to-equivalent
+        Gram matrix at level 0.
+    dc2e_v : np.array(shape=(n, n))
+        Second component of the inverse of the downward-check-to-equivalent
+        Gram matrix at level 0.
+
+    Returns:
+    --------
+    np.array(shape=(n, n))
+        Dense M2L matrix associated with this target.
     """
-    with M2L_LOCK:
-        M2L_COUNTER.value += 1
+    # Get level and scale
+    level = morton.find_level(target)
+    scale = kernel.scale(level)
 
+    #  Allocate block matrices for dc2e components with redundancy
+    n_blocks = len(interaction_list)
+    x_dim, y_dim = dc2e_u.shape
+    dc2e_u_block_cpu = np.zeros(shape=(x_dim, n_blocks*y_dim), dtype=np.float64)
+    dc2e_v_block_cpu = np.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
 
-def log_m2l_progress(counter_value, level):
-    """
-    Log M2L progress to stdout.
-    """
-    max_calculations = sum([8**(level) for level in range(0, level)])
-    calculation_number = counter_value - max_calculations
+    dc2e_v = scale*dc2e_v
 
-    print(f"Computed {calculation_number}/{8**level} M2L Operators")
+    # Compute target check surface
+    target_center = morton.find_physical_center_from_key(
+        key=target,
+        x0=x0,
+        r0=r0
+    )
 
+    target_check_surface = operator.scale_surface(
+        surface=surface,
+        radius=r0,
+        level=level,
+        center=target_center,
+        alpha=alpha_inner
+    )
 
-# def compute_m2l_matrices(
-#         target, kernel, surface, alpha_inner, x0, r0, dc2e_v, dc2e_u, interaction_list,
-#     ):
-#     """
-#     Data has to be passed to each process in order to compute the m2l matrices
-#         associated with a given target key. This method takes the required data
-#         and computes all the m2l matrices for a given target.
+    # Allocate a block matrix for the se2tc matrices
+    se2tc_block_cpu = np.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
 
-#     Parameters:
-#     -----------
-#     target : np.int64
-#         Target Hilbert Key.
-#     kernel : function
-#     surface : np.array(shape=(n, 3), dtype=np.float64)
-#     alpha_inner : np.float64
-#         Ratio between side length of shifted/scaled node and original node.
-#     x0 : np.array(shape=(1, 3), dtype=np.float64)
-#         Center of Octree's root node.
-#     r0 : np.float64
-#         Half side length of Octree's root node.
-#     dc2e_v : np.array(shape=(n, n))
-#         First component of the inverse of the downward-check-to-equivalent
-#         Gram matrix at level 0.
-#     dc2e_v : np.array(shape=(n, n))
-#         Second component of the inverse of the downward-check-to-equivalent
-#         Gram matrix at level 0.
+    for i in range(n_blocks):
 
-#     Returns:
-#     --------
-#     list[np.array(shape=(n, n))]
-#         List of all m2l matrices associated with this target.
-#     """
-#     # Get level
-#     level = hilbert.get_level(target)
+        # Block indices
+        l_idx = i*x_dim
+        r_idx = (i+1)*x_dim
 
-#     # Container for results
-#     m2l_matrices = []
+        # Allocate redundant copies of dc2e components
+        dc2e_u_block_cpu[:, l_idx:r_idx] = dc2e_u
+        dc2e_v_block_cpu[l_idx:r_idx, :] = dc2e_v
 
-#     # Increment counter, and print progress
-#     increment_m2l_counter()
-#     log_m2l_progress(M2L_COUNTER.value, level)
+        # Compute se2tc matrices for each source
+        source = interaction_list[i]
 
-#     # Compute target check surface
-#     target_center = hilbert.get_center_from_key(
-#         key=target,
-#         x0=x0,
-#         r0=r0
-#     )
+        source_center = morton.find_physical_center_from_key(
+            key=source,
+            x0=x0,
+            r0=r0
+        )
 
-#     target_check_surface = operator.scale_surface(
-#         surface=surface,
-#         radius=r0,
-#         level=level,
-#         center=target_center,
-#         alpha=alpha_inner
-#     )
+        source_equivalent_surface = operator.scale_surface(
+            surface=surface,
+            radius=r0,
+            level=level,
+            center=source_center,
+            alpha=alpha_inner
+        )
 
-#     # Compute m2l matrices
-#     for source in interaction_list:
+        se2tc = operator.gram_matrix(
+            kernel_function=kernel.eval,
+            sources=source_equivalent_surface,
+            targets=target_check_surface
+        )
 
-#         source_center = hilbert.get_center_from_key(
-#             key=source,
-#             x0=x0,
-#             r0=r0
-#         )
+        # Allocate se2tc matrices to blocked matrix
+        se2tc_block_cpu[l_idx:r_idx, :] = se2tc
 
-#         source_equivalent_surface = operator.scale_surface(
-#             surface=surface,
-#             radius=r0,
-#             level=level,
-#             center=source_center,
-#             alpha=alpha_inner
-#         )
+    # Transfer data to GPU for matrix product
+    dc2e_u_block_gpu = cp.asarray(dc2e_u_block_cpu)
+    dc2e_v_block_gpu = cp.asarray(dc2e_v_block_cpu)
+    se2tc_block_gpu = cp.asarray(se2tc_block_cpu)
 
-#         se2tc = operator.gram_matrix(
-#             kernel_function=kernel,
-#             sources=source_equivalent_surface,
-#             targets=target_check_surface
-#         )
+    tmp_gpu = cp.matmul(dc2e_u_block_gpu, se2tc_block_gpu)
 
-#         scale = (1/kernel.scale)**(level)
+    m2l_matrix_gpu = cp.matmul(dc2e_v_block_gpu, tmp_gpu)
 
-#         tmp = np.matmul(dc2e_u, se2tc)
+    # Transfer result back to CPU
+    m2l_matrix_cpu = m2l_matrix_gpu.get()
 
-#         m2l_matrix = np.matmul(scale*dc2e_v, tmp)
-
-#         m2l_matrices.append(m2l_matrix)
-
-#     return m2l_matrices
+    return m2l_matrix_cpu
 
 
 def compute_surface(config, db):
-    
+
     order = config['order']
     surface = operator.compute_surface(order)
-    
+
     print(f"Computing Surface of Order {order}")
 
     if 'surface' in db.keys():
         del db['surface']
-        db['surface'] = surface
 
-    else:
-        db['surface'] = surface
+    db['surface'] = surface
 
     return surface
 
@@ -164,12 +162,12 @@ def compute_octree(config, db):
     sources = db['particle_data']['sources'][...]
     targets = db['particle_data']['targets'][...]
     points = np.vstack((sources, targets))
-    
-    # Compute Octree 
+
+    # Compute Octree
     max_bound, min_bound = morton.find_bounds(points)
     x0 = morton.find_center(max_bound, min_bound)
     r0 = morton.find_radius(x0, max_bound, min_bound)
-    
+
     unbalanced = tree.build(targets, max_level, max_points, start_level)
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
@@ -177,53 +175,48 @@ def compute_octree(config, db):
     complete = tree.complete_tree(octree)
     u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
 
+    sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
+    targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
+
     if 'octree' in db.keys():
         del db['octree']['keys']
         del db['octree']['depth']
         del db['octree']['x0']
         del db['octree']['r0']
         del db['octree']['complete']
-
-        db['octree']['keys'] = octree
-        db['octree']['depth'] = np.array([depth], np.int64)
-        db['octree']['x0'] = np.array([x0], np.float64)
-        db['octree']['r0'] = np.array([r0], np.float64)
-        db['octree']['complete'] = complete
-
-        for i in range(len(complete)):
-            node = str(complete[i])
-            del db['key_to_index'][node]
-            db['key_to_index'][node] = np.array([i])
-
+        del db['particle_data']['sources_to_keys']
+        del db['particle_data']['targets_to_keys']
         del db['interaction_lists']['u']
         del db['interaction_lists']['x']
         del db['interaction_lists']['v']
         del db['interaction_lists']['w']
-            
-        db['interaction_lists']['u'] = u
-        db['interaction_lists']['x'] = x
-        db['interaction_lists']['v'] = v
-        db['interaction_lists']['w'] = w
+
+        for i in range(len(complete)):
+            node = str(complete[i])
+            del db['key_to_index'][node]
 
     else:
         db.create_group('octree')
         db.create_group('interaction_lists')
         db.create_group('key_to_index')
 
-        db['octree']['keys'] = octree
-        db['octree']['depth'] = np.array([depth], np.int64)
-        db['octree']['x0'] = np.array([x0], np.float64)
-        db['octree']['r0'] = np.array([r0], np.float64)
-        db['octree']['complete'] = complete
-        
-        for i in range(len(complete)):
-            node = str(complete[i])
-            db['key_to_index'][node] = np.array([i])
-        
-        db['interaction_lists']['u'] = u
-        db['interaction_lists']['x'] = x
-        db['interaction_lists']['v'] = v
-        db['interaction_lists']['w'] = w
+    db['octree']['keys'] = octree
+    db['octree']['depth'] = np.array([depth], np.int64)
+    db['octree']['x0'] = np.array([x0], np.float64)
+    db['octree']['r0'] = np.array([r0], np.float64)
+    db['octree']['complete'] = complete
+
+    db['particle_data']['sources_to_keys'] = sources_to_keys
+    db['particle_data']['targets_to_keys'] = targets_to_keys
+
+    for i in range(len(complete)):
+        node = str(complete[i])
+        db['key_to_index'][node] = np.array([i])
+
+    db['interaction_lists']['u'] = u
+    db['interaction_lists']['x'] = x
+    db['interaction_lists']['v'] = v
+    db['interaction_lists']['w'] = w
 
     return x0, r0, depth, octree, complete, u, x, v, w
 
@@ -231,7 +224,7 @@ def compute_octree(config, db):
 def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
     print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
-    
+
     upward_equivalent_surface = operator.scale_surface(
         surface=surface,
         radius=r0,
@@ -269,20 +262,15 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
         del db['uc2e']['v']
         del db['dc2e']['v']
 
-        db['uc2e']['u'] = uc2e_u
-        db['uc2e']['v'] = uc2e_v
-        db['dc2e']['u'] = dc2e_u
-        db['dc2e']['v'] = dc2e_v
-
     else:
 
         db.create_group('uc2e')
         db.create_group('dc2e')
 
-        db['uc2e']['u'] = uc2e_u
-        db['uc2e']['v'] = uc2e_v
-        db['dc2e']['u'] = dc2e_u
-        db['dc2e']['v'] = dc2e_v
+    db['uc2e']['u'] = uc2e_u
+    db['uc2e']['v'] = uc2e_v
+    db['dc2e']['u'] = dc2e_u
+    db['dc2e']['v'] = dc2e_v
 
     return uc2e_u, uc2e_v, dc2e_u, dc2e_v
 
@@ -312,7 +300,7 @@ def compute_m2m_and_l2l(
 
     loading = len(child_centers)
 
-    kernel_function = kernel.eval 
+    kernel_function = kernel.eval
     scale = kernel.scale(child_level)
 
     print(f"Computing M2M & L2L Operators of Order {config['order']}")
@@ -352,78 +340,36 @@ def compute_m2m_and_l2l(
     l2l = np.array(l2l)
 
     print("Saving M2M & L2L Operators")
+
     if 'm2m' in db.keys() and 'l2l' in db.keys():
         del db['m2m']
         del db['l2l']
 
-        db['m2m'] = m2m
-        db['l2l'] = l2l
-
-    else:
-        db['m2m'] = m2m
-        db['l2l'] = l2l
+    db['m2m'] = m2m
+    db['l2l'] = l2l
 
 
-def compute_m2l(config, db, depth, complete, v_list):
+def compute_m2l(config, db, kernel, surface, depth, x0, r0, dc2e_v, dc2e_u, complete):
 
-    current_level = 2
-    
-    while current_level <= depth:
+    # This whole loop can be multi-processed
+    for i in range(len(complete)):
+        node = complete[i]
+        v_list = db['interaction_lists']['v'][str(node)][...]
+        v_list = v_list[v_list != -1]
 
-        print(f"Computing M2L Operators for Level {current_level}")
+        if len(v_list) > 0:
+            m2l_matrix = compute_dense_m2l(
+                node, kernel, surface, config['alpha_inner'],
+                x0, r0, dc2e_v, dc2e_u, v_list
+            )
 
-            # leaves = np.arange(
-            #     hilbert.get_level_offset(current_level),
-            #     hilbert.get_level_offset(current_level+1)
-            #     )
+        else:
+            m2l_matrix = np.array([-1])
 
-    #         loading = 0
+        if 'm2l' in db.keys():
+            del db['m2l']['dense'][node]
 
-    #         m2l = [
-    #             [] for leaf in range(len(leaves))
-    #         ]
-
-    #         index_to_key = [
-    #             None for leaf in range(len(leaves))
-    #         ]
-
-    #         index_to_key_filename = f'index_to_key_level_{current_level}'
-
-    #         args = []
-
-    #         # Gather arguments needed to send out to processes, and create index
-    #         # mapping
-    #         for target_idx, target in enumerate(leaves):
-
-    #             interaction_list = hilbert.get_interaction_list(target)
-
-    #             # Create index mapping for looking up the m2l operator
-    #             index_to_key[target_idx] = interaction_list
-
-    #             # Add arg to args for parallel mapping
-    #             arg = (
-    #                 target, kernel, surface, config['alpha_inner'],
-    #                 octree.center, octree.radius, dc2e_v, dc2e_u, interaction_list
-    #                 )
-
-    #             args.append(arg)
-
-    #         # Submit tasks to process pool
-    #         m2l = pool.starmap(compute_m2l_matrices, args)
-
-    #         # Convert results to matrix
-    #         m2l = np.array([np.array(l) for l in m2l])
-
-    #         print(f"Saving Dense M2L Operators for level {current_level}")
-    #         data.save_pickle(
-    #             m2l, m2l_filename, m2l_dirpath
-    #         )
-    #         data.save_pickle(
-    #             index_to_key, index_to_key_filename, m2l_dirpath
-    #         )
-
-        current_level += 1
-    return
+        db['m2l']['dense'][node] = m2l_matrix
 
 
 def main(**config):
@@ -453,8 +399,8 @@ def main(**config):
     # Step 3: Compute M2M/L2L operators
     compute_m2m_and_l2l(
         config, db, surface, kernel, uc2e_u, uc2e_v, dc2e_u, dc2e_v,
-        x0, r0        
-        )
+        x0, r0
+    )
 
     # Step 4: Compute M2L operators
     # compute_m2l(config, db, depth, complete, v)
