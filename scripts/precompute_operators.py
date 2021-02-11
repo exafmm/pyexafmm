@@ -24,6 +24,66 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
 
+
+def compute_dense_m2l_cpu(
+        target, kernel, surface, alpha_inner, x0,
+        r0, dc2e_v, dc2e_u, interaction_list,
+    ):
+    # Get level
+    level = morton.find_level(target)
+    scale = kernel.scale(level)
+
+    # Container for results
+    m2l_matrices = []
+
+
+    # Compute target check surface
+    target_center = morton.find_physical_center_from_key(
+        key=target,
+        x0=x0,
+        r0=r0
+    )
+
+    target_check_surface = operator.scale_surface(
+        surface=surface,
+        radius=r0,
+        level=level,
+        center=target_center,
+        alpha=alpha_inner
+    )
+
+    # Compute m2l matrices
+    for source in interaction_list:
+
+        source_center = morton.find_physical_center_from_key(
+            key=source,
+            x0=x0,
+            r0=r0
+        )
+
+        source_equivalent_surface = operator.scale_surface(
+            surface=surface,
+            radius=r0,
+            level=level,
+            center=source_center,
+            alpha=alpha_inner
+        )
+
+        se2tc = operator.gram_matrix(
+            kernel_function=kernel.eval,
+            sources=source_equivalent_surface,
+            targets=target_check_surface
+        )
+
+        tmp = np.matmul(dc2e_u, se2tc)
+
+        m2l_matrix = np.matmul(scale*dc2e_v, tmp)
+
+        m2l_matrices.append(m2l_matrix)
+
+    return m2l_matrices
+
+
 def compute_dense_m2l(
         target, kernel, surface, alpha_inner, x0, r0,
         dc2e_v, dc2e_u, interaction_list,
@@ -64,9 +124,6 @@ def compute_dense_m2l(
     #  Allocate block matrices for dc2e components with redundancy
     n_blocks = len(interaction_list)
     x_dim, y_dim = dc2e_u.shape
-    dc2e_u_block_cpu = np.zeros(shape=(x_dim, n_blocks*y_dim), dtype=np.float64)
-    dc2e_v_block_cpu = np.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
-
     dc2e_v = scale*dc2e_v
 
     # Compute target check surface
@@ -87,15 +144,15 @@ def compute_dense_m2l(
     # Allocate a block matrix for the se2tc matrices
     se2tc_block_cpu = np.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
 
+    # Allocate space to store results
+    m2l_matrix_gpu = cp.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
+
+    start = time.time()
     for i in range(n_blocks):
 
         # Block indices
         l_idx = i*x_dim
         r_idx = (i+1)*x_dim
-
-        # Allocate redundant copies of dc2e components
-        dc2e_u_block_cpu[:, l_idx:r_idx] = dc2e_u
-        dc2e_v_block_cpu[l_idx:r_idx, :] = dc2e_v
 
         # Compute se2tc matrices for each source
         source = interaction_list[i]
@@ -123,19 +180,25 @@ def compute_dense_m2l(
         # Allocate se2tc matrices to blocked matrix
         se2tc_block_cpu[l_idx:r_idx, :] = se2tc
 
+    print(f'First Loop time {time.time()-start:.5f} s')
     # Transfer data to GPU for matrix product
-    dc2e_u_block_gpu = cp.asarray(dc2e_u_block_cpu)
-    dc2e_v_block_gpu = cp.asarray(dc2e_v_block_cpu)
+    dc2e_u_gpu = cp.asarray(dc2e_u)
+    dc2e_v_gpu = cp.asarray(dc2e_v)
     se2tc_block_gpu = cp.asarray(se2tc_block_cpu)
 
-    tmp_gpu = cp.matmul(dc2e_u_block_gpu, se2tc_block_gpu)
+    # Compute matmul
+    start = time.time()
+    for i in range(n_blocks):
+        # Block indices
+        l_idx = i*x_dim
+        r_idx = (i+1)*x_dim
 
-    m2l_matrix_gpu = cp.matmul(dc2e_v_block_gpu, tmp_gpu)
+        tmp_gpu = cp.matmul(dc2e_u_gpu, se2tc_block_gpu[l_idx:r_idx, :])
+        m2l_matrix_gpu[l_idx:r_idx, :] = cp.matmul(dc2e_v_gpu, tmp_gpu)
+    print(f'Second Loop time {time.time()-start:.5f} s')
 
     # Transfer result back to CPU
-    m2l_matrix_cpu = m2l_matrix_gpu.get()
-
-    return m2l_matrix_cpu
+    return m2l_matrix_gpu.get()
 
 
 def compute_surface(config, db):

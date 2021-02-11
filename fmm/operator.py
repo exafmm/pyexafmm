@@ -102,7 +102,7 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
-# @numba.njit(cache=True)
+@numba.njit(cache=True)
 def gram_matrix(kernel_function, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
