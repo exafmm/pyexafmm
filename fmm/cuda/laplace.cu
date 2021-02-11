@@ -26,7 +26,6 @@ extern "C" {
         }
      }
 
-
     __global__ void gram_matrix(double3* sources, double3* targets, double* result, int ntargets, int nsources)
     {
 
