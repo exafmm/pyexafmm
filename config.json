@@ -1,8 +1,8 @@
 {
     "experiment": "fmm",
-    "npoints": 123,
+    "npoints": 1000,
     "data_type": "random",
-    "order": 2,
+    "order": 7,
     "kernel": "laplace",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,

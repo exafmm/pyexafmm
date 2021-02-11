@@ -7,7 +7,7 @@ import pathlib
 import numba
 import numpy as np
 
-from fmm.density import Potential
+# from fmm.density import Potential
 
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
@@ -102,7 +102,7 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
-@numba.njit(cache=True)
+# @numba.njit(cache=True)
 def gram_matrix(kernel_function, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
@@ -221,32 +221,32 @@ def compute_check_to_equivalent_inverse(
     return c2e_inverse_v, c2e_inverse_u
 
 
-def p2p(kernel_function, targets, sources, source_densities):
-    """
-    Directly calculate potential at m targets from n sources.
+# def p2p(kernel_function, targets, sources, source_densities):
+#     """
+#     Directly calculate potential at m targets from n sources.
 
-    Parameters:
-    -----------
-    kernel_function : function
-    targets : np.array(shape=(m, 3))
-    sources : np.array(shape=(n, 3))
-    source_densities : np.array(shape=(n))
+#     Parameters:
+#     -----------
+#     kernel_function : function
+#     targets : np.array(shape=(m, 3))
+#     sources : np.array(shape=(n, 3))
+#     source_densities : np.array(shape=(n))
 
-    Returns:
-    --------
-    Potential
-        Potential denities at all target points from from all sources.
-    """
+#     Returns:
+#     --------
+#     Potential
+#         Potential denities at all target points from from all sources.
+#     """
 
-    # Potential at target locations
-    target_densities = np.zeros(shape=(len(targets)))
+#     # Potential at target locations
+#     target_densities = np.zeros(shape=(len(targets)))
 
-    for i, target in enumerate(targets):
-        potential = 0
-        for j, source in enumerate(sources):
-            source_density = source_densities[j]
-            potential += kernel_function(target, source)*source_density
+#     for i, target in enumerate(targets):
+#         potential = 0
+#         for j, source in enumerate(sources):
+#             source_density = source_densities[j]
+#             potential += kernel_function(target, source)*source_density
 
-        target_densities[i] = potential
+#         target_densities[i] = potential
 
-    return Potential(targets, target_densities)
+#     return Potential(targets, target_densities)
