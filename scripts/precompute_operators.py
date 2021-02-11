@@ -22,7 +22,10 @@ import utils.time
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
+CUDA_FILEPATH = PARENT / 'fmm/cuda'
 
+TPB = 32 # Threads Per Block for GPU
+BLOCK_DIMENSIONS = (TPB, TPB)
 
 
 def compute_dense_m2l_cpu(
@@ -86,42 +89,16 @@ def compute_dense_m2l_cpu(
 
 def compute_dense_m2l(
         target, kernel, surface, alpha_inner, x0, r0,
-        dc2e_v, dc2e_u, interaction_list,
+        dc2e_v, dc2e_u, interaction_list, gram_matrix_gpu
     ):
     """
-    Data has to be passed to each process in order to compute the m2l matrices
-        associated with a given target key. This method takes the required data
-        and computes all the m2l matrices for a given target.
-
-    Parameters:
-    -----------
-    target : np.int64
-        Target Hilbert Key.
-    kernel : function
-    surface : np.array(shape=(n, 3), dtype=np.float64)
-    alpha_inner : np.float64
-        Ratio between side length of shifted/scaled node and original node.
-    x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Center of Octree's root node.
-    r0 : np.float64
-        Half side length of Octree's root node.
-    dc2e_v : np.array(shape=(n, n))
-        First component of the inverse of the downward-check-to-equivalent
-        Gram matrix at level 0.
-    dc2e_v : np.array(shape=(n, n))
-        Second component of the inverse of the downward-check-to-equivalent
-        Gram matrix at level 0.
-
-    Returns:
-    --------
-    np.array(shape=(n, n))
-        Dense M2L matrix associated with this target.
+    Compute Dense M2L matrix.
     """
     # Get level and scale
     level = morton.find_level(target)
     scale = kernel.scale(level)
 
-    #  Allocate block matrices for dc2e components with redundancy
+    # Block matrices, one block per interaction list item.
     n_blocks = len(interaction_list)
     x_dim, y_dim = dc2e_u.shape
     dc2e_v = scale*dc2e_v
@@ -141,22 +118,28 @@ def compute_dense_m2l(
         alpha=alpha_inner
     )
 
-    # Allocate a block matrix for the se2tc matrices
-    se2tc_block_cpu = np.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
+    # Transfer target check surface to GPU
+    target_check_surface_gpu = cp.asarray(target_check_surface)
+
+    # Allocate space for all source equivalent surfaces on the GPU
+    source_equivalent_surfaces_gpu = cp.zeros(shape=(n_blocks*x_dim, 3), dtype=np.float64)
+
+    # Allocate a block matrix for the se2tc matrices on the GPU
+    se2tc_block_gpu = cp.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
 
     # Allocate space to store results
     m2l_matrix_gpu = cp.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
 
-    start = time.time()
+    # Compute equivalent surface for each source, and transfer to GPU
     for i in range(n_blocks):
 
         # Block indices
         l_idx = i*x_dim
         r_idx = (i+1)*x_dim
 
-        # Compute se2tc matrices for each source
         source = interaction_list[i]
 
+        # Compute surface
         source_center = morton.find_physical_center_from_key(
             key=source,
             x0=x0,
@@ -171,22 +154,38 @@ def compute_dense_m2l(
             alpha=alpha_inner
         )
 
-        se2tc = operator.gram_matrix(
-            kernel_function=kernel.eval,
-            sources=source_equivalent_surface,
-            targets=target_check_surface
+        # Transfer to GPU
+        source_equivalent_surfaces_gpu[l_idx:r_idx, :] = cp.asarray(source_equivalent_surface)
+
+    # GPU grid dimensions derived from size of problem
+    grid_dimensions = (int(np.ceil(x_dim/32)), int(np.ceil(y_dim/32)))
+
+    start = time.time()
+    # Compute gram matrix for each source/target pair in a loop
+    for i in range(n_blocks):
+        l_idx = i*x_dim
+        r_idx = (i+1)*x_dim
+
+        # Index sources with which to compute gram matrix
+        gram_matrix_gpu(
+            grid_dimensions,
+            BLOCK_DIMENSIONS,
+            (
+                source_equivalent_surfaces_gpu[l_idx:r_idx,:],
+                target_check_surface_gpu,
+                se2tc_block_gpu[l_idx:r_idx, :],
+                x_dim,
+                y_dim
+            )
         )
 
-        # Allocate se2tc matrices to blocked matrix
-        se2tc_block_cpu[l_idx:r_idx, :] = se2tc
-
     print(f'First Loop time {time.time()-start:.5f} s')
-    # Transfer data to GPU for matrix product
+
+    # Transfer dc2e components to GPU
     dc2e_u_gpu = cp.asarray(dc2e_u)
     dc2e_v_gpu = cp.asarray(dc2e_v)
-    se2tc_block_gpu = cp.asarray(se2tc_block_cpu)
 
-    # Compute matmul
+    # Compute dense M2L matrix on GPU
     start = time.time()
     for i in range(n_blocks):
         # Block indices
@@ -195,6 +194,7 @@ def compute_dense_m2l(
 
         tmp_gpu = cp.matmul(dc2e_u_gpu, se2tc_block_gpu[l_idx:r_idx, :])
         m2l_matrix_gpu[l_idx:r_idx, :] = cp.matmul(dc2e_v_gpu, tmp_gpu)
+
     print(f'Second Loop time {time.time()-start:.5f} s')
 
     # Transfer result back to CPU
@@ -414,6 +414,15 @@ def compute_m2m_and_l2l(
 
 def compute_m2l(config, db, kernel, surface, depth, x0, r0, dc2e_v, dc2e_u, complete):
 
+    # Instantiate GPU kernel object
+    kernel_src_filepath = CUDA_FILEPATH / f"{config['kernel']}.cu"
+
+    with open(kernel_src_filepath, 'r') as f:
+        kernel_src = f.read()
+
+    module = cp.RawModule(code=kernel_src)
+    gram_matrix_gpu = module.get_function('gram_matrix')
+
     # This whole loop can be multi-processed
     for i in range(len(complete)):
         node = complete[i]
@@ -423,7 +432,7 @@ def compute_m2l(config, db, kernel, surface, depth, x0, r0, dc2e_v, dc2e_u, comp
         if len(v_list) > 0:
             m2l_matrix = compute_dense_m2l(
                 node, kernel, surface, config['alpha_inner'],
-                x0, r0, dc2e_v, dc2e_u, v_list
+                x0, r0, dc2e_v, dc2e_u, v_list, gram_matrix_gpu
             )
 
         else:
