@@ -39,7 +39,6 @@ def compute_dense_m2l_cpu(
     # Container for results
     m2l_matrices = []
 
-
     # Compute target check surface
     target_center = morton.find_physical_center_from_key(
         key=target,
@@ -160,7 +159,7 @@ def compute_dense_m2l(
     # GPU grid dimensions derived from size of problem
     grid_dimensions = (int(np.ceil(x_dim/32)), int(np.ceil(y_dim/32)))
 
-    start = time.time()
+    # start = time.time()
     # Compute gram matrix for each source/target pair in a loop
     for i in range(n_blocks):
         l_idx = i*x_dim
@@ -179,14 +178,14 @@ def compute_dense_m2l(
             )
         )
 
-    print(f'First Loop time {time.time()-start:.5f} s')
+    # print(f'First Loop time {time.time()-start:.5f} s')
 
     # Transfer dc2e components to GPU
     dc2e_u_gpu = cp.asarray(dc2e_u)
     dc2e_v_gpu = cp.asarray(dc2e_v)
 
     # Compute dense M2L matrix on GPU
-    start = time.time()
+    # start = time.time()
     for i in range(n_blocks):
         # Block indices
         l_idx = i*x_dim
@@ -195,7 +194,7 @@ def compute_dense_m2l(
         tmp_gpu = cp.matmul(dc2e_u_gpu, se2tc_block_gpu[l_idx:r_idx, :])
         m2l_matrix_gpu[l_idx:r_idx, :] = cp.matmul(dc2e_v_gpu, tmp_gpu)
 
-    print(f'Second Loop time {time.time()-start:.5f} s')
+    # print(f'Second Loop time {time.time()-start:.5f} s')
 
     # Transfer result back to CPU
     return m2l_matrix_gpu.get()
@@ -412,7 +411,7 @@ def compute_m2m_and_l2l(
     db['l2l'] = l2l
 
 
-def compute_m2l(config, db, kernel, surface, depth, x0, r0, dc2e_v, dc2e_u, complete):
+def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
 
     # Instantiate GPU kernel object
     kernel_src_filepath = CUDA_FILEPATH / f"{config['kernel']}.cu"
@@ -423,10 +422,24 @@ def compute_m2l(config, db, kernel, surface, depth, x0, r0, dc2e_v, dc2e_u, comp
     module = cp.RawModule(code=kernel_src)
     gram_matrix_gpu = module.get_function('gram_matrix')
 
+    if 'm2l' in db.keys():
+        del db['m2l']
+
+    else:
+        db.create_group('m2l')
+        group = db['m2l']
+        group.create_group('dense')
+
+
     # This whole loop can be multi-processed
-    for i in range(len(complete)):
+    progress = 0
+    n_complete = len(complete)
+    for i in range(n_complete):
+
         node = complete[i]
-        v_list = db['interaction_lists']['v'][str(node)][...]
+        node_str = str(node)
+        node_idx = db['key_to_index'][node_str][0]
+        v_list = db['interaction_lists']['v'][node_idx]
         v_list = v_list[v_list != -1]
 
         if len(v_list) > 0:
@@ -438,10 +451,10 @@ def compute_m2l(config, db, kernel, surface, depth, x0, r0, dc2e_v, dc2e_u, comp
         else:
             m2l_matrix = np.array([-1])
 
-        if 'm2l' in db.keys():
-            del db['m2l']['dense'][node]
+        db['m2l']['dense'][node_str] = m2l_matrix
 
-        db['m2l']['dense'][node] = m2l_matrix
+        progress += 1
+        print(f'computed {progress}/{n_complete} m2l operators')
 
 
 def main(**config):
@@ -475,7 +488,7 @@ def main(**config):
     )
 
     # Step 4: Compute M2L operators
-    # compute_m2l(config, db, depth, complete, v)
+    compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete)
 
     minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
     print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
