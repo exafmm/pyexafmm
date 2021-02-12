@@ -7,8 +7,6 @@ import pathlib
 import numba
 import numpy as np
 
-# from fmm.density import Potential
-
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent

@@ -34,7 +34,7 @@ def compute_dense_m2l_cpu(
     ):
     # Get level
     level = morton.find_level(target)
-    scale = kernel.scale(level)
+    scale = kernel['scale'](level)
 
     # Container for results
     m2l_matrices = []
@@ -72,7 +72,7 @@ def compute_dense_m2l_cpu(
         )
 
         se2tc = operator.gram_matrix(
-            kernel_function=kernel.eval,
+            kernel_function=kernel['eval'],
             sources=source_equivalent_surface,
             targets=target_check_surface
         )
@@ -95,7 +95,7 @@ def compute_dense_m2l(
     """
     # Get level and scale
     level = morton.find_level(target)
-    scale = kernel.scale(level)
+    scale = kernel['scale'](level)
 
     # Block matrices, one block per interaction list item.
     n_blocks = len(interaction_list)
@@ -304,7 +304,7 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
     )
 
     uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function=kernel,
+        kernel_function=kernel['eval'],
         check_surface=upward_check_surface,
         equivalent_surface=upward_equivalent_surface,
         cond=None
@@ -472,7 +472,7 @@ def main(**config):
     x0, r0, depth, octree, complete, u, x, v, w = compute_octree(config, db)
 
     # Load required Python objects
-    kernel = KERNELS[config['kernel']]()
+    kernel = KERNELS[config['kernel']]
 
     # Step 1: Compute a surface of a given order
     surface = compute_surface(config, db)
