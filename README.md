@@ -61,16 +61,16 @@ This is done via a `config.json` file,
 }
 ```
 
-|Parameter    | Description |
-|---	    |---	 |
-| `experiment`	| Order of local and multipole expansions. |
-| `npoints` | Number of points to generate in test data. |
-| `data_type` | Type of test data to generate. |
-| `order`	| Order of local and multipole expansions. |
-| `kernel` | Kernel function to use. |
-| `alpha_inner`	| Relative size of inner surface's radius. |	|
-| `alpha_outer`	| Relative size of outer surface's radius. |
-| `max_level` | Depth of octree to use in simulations. |
+|Parameter      | Description                                        |
+|--------------	|-----------------------------------------------	 |
+| `experiment`	| Order of local and multipole expansions.           |
+| `npoints`     | Number of points to generate in test data.         |
+| `data_type`   | Type of test data to generate.                     |
+| `order`	    | Order of local and multipole expansions.           |
+| `kernel`      | Kernel function to use.                            |
+| `alpha_inner`	| Relative size of inner surface's radius.           |
+| `alpha_outer`	| Relative size of outer surface's radius.           |
+| `max_level`   | Depth of octree to use in simulations.             |
 | `target_rank` | Target rank in low-rank compression of M2L matrix. |
 
 PyExaFMM provides some simple test-data generation functions, which can be configured for. However, to use your own data, simply create a HDF5 file, with the same name as `experiment` in your configuration file, with the following group hierarchy,
