@@ -3,14 +3,24 @@ PyExaFMM
 </h1>
 
 The goal of PyExaFMM is to develop a highly performant implementation of the
-particle FMM that is written in Python. The utility of FMM algorithms are hindered
-by their relatively complex implementation, especially for achieving high-performance.
+particle FMM that is written in Python.
+
+The utility of FMM algorithms are hindered  by their relatively complex implementation, especially for achieving high-performance.
+
 PyExaFMM is a particle kernel-independent FMM based on [1], written in pure Python
 with some extensions. Representing a compromise between portability, east of use,
 and performance. Optimisations are currently implemented  using Numba, Numpy, and
-Multiprocessing. However the vision of the project is to eventually provide
-optimisations taking advantage distributed and heterogenous computing environments,
-and to scale from desktops to HPC clusters.
+CUDA acceleration.
+
+The vision of the project is to eventually provide optimisations fully taking advantage
+distributed and heterogenous computing environments, and to scale from desktops to HPC clusters.
+Most importantly however, Python will allow non-specialist scientists and engineers to solve
+particle FMM problems, from a jupyter notebook!
+
+## System Requirements
+
+An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
+
 
 ## Install
 
@@ -28,60 +38,71 @@ conda build conda.recipe
 conda install --use-local pyexafmm
 
 # (For developers) Install in editable mode
-pip3 install -e .
+python setup.py develop
 ```
 
 ## Configure
 
-After installation, use provided scripts to precompute and cache FMM operators,
+After installation, you must precompute and cache the FMM operators for your dataset,
 
-e.g.
-
-```bash
-exafmm compute-operators
-```
-
-Make sure to configure the FMM simulation using the `config.json` file.
+This is done via a `config.json` file,
 
 ```json
 {
-    "order": 3,
-    "operator_dirname": "precomputed_operators_order_3_test",
-    "surface_filename": "surface",
+    "experiment": "fmm",
+    "npoints": 10000,
+    "data_type": "random",
+    "order": 5,
     "kernel": "laplace",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
-    "data_dirname": "data_1k_random_test",
-    "source_filename": "sources",
-    "target_filename": "targets",
-    "source_densities_filename": "source_densities",
-    "octree_max_level": 3,
-    "target_rank": 3,
-    "m2l_compressed_filename": "m2l_compressed"
+    "max_level": 10,
+    "max_points": 100,
+    "target_rank": 1
 }
 ```
 
 |Parameter    | Description |
 |---	    |---	 |
+
+| `experiment`	| Order of local and multipole expansions. |
+| `npoints` | Number of points to generate in test data. |
+| `data_type` | Type of test data to generate. |
 | `order`	| Order of local and multipole expansions. |
-| `operator_dirname`	| Directory in which to store operator precomputations. |	|
-| `surface_filename`	| Filename to use for cached surface. |
 | `kernel` | Kernel function to use. |
 | `alpha_inner`	| Relative size of inner surface's radius. |	|
 | `alpha_outer`	| Relative size of outer surface's radius. |
-| `data_dirname` | Directory in which to store particle data. |
-| `source_filename` | Filename to use for source particles generated. |
-| `target_filename` | Filename to use for target particles generated. |
-| `source_densities_filename` | Filename to use for source densities generated. |
-| `octree_max_level` | Depth of octree to use in simulations. |
+| `max_level` | Depth of octree to use in simulations. |
 | `target_rank` | Target rank in low-rank compression of M2L matrix. |
-| `m2l_compressed_filename` | Filename to use for compressed M2L matrix. |
 
+PyExaFMM provides some simple test-data generation functions, which can be configured for. However, to use your own data, simply create a HDF5 file, with the same name as `experiment` in your configuration file, with the following group hierarchy,
+
+```bash
+particle_data/
+    sources/
+    source_densities/
+    targets/
+```
+
+where `sources` and `targets` are of shape `(nsources/ntargets, 3)`, and source densities is of shape `(nsources, 1)`.
+
+The CLI workflow is as follows,
+
+```bash
+
+# Generate test data (optional)
+fmm generate-test-data
+
+# Run operator pre-computations
+fmm compute-operators
+```
+
+Once this is done, you are ready to start programming with PyExaFMM.
 
 ## CLI
 
 ```bash
-exafmm [OPTIONS] COMMAND [ARGS]
+fmm [OPTIONS] COMMAND [ARGS]
 ```
 
 |Command    | Action |
@@ -90,10 +111,7 @@ exafmm [OPTIONS] COMMAND [ARGS]
 | `test`	| Run test suite	|
 | `lint`	| Run project linter 	|
 | `compute-operators` | Run operator pre-computations |
-| `generate-test-data [npoints] [dtype]` | Generate `npoints` random sources & targets `dtype = random or separated`|
-| `recompute-operators` | Clear cache of computed operators, and recalculate with current the config |
-| `compress-m2l` | Compress M2L Operators computed via `compute-operators` |
-| `recompress-m2l` | Clear cache, and re-compress M2L operators |
+| `generate-test-data` | Generate `npoints` sources & targets |
 
 
 ## References
