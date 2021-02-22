@@ -39,7 +39,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'exafmm=ci.cli:cli'
+            'fmm=ci.cli:cli'
         ]
     },
 )
