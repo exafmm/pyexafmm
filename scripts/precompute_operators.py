@@ -8,7 +8,6 @@ import sys
 import time
 
 import cupy as cp
-from numba.core.compiler import Flags
 import numpy as np
 
 import adaptoctree.morton as morton
@@ -16,9 +15,8 @@ import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS
 import fmm.operator as operator
-from fmm.operator import BLOCK_HEIGHT, BLOCK_WIDTH, implicit_gram_matrix
+from fmm.operator import BLOCK_HEIGHT, BLOCK_WIDTH
 import utils.data as data
-import utils.multiproc as multiproc
 import utils.time
 
 
@@ -28,67 +26,9 @@ PARENT = HERE.parent
 TPB = BLOCK_HEIGHT
 
 
-def compute_dense_m2l_cpu(
-        target, kernel, surface, alpha_inner, x0,
-        r0, dc2e_v, dc2e_u, interaction_list,
-    ):
-    # Get level
-    level = morton.find_level(target)
-    scale = kernel['scale'](level)
-
-    # Container for results
-    m2l_matrices = []
-
-    # Compute target check surface
-    target_center = morton.find_physical_center_from_key(
-        key=target,
-        x0=x0,
-        r0=r0
-    )
-
-    target_check_surface = operator.scale_surface(
-        surface=surface,
-        radius=r0,
-        level=level,
-        center=target_center,
-        alpha=alpha_inner
-    )
-
-    # Compute m2l matrices
-    for source in interaction_list:
-
-        source_center = morton.find_physical_center_from_key(
-            key=source,
-            x0=x0,
-            r0=r0
-        )
-
-        source_equivalent_surface = operator.scale_surface(
-            surface=surface,
-            radius=r0,
-            level=level,
-            center=source_center,
-            alpha=alpha_inner
-        )
-
-        se2tc = operator.gram_matrix(
-            kernel_function=kernel['eval'],
-            sources=source_equivalent_surface,
-            targets=target_check_surface
-        )
-
-        tmp = np.matmul(dc2e_u, se2tc)
-
-        m2l_matrix = np.matmul(scale*dc2e_v, tmp)
-
-        m2l_matrices.append(m2l_matrix)
-
-    return m2l_matrices
-
-
 def compute_compressed_m2l(
         node, kernel, surface, alpha_inner, x0, r0, ddc2e_v, ddc2e_u, v_list,
-        k,
+        k, implicit_gram_matrix
     ):
     """
     Compute compressed representation of M2L matrices, using Randomised SVD.
@@ -99,7 +39,8 @@ def compute_compressed_m2l(
 
     # Get level
     level = morton.find_level(node)
-    scale = kernel['scale'](level)
+    kernel_scale = KERNELS[kernel]['scale']
+    scale = kernel_scale(level)
 
     # Compute target check surface
     target_center = morton.find_physical_center_from_key(
@@ -149,7 +90,6 @@ def compute_compressed_m2l(
         csources[lidx:ridx] = source_equivalent_surface
 
     dsources = cp.asarray(csources)
-
 
     # Height and width of Gram matrix
     height = nsources
@@ -282,6 +222,7 @@ def compute_octree(config, db):
 
 def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
+    kernel_function = KERNELS[kernel]['eval']
     print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
 
     upward_equivalent_surface = operator.scale_surface(
@@ -301,14 +242,14 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
     )
 
     uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function=kernel['eval'],
+        kernel_function=kernel_function,
         check_surface=upward_check_surface,
         equivalent_surface=upward_equivalent_surface,
         cond=None
     )
 
     dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function=kernel['eval'],
+        kernel_function=kernel_function,
         check_surface=upward_equivalent_surface,
         equivalent_surface=upward_check_surface,
         cond=None
@@ -359,8 +300,9 @@ def compute_m2m_and_l2l(
 
     loading = len(child_centers)
 
-    kernel_function = kernel['eval']
-    scale = kernel['scale'](child_level)
+    kernel_function = KERNELS[kernel]['eval']
+    kernel_scale = KERNELS[kernel]['scale']
+    scale = kernel_scale(child_level)
 
     print(f"Computing M2M & L2L Operators of Order {config['order']}")
     for child_idx, child_center in enumerate(child_centers):
@@ -410,9 +352,13 @@ def compute_m2m_and_l2l(
 
 def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
 
+    # Get required GPU kernel
+    implicit_gram_matrix = KERNELS[kernel]['implicit_gram']
+
     # Transfer required data to GPU
     ddc2e_v = cp.asarray(dc2e_v.astype(np.float32))
     ddc2e_u = cp.asarray(dc2e_u.astype(np.float32))
+
 
     # Required config, not explicitly passed
     k = config['target_rank']
@@ -439,7 +385,7 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
         if len(v_list) > 0:
             U, S, VT = compute_compressed_m2l(
                 node, kernel, surface, config['alpha_inner'],
-                x0, r0, ddc2e_v, ddc2e_u, v_list, k
+                x0, r0, ddc2e_v, ddc2e_u, v_list, k, implicit_gram_matrix
             )
 
             if node_str in group.keys():
@@ -467,7 +413,7 @@ def main(**config):
     x0, r0, depth, octree, complete, u, x, v, w = compute_octree(config, db)
 
     # Load required Python objects
-    kernel = KERNELS[config['kernel']]
+    kernel = config['kernel']
 
     # Step 1: Compute a surface of a given order
     surface = compute_surface(config, db)

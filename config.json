@@ -1,6 +1,6 @@
 {
     "experiment": "fmm",
-    "npoints": 100000,
+    "npoints": 10000,
     "data_type": "random",
     "order": 5,
     "kernel": "laplace",
@@ -8,5 +8,5 @@
     "alpha_outer": 2.95,
     "max_level": 10,
     "max_points": 100,
-    "target_rank": 3
+    "target_rank": 1
 }

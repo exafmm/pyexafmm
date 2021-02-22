@@ -107,7 +107,6 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
-# @numba.njit(cache=True)
 def gram_matrix(kernel_function, sources, targets):
     """
     Compute Gram matrix of given kernel function. Elements are the pairwise
@@ -142,15 +141,15 @@ def gram_matrix(kernel_function, sources, targets):
 
 
 @cuda.jit
-def implicit_gram_matrix(
-    sources,
-    targets,
-    rhs,
-    result,
-    height,
-    width,
-    idx
-):
+def laplace_implicit_gram_matrix(
+        sources,
+        targets,
+        rhs,
+        result,
+        height,
+        width,
+        idx
+    ):
     """
     Implicitly apply the Gram matrix to a vector, computing Green's function on
         the fly on the device, and multiplying by random matrices to approximate
@@ -295,6 +294,7 @@ def compute_check_to_equivalent_inverse(
         and downard check-to-equivalent inverse stored as two components.
     """
     # Compute Gram Matrix of upward check to upward equivalent surfaces
+
     c2e = gram_matrix(
         kernel_function=kernel_function,
         sources=equivalent_surface,
