@@ -21,7 +21,6 @@ particle FMM problems, from a jupyter notebook!
 
 An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
 
-
 ## Install
 
 Build from source, and install locally into a Conda/Miniconda environment
@@ -105,13 +104,13 @@ Once this is done, you are ready to start programming with PyExaFMM.
 fmm [OPTIONS] COMMAND [ARGS]
 ```
 
-|Command    | Action |
-|---	    |---	 |
-| `build`	| Build dev version in current python env |
-| `test`	| Run test suite	|
-| `lint`	| Run project linter 	|
-| `compute-operators` | Run operator pre-computations |
-| `generate-test-data` | Generate `npoints` sources & targets |
+|Command               | Action |
+|--------------        |------------------------------------	 |
+| `build`	           | Build dev version in current python env |
+| `test`	           | Run test suite	                         |
+| `lint`	           | Run project linter 	                 |
+| `compute-operators`  | Run operator pre-computations           |
+| `generate-test-data` | Generate `npoints` sources & targets    |
 
 
 ## References
