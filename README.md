@@ -77,9 +77,9 @@ PyExaFMM provides some simple test-data generation functions, which can be confi
 
 ```bash
 particle_data/
-    sources/
-    source_densities/
-    targets/
+    |_ sources/
+    |_ source_densities/
+    |_ targets/
 ```
 
 where `sources` and `targets` are of shape `(nsources/ntargets, 3)`, and source densities is of shape `(nsources, 1)`.
