@@ -15,6 +15,7 @@ import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS
 import fmm.operator as operator
+from fmm.operator import BLOCK_HEIGHT, BLOCK_WIDTH
 import utils.data as data
 import utils.multiproc as multiproc
 import utils.time
@@ -22,10 +23,8 @@ import utils.time
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
-CUDA_FILEPATH = PARENT / 'fmm/cuda'
 
-TPB = 32 # Threads Per Block for GPU
-BLOCK_DIMENSIONS = (TPB, TPB)
+TPB = BLOCK_HEIGHT
 
 
 def compute_dense_m2l_cpu(
@@ -86,25 +85,107 @@ def compute_dense_m2l_cpu(
     return m2l_matrices
 
 
-def compute_dense_m2l(
-        target, kernel, surface, alpha_inner, x0, r0,
-        dc2e_v, dc2e_u, interaction_list, gram_matrix_gpu
-    ):
-    """
-    Compute Dense M2L matrix.
-    """
-    # Get level and scale
-    level = morton.find_level(target)
-    scale = kernel['scale'](level)
 
-    # Block matrices, one block per interaction list item.
-    n_blocks = len(interaction_list)
-    x_dim, y_dim = dc2e_u.shape
-    dc2e_v = scale*dc2e_v
+@cuda.jit
+def implicit_gram_matrix(
+    sources,
+    targets,
+    rhs,
+    result,
+    height,
+    width,
+    idx
+):
+    """
+    Implicitly apply gram matrix to a vector, computing Green's
+        function on the fly on the device, and multiplying by random
+        matrices to approximate the basis.
+
+    Parameters:
+    -----------
+    sources : np.array(shape=(nsources, 3))
+        nsources rows of gram matrix
+    targets : np.array(shape=(ntargets, 3))
+        ntargets columns of gram matrix
+    rhs : np.array(shape=(ntargets, nrhs))
+        Multiple right hand sides, indexed by 'idx'
+    result : np.array(shape=(height, nrhs))
+        Dimensions of result matrix defined by matrix height
+        and number of right hand sides
+    height : int
+        'height' of implicit gram matrix. Defined by m, where
+        m > n, and m is either ntargets or nsources.
+    width : int
+        'width' of implicit gram matrix.
+    idx: int
+        RHS index.
+    """
+
+    blockWidth = cuda.shared.array(1, nb.int32)
+    blockxInd = cuda.shared.array(1, nb.int32)
+    blockyInd = cuda.shared.array(1, nb.int32)
+
+    # Calculate once, and share amongs thread-block
+    if cuda.threadIdx.x == 0:
+        if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
+            blockWidth[0] = nb.int32(BLOCK_WIDTH)
+        else:
+            blockWidth[0] = nb.int32(width % BLOCK_WIDTH)
+
+        blockxInd[0] = nb.int32(cuda.blockIdx.x*BLOCK_WIDTH)
+        blockyInd[0] = nb.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
+
+    cuda.syncthreads()
+
+    # Extract tile of RHS, of size up to BLOCK_WIDTH
+    tmp = cuda.shared.array(BLOCK_WIDTH, nb.float32)
+
+    if cuda.threadIdx.x < blockWidth[0]:
+        tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
+
+    cuda.syncthreads()
+
+    # Accumulate matvec of tile into variable
+    row_sum = 0
+
+    threadyInd = blockyInd[0]+cuda.threadIdx.x
+
+    if threadyInd < height:
+        for i in range(blockWidth[0]):
+            col_idx = blockxInd[0] + i
+            row_idx = threadyInd
+            source = sources[row_idx]
+            target  = targets[col_idx]
+
+            sx = source[0]
+            sy = source[1]
+            sz = source[2]
+
+            tx = target[0]
+            ty = target[1]
+            tz = target[2]
+
+            row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
+
+    cuda.atomic.add(result, (threadyInd, idx), row_sum)
+
+
+def compute_compressed_m2l(node, kernel, surface, alpha_inner, x0, r0, dc2e_v, dc2e_u, v_list):
+    """
+    Compute compressed representation of M2L matrices, using RSVD.
+    """
+
+    # Preallocate space on the GPU for sources and targets
+
+    # ...
+
+    # Get level
+    level = morton.find_level(node)
+    scale = kernel['scale'](level)
 
     # Compute target check surface
     target_center = morton.find_physical_center_from_key(
-        key=target,
+        key=node,
         x0=x0,
         r0=r0
     )
@@ -117,28 +198,11 @@ def compute_dense_m2l(
         alpha=alpha_inner
     )
 
-    # Transfer target check surface to GPU
-    target_check_surface_gpu = cp.asarray(target_check_surface)
 
-    # Allocate space for all source equivalent surfaces on the GPU
-    source_equivalent_surfaces_gpu = cp.zeros(shape=(n_blocks*x_dim, 3), dtype=np.float64)
 
-    # Allocate a block matrix for the se2tc matrices on the GPU
-    se2tc_block_gpu = cp.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
+    # Compute m2l matrices
+    for source in interaction_list:
 
-    # Allocate space to store results
-    m2l_matrix_gpu = cp.zeros(shape=(n_blocks*x_dim, y_dim), dtype=np.float64)
-
-    # Compute equivalent surface for each source, and transfer to GPU
-    for i in range(n_blocks):
-
-        # Block indices
-        l_idx = i*x_dim
-        r_idx = (i+1)*x_dim
-
-        source = interaction_list[i]
-
-        # Compute surface
         source_center = morton.find_physical_center_from_key(
             key=source,
             x0=x0,
@@ -152,52 +216,6 @@ def compute_dense_m2l(
             center=source_center,
             alpha=alpha_inner
         )
-
-        # Transfer to GPU
-        source_equivalent_surfaces_gpu[l_idx:r_idx, :] = cp.asarray(source_equivalent_surface)
-
-    # GPU grid dimensions derived from size of problem
-    grid_dimensions = (int(np.ceil(x_dim/32)), int(np.ceil(y_dim/32)))
-
-    # start = time.time()
-    # Compute gram matrix for each source/target pair in a loop
-    for i in range(n_blocks):
-        l_idx = i*x_dim
-        r_idx = (i+1)*x_dim
-
-        # Index sources with which to compute gram matrix
-        gram_matrix_gpu(
-            grid_dimensions,
-            BLOCK_DIMENSIONS,
-            (
-                source_equivalent_surfaces_gpu[l_idx:r_idx,:],
-                target_check_surface_gpu,
-                se2tc_block_gpu[l_idx:r_idx, :],
-                x_dim,
-                y_dim
-            )
-        )
-
-    # print(f'First Loop time {time.time()-start:.5f} s')
-
-    # Transfer dc2e components to GPU
-    dc2e_u_gpu = cp.asarray(dc2e_u)
-    dc2e_v_gpu = cp.asarray(dc2e_v)
-
-    # Compute dense M2L matrix on GPU
-    # start = time.time()
-    for i in range(n_blocks):
-        # Block indices
-        l_idx = i*x_dim
-        r_idx = (i+1)*x_dim
-
-        tmp_gpu = cp.matmul(dc2e_u_gpu, se2tc_block_gpu[l_idx:r_idx, :])
-        m2l_matrix_gpu[l_idx:r_idx, :] = cp.matmul(dc2e_v_gpu, tmp_gpu)
-
-    # print(f'Second Loop time {time.time()-start:.5f} s')
-
-    # Transfer result back to CPU
-    return m2l_matrix_gpu.get()
 
 
 def compute_surface(config, db):
@@ -311,7 +329,7 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
     )
 
     dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function=kernel,
+        kernel_function=kernel['eval'],
         check_surface=upward_equivalent_surface,
         equivalent_surface=upward_check_surface,
         cond=None
@@ -362,8 +380,8 @@ def compute_m2m_and_l2l(
 
     loading = len(child_centers)
 
-    kernel_function = kernel.eval
-    scale = kernel.scale(child_level)
+    kernel_function = kernel['eval']
+    scale = kernel['scale'](child_level)
 
     print(f"Computing M2M & L2L Operators of Order {config['order']}")
     for child_idx, child_center in enumerate(child_centers):
@@ -413,15 +431,6 @@ def compute_m2m_and_l2l(
 
 def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
 
-    # Instantiate GPU kernel object
-    kernel_src_filepath = CUDA_FILEPATH / f"{config['kernel']}.cu"
-
-    with open(kernel_src_filepath, 'r') as f:
-        kernel_src = f.read()
-
-    module = cp.RawModule(code=kernel_src)
-    gram_matrix_gpu = module.get_function('gram_matrix')
-
     if 'm2l' in db.keys():
         del db['m2l']
 
@@ -430,8 +439,6 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
         group = db['m2l']
         group.create_group('dense')
 
-
-    # This whole loop can be multi-processed
     progress = 0
     n_complete = len(complete)
     for i in range(n_complete):
@@ -443,9 +450,9 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
         v_list = v_list[v_list != -1]
 
         if len(v_list) > 0:
-            m2l_matrix = compute_dense_m2l(
+            m2l_matrix = compute_compressed_m2l(
                 node, kernel, surface, config['alpha_inner'],
-                x0, r0, dc2e_v, dc2e_u, v_list, gram_matrix_gpu
+                x0, r0, dc2e_v, dc2e_u, v_list
             )
 
         else:

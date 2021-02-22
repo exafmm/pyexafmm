@@ -2,14 +2,11 @@
 import os
 import pathlib
 
+import h5py
 import numpy as np
 
-import fmm.hilbert as hilbert
-import fmm.density as density
-import fmm.node as node
 import fmm.operator as operator
 import fmm.kernel as kernel
-import fmm.octree as octree
 
 import utils.data as data
 
@@ -26,6 +23,7 @@ class Fmm:
 
     def __init__(self, config_filename=None):
 
+        # Load experimental database
         if config_filename is not None:
             config_filepath = PARENT / config_filename
         else:
@@ -33,53 +31,18 @@ class Fmm:
 
         self.config = data.load_json(config_filepath)
 
-        data_dirpath = PARENT / self.config["data_dirname"]
-        operator_dirpath = PARENT/ self.config["operator_dirname"]
-        source_filename = self.config['source_filename']
-        target_filename = self.config['target_filename']
-        source_densities_filename = self.config['source_densities_filename']
-
-        # Load sources, targets and source densities
-        self.surface = data.load_hdf5_to_array('surface', 'surface', operator_dirpath)
-        self.sources = data.load_hdf5_to_array(source_filename, source_filename, data_dirpath)
-        self.targets = data.load_hdf5_to_array(target_filename, target_filename, data_dirpath)
-        self.source_densities = data.load_hdf5_to_array(
-            source_densities_filename, source_densities_filename, data_dirpath
-            )
-
-        # Load precomputed operators
-        self.uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
-        self.uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
-        self.m2m = data.load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
-        self.l2l = data.load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
-        self.m2l = data.load_pickle('m2l_compressed', operator_dirpath)
-
-        # Load configuration properties
-        self.maximum_level = self.config['octree_max_level']
-        self.kernel_function = kernel.KERNELS[self.config['kernel']]()
-        self.order = self.config['order']
-        self.octree = octree.Octree(
-            self.sources, self.targets, self.maximum_level, self.source_densities
-            )
+        db_filepath = config_filepath / self.config['experiment']
+        self.db = h5py.File(db_filepath, 'r')
 
         # Coefficients discretising surface of a node
         self.ncoefficients = 6*(self.order-1)**2 + 2
 
         # Containers for results
-        self.result_data = [
-            density.Potential(target, np.zeros(1, dtype='float64'))
-            for target in self.octree.targets
-            ]
+        self.result_data = []
 
-        self.source_data = {
-            key: node.Node(key, self.ncoefficients)
-            for key in self.octree.non_empty_source_nodes
-        }
+        self.source_data = []
 
-        self.target_data = {
-            key: node.Node(key, self.ncoefficients)
-            for key in self.octree.non_empty_target_nodes
-        }
+        self.target_data = []
 
     def upward_pass(self):
         """Upward pass loop."""
