@@ -63,7 +63,6 @@ This is done via a `config.json` file,
 
 |Parameter    | Description |
 |---	    |---	 |
-
 | `experiment`	| Order of local and multipole expansions. |
 | `npoints` | Number of points to generate in test data. |
 | `data_type` | Type of test data to generate. |
