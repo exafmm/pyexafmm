@@ -8,6 +8,7 @@ import sys
 import time
 
 import cupy as cp
+from numba.core.compiler import Flags
 import numpy as np
 
 import adaptoctree.morton as morton
@@ -15,7 +16,7 @@ import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS
 import fmm.operator as operator
-from fmm.operator import BLOCK_HEIGHT, BLOCK_WIDTH
+from fmm.operator import BLOCK_HEIGHT, BLOCK_WIDTH, implicit_gram_matrix
 import utils.data as data
 import utils.multiproc as multiproc
 import utils.time
@@ -85,99 +86,17 @@ def compute_dense_m2l_cpu(
     return m2l_matrices
 
 
-
-@cuda.jit
-def implicit_gram_matrix(
-    sources,
-    targets,
-    rhs,
-    result,
-    height,
-    width,
-    idx
-):
+def compute_compressed_m2l(
+        node, kernel, surface, alpha_inner, x0, r0, ddc2e_v, ddc2e_u, v_list,
+        k
+        ):
     """
-    Implicitly apply gram matrix to a vector, computing Green's
-        function on the fly on the device, and multiplying by random
-        matrices to approximate the basis.
+    Compute compressed representation of M2L matrices, using Randomised SVD.
 
-    Parameters:
-    -----------
-    sources : np.array(shape=(nsources, 3))
-        nsources rows of gram matrix
-    targets : np.array(shape=(ntargets, 3))
-        ntargets columns of gram matrix
-    rhs : np.array(shape=(ntargets, nrhs))
-        Multiple right hand sides, indexed by 'idx'
-    result : np.array(shape=(height, nrhs))
-        Dimensions of result matrix defined by matrix height
-        and number of right hand sides
-    height : int
-        'height' of implicit gram matrix. Defined by m, where
-        m > n, and m is either ntargets or nsources.
-    width : int
-        'width' of implicit gram matrix.
-    idx: int
-        RHS index.
+    Strategy: We implicitly compute the Gram matrix between sources and targets
+        to reduce memory writes of dense matrices.
     """
 
-    blockWidth = cuda.shared.array(1, nb.int32)
-    blockxInd = cuda.shared.array(1, nb.int32)
-    blockyInd = cuda.shared.array(1, nb.int32)
-
-    # Calculate once, and share amongs thread-block
-    if cuda.threadIdx.x == 0:
-        if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
-            blockWidth[0] = nb.int32(BLOCK_WIDTH)
-        else:
-            blockWidth[0] = nb.int32(width % BLOCK_WIDTH)
-
-        blockxInd[0] = nb.int32(cuda.blockIdx.x*BLOCK_WIDTH)
-        blockyInd[0] = nb.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
-
-    cuda.syncthreads()
-
-    # Extract tile of RHS, of size up to BLOCK_WIDTH
-    tmp = cuda.shared.array(BLOCK_WIDTH, nb.float32)
-
-    if cuda.threadIdx.x < blockWidth[0]:
-        tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
-
-    cuda.syncthreads()
-
-    # Accumulate matvec of tile into variable
-    row_sum = 0
-
-    threadyInd = blockyInd[0]+cuda.threadIdx.x
-
-    if threadyInd < height:
-        for i in range(blockWidth[0]):
-            col_idx = blockxInd[0] + i
-            row_idx = threadyInd
-            source = sources[row_idx]
-            target  = targets[col_idx]
-
-            sx = source[0]
-            sy = source[1]
-            sz = source[2]
-
-            tx = target[0]
-            ty = target[1]
-            tz = target[2]
-
-            row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
-
-    cuda.atomic.add(result, (threadyInd, idx), row_sum)
-
-
-def compute_compressed_m2l(node, kernel, surface, alpha_inner, x0, r0, dc2e_v, dc2e_u, v_list):
-    """
-    Compute compressed representation of M2L matrices, using RSVD.
-    """
-
-    # Preallocate space on the GPU for sources and targets
-
-    # ...
 
     # Get level
     level = morton.find_level(node)
@@ -190,18 +109,26 @@ def compute_compressed_m2l(node, kernel, surface, alpha_inner, x0, r0, dc2e_v, d
         r0=r0
     )
 
+    # Convert to single precision before transferring to GPU
     target_check_surface = operator.scale_surface(
         surface=surface,
         radius=r0,
         level=level,
         center=target_center,
         alpha=alpha_inner
-    )
+    ).astype(np.float32)
 
 
+    # Allocate space on the GPU for sources and targets
+    ntargets = len(target_check_surface)
+    nsources = len(v_list)*ntargets
+    dtargets = cp.asarray(target_check_surface)
+    csources = np.zeros((nsources, 3), dtype=np.float32)
 
-    # Compute m2l matrices
-    for source in interaction_list:
+    # Compute source equivalent surfaces and transfer to GPU
+    for idx in range(len(v_list)):
+
+        source = v_list[idx]
 
         source_center = morton.find_physical_center_from_key(
             key=source,
@@ -215,7 +142,61 @@ def compute_compressed_m2l(node, kernel, surface, alpha_inner, x0, r0, dc2e_v, d
             level=level,
             center=source_center,
             alpha=alpha_inner
-        )
+        ).astype(np.float32)
+
+        lidx = idx*ntargets
+        ridx = (idx+1)*ntargets
+
+        csources[lidx:ridx] = source_equivalent_surface
+
+    dsources = cp.asarray(csources)
+
+
+    # Height and width of Gram matrix
+    height = nsources
+    width = ntargets
+
+    tpb = BLOCK_HEIGHT
+    bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
+
+    # Result data, in the language of RSVD
+    dY = cp.zeros((nsources, k)).astype(np.float32)
+
+    # Random matrix, for compressed basis, premultiplied by transpose of
+    # Inverse components needed for M2L operator, so that implicit Kernel
+    # matrix can be applied
+    dOmega = cp.random.rand(k, ntargets).astype(np.float32)
+
+    dDT = scale*cp.matmul(ddc2e_u, ddc2e_v)
+    dRHS = cp.matmul(dDT, dOmega.T).T
+
+    # Perform implicit matrix matrix product between Gram matrix and Random
+    # Matrix Omega
+
+    for idx in range(k):
+        implicit_gram_matrix[bpg, tpb](dsources, dtargets, dRHS, dY, height, width, idx)
+
+    # Perform QR decomposition on the GPU
+    dQ, _ = cp.linalg.qr(dY)
+    dQT = cp.transpose(dQ)
+
+    # Perform transposed matrix-matrix multiplication implicitly
+    height = ntargets
+    width = nsources
+    dBT = cp.zeros((ntargets, k)).astype(np.float32)
+
+    # Blocking is transposed
+    bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
+
+    for idx in range(k):
+        implicit_gram_matrix[bpg, tpb](dtargets, dsources, dQT, dBT, height, width, idx)
+
+    # Perform SVD on reduced matrix
+    du, dS, dVT = cp.linalg.svd(dBT.T, full_matrices=False)
+    dU = cp.matmul(dQ, du)
+
+    # Return compressed SVD components
+    return (dU.get(), dS.get(), dVT.get())
 
 
 def compute_surface(config, db):
@@ -431,6 +412,10 @@ def compute_m2m_and_l2l(
 
 def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
 
+    # Transfer required data to GPU
+    ddc2e_v = cp.asarray(dc2e_v.astype(np.float32))
+    ddc2e_u = cp.asarray(dc2e_u.astype(np.float32))
+
     if 'm2l' in db.keys():
         del db['m2l']
 
@@ -446,13 +431,14 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
         node = complete[i]
         node_str = str(node)
         node_idx = db['key_to_index'][node_str][0]
+        k = config['target_rank']
         v_list = db['interaction_lists']['v'][node_idx]
         v_list = v_list[v_list != -1]
 
         if len(v_list) > 0:
             m2l_matrix = compute_compressed_m2l(
                 node, kernel, surface, config['alpha_inner'],
-                x0, r0, dc2e_v, dc2e_u, v_list
+                x0, r0, ddc2e_v, ddc2e_u, v_list, k
             )
 
         else:
