@@ -1,6 +1,10 @@
 """
-Script to precompute and store M2M/L2L and M2L operators. M2L computation
-accellerated via multiprocessing.
+Precompute and store M2M/L2L/M2L operators for a given points dataset.
+
+We use a Randomised SVD to compress the effect of all M2L operator matrices on
+a single target node. This is accellerated with a GPU. Furthermore, dense
+interactions are computed on-the-fly, rather than being stored in a dense
+interaction matrix.
 """
 import os
 import pathlib
@@ -13,9 +17,8 @@ import numpy as np
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
-from fmm.kernel import KERNELS
+from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
 import fmm.operator as operator
-from fmm.operator import BLOCK_HEIGHT, BLOCK_WIDTH
 import utils.data as data
 import utils.time
 
@@ -95,7 +98,6 @@ def compute_compressed_m2l(
     height = nsources
     width = ntargets
 
-    tpb = BLOCK_HEIGHT
     bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
 
     # Result data, in the language of RSVD
@@ -112,7 +114,7 @@ def compute_compressed_m2l(
     # Perform implicit matrix matrix product between Gram matrix and random
     # matrix Omega
     for idx in range(k):
-        implicit_gram_matrix[bpg, tpb](dsources, dtargets, dRHS, dY, height, width, idx)
+        implicit_gram_matrix[bpg, TPB](dsources, dtargets, dRHS, dY, height, width, idx)
 
     # Perform QR decomposition on the GPU
     dQ, _ = cp.linalg.qr(dY)
@@ -127,7 +129,7 @@ def compute_compressed_m2l(
     bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
 
     for idx in range(k):
-        implicit_gram_matrix[bpg, tpb](dtargets, dsources, dQT, dBT, height, width, idx)
+        implicit_gram_matrix[bpg, TPB](dtargets, dsources, dQT, dBT, height, width, idx)
 
     # Perform SVD on reduced matrix
     du, dS, dVT = cp.linalg.svd(dBT.T, full_matrices=False)
@@ -306,7 +308,7 @@ def compute_m2m_and_l2l(
 
     print(f"Computing M2M & L2L Operators of Order {config['order']}")
     for child_idx, child_center in enumerate(child_centers):
-        print(f'Computed ({child_idx+1}/{loading}) M2L/L2L operators')
+        print(f'Computed ({child_idx+1}/{loading}) M2M/L2L operators')
 
         child_upward_equivalent_surface = operator.scale_surface(
             surface=surface,
@@ -339,8 +341,6 @@ def compute_m2m_and_l2l(
     # Save m2m & l2l operators
     m2m = np.array(m2m)
     l2l = np.array(l2l)
-
-    print("Saving M2M & L2L Operators")
 
     if 'm2m' in db.keys() and 'l2l' in db.keys():
         del db['m2m']
@@ -399,7 +399,7 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
 
         progress += 1
 
-        print(f'computed ({progress}/{n_complete}) m2l operators')
+        print(f'Computed ({progress}/{n_complete}) M2L operators')
 
 
 def main(**config):

@@ -1,5 +1,5 @@
 """
-CPU based kernels for, accelerated with Numba.
+Kernels accelerated with CUDA and Numba.
 """
 import math
 

@@ -14,10 +14,6 @@ import fmm.kernel as kernel
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
-# GPU Kernel parameters
-BLOCK_WIDTH = 32
-BLOCK_HEIGHT = 1024
-
 
 @numba.njit(cache=True)
 def compute_surface(order):
@@ -140,90 +136,6 @@ def gram_matrix(kernel_function, sources, targets):
     return matrix
 
 
-@cuda.jit
-def laplace_implicit_gram_matrix(
-        sources,
-        targets,
-        rhs,
-        result,
-        height,
-        width,
-        idx
-    ):
-    """
-    Implicitly apply the Gram matrix to a vector, computing Green's function on
-        the fly on the device, and multiplying by random matrices to approximate
-        the basis. Multiple RHS are computed in a loop, specified by the index.
-
-    Parameters:
-    -----------
-    sources : np.array(shape=(nsources, 3))
-        nsources rows of gram matrix
-    targets : np.array(shape=(ntargets, 3))
-        ntargets columns of gram matrix
-    rhs : np.array(shape=(ntargets, nrhs))
-        Multiple right hand sides, indexed by 'idx'
-    result : np.array(shape=(height, nrhs))
-        Dimensions of result matrix defined by matrix height
-        and number of right hand sides
-    height : int
-        'height' of implicit gram matrix. Defined by m, where
-        m > n, and m is either ntargets or nsources.
-    width : int
-        'width' of implicit gram matrix.
-    idx: int
-        RHS index.
-    """
-
-    blockWidth = cuda.shared.array(1, numba.int32)
-    blockxInd = cuda.shared.array(1, numba.int32)
-    blockyInd = cuda.shared.array(1, numba.int32)
-
-    # Calculate once, and share amongs thread-block
-    if cuda.threadIdx.x == 0:
-        if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
-            blockWidth[0] = numba.int32(BLOCK_WIDTH)
-        else:
-            blockWidth[0] = numba.int32(width % BLOCK_WIDTH)
-
-        blockxInd[0] = numba.int32(cuda.blockIdx.x*BLOCK_WIDTH)
-        blockyInd[0] = numba.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
-
-    cuda.syncthreads()
-
-    # Extract tile of RHS, of size up to BLOCK_WIDTH
-    tmp = cuda.shared.array(BLOCK_WIDTH, numba.float32)
-
-    if cuda.threadIdx.x < blockWidth[0]:
-        tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
-
-    cuda.syncthreads()
-
-    # Accumulate matvec of tile into variable
-    row_sum = 0
-
-    threadyInd = blockyInd[0]+cuda.threadIdx.x
-
-    if threadyInd < height:
-        for i in range(blockWidth[0]):
-            col_idx = blockxInd[0] + i
-            row_idx = threadyInd
-            source = sources[row_idx]
-            target  = targets[col_idx]
-
-            sx = source[0]
-            sy = source[1]
-            sz = source[2]
-
-            tx = target[0]
-            ty = target[1]
-            tz = target[2]
-
-            row_sum += kernel.laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
-
-    cuda.atomic.add(result, (threadyInd, idx), row_sum)
-
-
 def compute_pseudo_inverse(matrix, cond=None):
     """
     Compute pseudo-inverse using SVD of a given matrix. Based on the backward-
@@ -308,34 +220,3 @@ def compute_check_to_equivalent_inverse(
         c2e_inverse_v, c2e_inverse_u = compute_pseudo_inverse(c2e, cond)
 
     return c2e_inverse_v, c2e_inverse_u
-
-
-# def p2p(kernel_function, targets, sources, source_densities):
-#     """
-#     Directly calculate potential at m targets from n sources.
-
-#     Parameters:
-#     -----------
-#     kernel_function : function
-#     targets : np.array(shape=(m, 3))
-#     sources : np.array(shape=(n, 3))
-#     source_densities : np.array(shape=(n))
-
-#     Returns:
-#     --------
-#     Potential
-#         Potential denities at all target points from from all sources.
-#     """
-
-#     # Potential at target locations
-#     target_densities = np.zeros(shape=(len(targets)))
-
-#     for i, target in enumerate(targets):
-#         potential = 0
-#         for j, source in enumerate(sources):
-#             source_density = source_densities[j]
-#             potential += kernel_function(target, source)*source_density
-
-#         target_densities[i] = potential
-
-#     return Potential(targets, target_densities)
