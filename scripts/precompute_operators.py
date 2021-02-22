@@ -88,15 +88,14 @@ def compute_dense_m2l_cpu(
 
 def compute_compressed_m2l(
         node, kernel, surface, alpha_inner, x0, r0, ddc2e_v, ddc2e_u, v_list,
-        k
-        ):
+        k,
+    ):
     """
     Compute compressed representation of M2L matrices, using Randomised SVD.
 
     Strategy: We implicitly compute the Gram matrix between sources and targets
         to reduce memory writes of dense matrices.
     """
-
 
     # Get level
     level = morton.find_level(node)
@@ -170,9 +169,8 @@ def compute_compressed_m2l(
     dDT = scale*cp.matmul(ddc2e_u, ddc2e_v)
     dRHS = cp.matmul(dDT, dOmega.T).T
 
-    # Perform implicit matrix matrix product between Gram matrix and Random
-    # Matrix Omega
-
+    # Perform implicit matrix matrix product between Gram matrix and random
+    # matrix Omega
     for idx in range(k):
         implicit_gram_matrix[bpg, tpb](dsources, dtargets, dRHS, dY, height, width, idx)
 
@@ -416,38 +414,46 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
     ddc2e_v = cp.asarray(dc2e_v.astype(np.float32))
     ddc2e_u = cp.asarray(dc2e_u.astype(np.float32))
 
+    # Required config, not explicitly passed
+    k = config['target_rank']
+
     if 'm2l' in db.keys():
         del db['m2l']
 
     else:
         db.create_group('m2l')
-        group = db['m2l']
-        group.create_group('dense')
+
+    group = db['m2l']
 
     progress = 0
     n_complete = len(complete)
+
     for i in range(n_complete):
 
         node = complete[i]
         node_str = str(node)
         node_idx = db['key_to_index'][node_str][0]
-        k = config['target_rank']
         v_list = db['interaction_lists']['v'][node_idx]
         v_list = v_list[v_list != -1]
 
         if len(v_list) > 0:
-            m2l_matrix = compute_compressed_m2l(
+            U, S, VT = compute_compressed_m2l(
                 node, kernel, surface, config['alpha_inner'],
                 x0, r0, ddc2e_v, ddc2e_u, v_list, k
             )
 
-        else:
-            m2l_matrix = np.array([-1])
+            if node_str in group.keys():
+                del db['m2l'][node_str]
+            else:
+                group.create_group(node_str)
 
-        db['m2l']['dense'][node_str] = m2l_matrix
+            db['m2l'][node_str]['U'] = U
+            db['m2l'][node_str]['S'] = S
+            db['m2l'][node_str]['VT'] = VT
 
         progress += 1
-        print(f'computed {progress}/{n_complete} m2l operators')
+
+        print(f'computed ({progress}/{n_complete}) m2l operators')
 
 
 def main(**config):
@@ -455,10 +461,6 @@ def main(**config):
     Main script, configure using config.json file in module root.
     """
     start = time.time()
-
-    # Setup Multiproc
-    processes = os.cpu_count()
-    pool = multiproc.setup_pool(processes=processes)
 
     # Step 0: Construct Octree and load Python config objs
     db = data.load_hdf5(config['experiment'], PARENT, 'a')
