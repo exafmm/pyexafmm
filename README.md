@@ -42,7 +42,7 @@ python setup.py develop
 
 ## Configure
 
-After installation, you must precompute and cache the FMM operators for your dataset,
+After installation, you must precompute and cache the FMM operators for your dataset. Most of these are calculated using the techniques in [1], notably M2M and L2L matrices can be computed for a single parent node and its children, and scaled in a simple fashion for the kernels implemented by PyExaFMM. For the M2L operators, we introduce a randomised SVD compression [2], to avoid storing and applying potentially very large dense matrices.
 
 This is done via a `config.json` file,
 
@@ -115,3 +115,4 @@ fmm [OPTIONS] COMMAND [ARGS]
 ## References
 
 [1] Ying, L., Biros, G., & Zorin, D. (2004). A kernel-independent adaptive fast multipole algorithm in two and three dimensions. Journal of Computational Physics, 196(2), 591-626.
+[2] Halko, N., Martinsson, P. G., & Tropp, J. A. (2011). Finding structure with randomness: Probabilistic algorithms for constructing approximate matrix decompositions. SIAM review, 53(2), 217-288.
