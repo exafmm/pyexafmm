@@ -82,7 +82,7 @@ particle_data/
     |_ targets/
 ```
 
-where `sources` and `targets` are of shape `(nsources/ntargets, 3)`, and source densities is of shape `(nsources, 1)`.
+where `sources` and `targets` are the coordinates of your source and target particles respectivley, of shape `(nsources/ntargets, 3)`, and source densities is of shape `(nsources, 1)`.
 
 The CLI workflow is as follows,
 
