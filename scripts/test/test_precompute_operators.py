@@ -141,68 +141,88 @@ def test_l2l(db):
     assert np.isclose(parent_direct, child_direct, rtol=RTOL)
 
 
-# def test_m2l(npoints, octree, m2l_operators):
+def test_m2l(db):
 
-#     # pick a target box on level 2 or below
-#     x0 = octree.center
-#     r0 = octree.radius
+    x0 = db["octree"]["x0"][...]
+    r0 = db["octree"]["r0"][...]
+    surface = db["surface"][...]
+    npoints = len(surface)
+    kernel = CONFIG["kernel"]
+    p2p_function = KERNELS[kernel]["p2p"]
 
-#     target_key = 72
+    # Pick a target key with a non-empty interaction list
+    complete = db['octree']['complete']
+    v_lists = db['interaction_lists']['v']
 
-#     source_level = target_level = morton.find_level(target_key)
+    for i, v_list in enumerate(v_lists):
+        if complete[i] != 0:
+            if len(v_list[v_list != -1]) > 0:
+                target_key = complete[i]
+                target_index = i
+                break
 
-#     m2l = m2l_operators.operators[source_level]
+    v_list = v_lists[target_index]
+    v_list = v_list[v_list != -1]
 
-#     target_index = morton.remove_level_offset(target_key)
-#     target_center = morton.find_physical_center_from_key(target_key, x0, r0)
-#     interaction_list = morton.get_interaction_list(target_key)
+    # print(target_key, target_index)
+    source_level = target_level = morton.find_level(target_key)
 
-#     # pick a source box in target's interaction list
-#     source_key = interaction_list[2]
-#     source_center = morton.find_physical_center_from_key(source_key, x0, r0)
+    # 950274 2
+    target_center = morton.find_physical_center_from_key(target_key, x0, r0)
 
-#     # get the operator index from current level lookup table
-#     index_to_key = m2l_operators.index_to_key[target_level][target_index]
-#     source_index = np.where(source_key == index_to_key)[0][0]
+    # Construct a vector of source points for all boxes in v_list
+    sources = np.zeros(shape=(npoints*len(v_list), 3))
+    for idx in range(len(v_list)):
+        source_key = v_list[idx]
+        source_center = morton.find_physical_center_from_key(source_key, x0, r0)
 
-#     # place unit densities on source box
-#     # source_equivalent_density = np.ones(shape=(npoints))
-#     source_equivalent_density = np.random.rand(npoints)
+        source_equivalent_surface = operator.scale_surface(
+            surface=surface,
+            radius=r0,
+            level=source_level,
+            center=source_center,
+            alpha=CONFIG['alpha_inner']
+        )
 
-#     source_equivalent_surface = operator.scale_surface(
-#         surface=SURFACE,
-#         radius=r0,
-#         level=source_level,
-#         center=source_center,
-#         alpha=1.05
-#     )
+        lidx = idx*npoints
+        ridx = (idx+1)*npoints
 
-#     m2l_matrix = m2l[target_index][source_index]
+        sources[lidx:ridx] = source_equivalent_surface
 
-#     target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+    # # place unit densities on source boxes
+    source_equivalent_density = np.ones(len(v_list)*npoints)
+    # source_equivalent_density = np.random.rand(len(v_list)*npoints)
 
-#     target_equivalent_surface = operator.scale_surface(
-#         surface=SURFACE,
-#         radius=r0,
-#         level=target_level,
-#         center=target_center,
-#         alpha=2.95
-#     )
 
-#     local_point = np.array([list(target_center)])
+    U = db['m2l'][str(target_key)]['U']
+    S = db['m2l'][str(target_key)]['S']
+    VT = db['m2l'][str(target_key)]['VT']
 
-#     target_direct = operator.p2p(
-#         kernel_function=KERNEL_FUNCTION,
-#         targets=local_point,
-#         sources=target_equivalent_surface,
-#         source_densities=target_equivalent_density
-#     )
+    m2l_matrix = (U @ np.diag(S) @ VT).T
 
-#     source_direct = operator.p2p(
-#         kernel_function=KERNEL_FUNCTION,
-#         targets=local_point,
-#         sources=source_equivalent_surface,
-#         source_densities=source_equivalent_density
-#     )
+    target_equivalent_density = m2l_matrix @ source_equivalent_density
 
-#     assert np.isclose(target_direct.density, source_direct.density, rtol=RTOL)
+    targets = operator.scale_surface(
+        surface=surface,
+        radius=r0,
+        level=target_level,
+        center=target_center,
+        alpha=CONFIG['alpha_outer']
+    )
+
+    local_point = np.array([list(target_center)])
+
+    target_direct = p2p_function(
+        targets=local_point,
+        sources=targets,
+        source_densities=target_equivalent_density
+    )
+
+    source_direct = p2p_function(
+        targets=local_point,
+        sources=sources,
+        source_densities=source_equivalent_density
+    )
+
+    print(target_direct, source_direct)
+    assert np.isclose(target_direct, source_direct, rtol=RTOL)
