@@ -14,8 +14,7 @@ CUDA acceleration.
 
 The vision of the project is to eventually provide optimisations fully taking advantage
 distributed and heterogenous computing environments, and to scale from desktops to HPC clusters.
-Most importantly however, Python will allow non-specialist scientists and engineers to solve
-particle FMM problems, from a jupyter notebook!
+Most importantly however, PyExaFMM will allow non-specialist scientists and engineers to solve particle FMM problems, from a jupyter notebook!
 
 ## System Requirements
 

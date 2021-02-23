@@ -64,7 +64,6 @@ def compute_operators(config):
     ])
 
 
-
 @click.command(
     help='Generate targets and sources with unit density'
 )
@@ -83,8 +82,6 @@ def generate_test_data(config):
         HERE.parent / f'{config}.json',
         data_type
     ])
-
-
 
 
 cli.add_command(build)
