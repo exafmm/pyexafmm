@@ -1,15 +1,12 @@
 {
-    "order": 3,
-    "operator_dirname": "precomputed_operators_order_3_test",
-    "surface_filename": "surface",
+    "experiment": "test",
+    "npoints": 1000,
+    "data_type": "random",
+    "order": 5,
     "kernel": "laplace",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
-    "data_dirname": "data_1k_random_test",
-    "source_filename": "sources",
-    "target_filename": "targets",
-    "source_densities_filename": "source_densities",
-    "octree_max_level": 3,
-    "target_rank": 1,
-    "m2l_compressed_filename": "m2l_compressed"
+    "max_level": 10,
+    "max_points": 100,
+    "target_rank": 1
 }
