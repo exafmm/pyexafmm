@@ -108,7 +108,7 @@ def compute_compressed_m2l(
     # matrix can be applied
     dOmega = cp.random.rand(k, ntargets).astype(np.float32)
 
-    dDT = scale*cp.matmul(ddc2e_u, ddc2e_v)
+    dDT = cp.matmul(scale*ddc2e_v, ddc2e_u).T
     dRHS = cp.matmul(dDT, dOmega.T).T
 
     # Perform implicit matrix matrix product between Gram matrix and random
@@ -118,7 +118,7 @@ def compute_compressed_m2l(
 
     # Perform QR decomposition on the GPU
     dQ, _ = cp.linalg.qr(dY)
-    dQT = cp.transpose(dQ)
+    dQT = dQ.T
 
     # Perform transposed matrix-matrix multiplication implicitly
     height = ntargets

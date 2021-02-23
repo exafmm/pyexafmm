@@ -205,8 +205,6 @@ def compute_check_to_equivalent_inverse(
         Tuple of upward check-to-equivalent inverse stored as two compoennts,
         and downard check-to-equivalent inverse stored as two components.
     """
-    # Compute Gram Matrix of upward check to upward equivalent surfaces
-
     c2e = gram_matrix(
         kernel_function=kernel_function,
         sources=equivalent_surface,
