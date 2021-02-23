@@ -8,13 +8,12 @@ particle FMM that is written in Python.
 The utility of FMM algorithms are hindered  by their relatively complex implementation, especially for achieving high-performance.
 
 PyExaFMM is a particle kernel-independent FMM based on [1], written in pure Python
-with some extensions. Representing a compromise between portability, east of use,
+with some extensions. Representing a compromise between portability, ease of use,
 and performance. Optimisations are currently implemented  using Numba, Numpy, and
 CUDA acceleration.
 
 The vision of the project is to eventually provide optimisations fully taking advantage
-distributed and heterogenous computing environments, and to scale from desktops to HPC clusters.
-Most importantly however, PyExaFMM will allow non-specialist scientists and engineers to solve particle FMM problems, from a jupyter notebook!
+distributed and heterogenous computing environments, and to scale from desktops to HPC clusters. Most importantly however, PyExaFMM will allow non-specialist scientists and engineers to solve particle FMM problems, from a Jupyter notebook!
 
 ## System Requirements
 
