@@ -153,9 +153,26 @@ def laplace_implicit_gram_matrix(
     cuda.atomic.add(result, (threadyInd, idx), row_sum)
 
 
-@cuda.jit
-def laplace_p2p():
-    pass
+@numba.jit
+def laplace_p2p(sources, targets, source_densities):
+
+    ntargets = len(targets)
+    nsources = len(sources)
+
+    target_densities = np.zeros(shape=(ntargets))
+
+    for i in range(ntargets):
+        target = targets[i]
+        potential = 0
+        for j in range(nsources):
+            source = sources[j]
+            source_density = source_densities[j]
+            potential += laplace_cpu(target, source)*source_density
+
+        target_densities[i] = potential
+
+    return target_densities
+
 
 
 KERNELS = {
