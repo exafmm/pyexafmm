@@ -105,7 +105,7 @@ fmm [OPTIONS] COMMAND [ARGS]
 
 |Command               | Action |
 |--------------        |------------------------------------	 |
-| `build`	           | Build dev version in current python env |
+| `build`	           | Build Conda recipe                      |
 | `test`	           | Run test suite	                         |
 | `lint`	           | Run project linter 	                 |
 | `compute-operators`  | Run operator pre-computations           |
