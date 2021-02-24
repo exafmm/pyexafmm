@@ -224,7 +224,6 @@ def compute_octree(config, db):
 
 def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
-    kernel_function = KERNELS[kernel]['eval']
     gram_matrix = KERNELS[kernel]['dense_gram']
     print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
 
@@ -309,7 +308,6 @@ def compute_m2m_and_l2l(
 
     loading = len(child_centers)
 
-    kernel_function = KERNELS[kernel]['eval']
     gram_matrix = KERNELS[kernel]['dense_gram']
     kernel_scale = KERNELS[kernel]['scale']
     scale = kernel_scale(child_level)

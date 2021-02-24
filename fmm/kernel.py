@@ -174,38 +174,6 @@ def laplace_p2p(sources, targets, source_densities):
     return target_densities
 
 
-def gram_matrix_laplace(kernel_function, sources, targets):
-    """
-    Compute Gram matrix of given kernel function. Elements are the pairwise
-        interactions of sources/targets under the action of the kernel function.
-
-    Parameters:
-    -----------
-    kernel_function : function
-        Kernel function
-    sources : np.array(shape=(n, 3))
-        The n source locations on a surface.
-    targets : np.array(shape=(m, 3))
-        The m target locations on a surface.
-
-    Returns:
-    --------
-    np.array(shape=(n, m))
-        The Gram matrix.
-    """
-    n_sources = len(sources)
-    n_targets = len(targets)
-
-    matrix = np.zeros(shape=(n_targets, n_sources))
-
-    for row_idx in range(n_targets):
-        target = targets[row_idx]
-        for col_idx in range(n_sources):
-            source = sources[col_idx]
-            matrix[row_idx][col_idx] = kernel_function(target, source)
-
-    return matrix
-
 @numba.njit(cache=True)
 def laplace_gram_matrix(sources, targets):
     """
