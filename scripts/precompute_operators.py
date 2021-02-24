@@ -17,7 +17,7 @@ import numpy as np
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
-from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
+from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT, laplace_gram_matrix
 import fmm.operator as operator
 import utils.data as data
 import utils.time
@@ -225,6 +225,7 @@ def compute_octree(config, db):
 def compute_inv_c2e(config, db, kernel, surface, x0, r0):
 
     kernel_function = KERNELS[kernel]['eval']
+    gram_matrix = KERNELS[kernel]['dense_gram']
     print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
 
     upward_equivalent_surface = operator.scale_surface(
@@ -243,18 +244,24 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
         alpha=config['alpha_outer']
     )
 
-    uc2e_v, uc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function=kernel_function,
-        check_surface=upward_check_surface,
-        equivalent_surface=upward_equivalent_surface,
-        cond=None
+    uc2e = gram_matrix(
+        targets=upward_check_surface,
+        sources=upward_equivalent_surface,
     )
 
-    dc2e_v, dc2e_u = operator.compute_check_to_equivalent_inverse(
-        kernel_function=kernel_function,
-        check_surface=upward_equivalent_surface,
-        equivalent_surface=upward_check_surface,
-        cond=None
+    uc2e_v, uc2e_u = operator.compute_pseudo_inverse(
+        matrix=uc2e,
+        cond=config['cond']
+    )
+
+    dc2e = gram_matrix(
+        targets=upward_equivalent_surface,
+        sources=upward_check_surface,
+    )
+
+    dc2e_v, dc2e_u = operator.compute_pseudo_inverse(
+        matrix=dc2e,
+        cond=config['cond']
     )
 
     if 'uc2e' in db.keys() and 'dc2e' in db.keys():
@@ -303,6 +310,7 @@ def compute_m2m_and_l2l(
     loading = len(child_centers)
 
     kernel_function = KERNELS[kernel]['eval']
+    gram_matrix = KERNELS[kernel]['dense_gram']
     kernel_scale = KERNELS[kernel]['scale']
     scale = kernel_scale(child_level)
 
@@ -318,8 +326,7 @@ def compute_m2m_and_l2l(
             alpha=config['alpha_inner']
         )
 
-        pc2ce = operator.gram_matrix(
-            kernel_function=kernel_function,
+        pc2ce = gram_matrix(
             targets=parent_upward_check_surface,
             sources=child_upward_equivalent_surface,
         )
@@ -329,8 +336,7 @@ def compute_m2m_and_l2l(
         m2m.append(np.matmul(uc2e_v, tmp))
 
         # Compute L2L operator for this octant
-        cc2pe = operator.gram_matrix(
-            kernel_function=kernel_function,
+        cc2pe = gram_matrix(
             targets=child_upward_equivalent_surface,
             sources=parent_upward_check_surface
         )

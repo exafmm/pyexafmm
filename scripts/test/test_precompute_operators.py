@@ -164,10 +164,8 @@ def test_m2l(db):
     v_list = v_lists[target_index]
     v_list = v_list[v_list != -1]
 
-    # print(target_key, target_index)
     source_level = target_level = morton.find_level(target_key)
 
-    # 950274 2
     target_center = morton.find_physical_center_from_key(target_key, x0, r0)
 
     # Construct a vector of source points for all boxes in v_list

@@ -4,11 +4,8 @@ Operator helper methods.
 import os
 import pathlib
 
-from numba import cuda
 import numba
 import numpy as np
-
-import fmm.kernel as kernel
 
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
@@ -103,39 +100,6 @@ def scale_surface(surface, radius, level, center, alpha):
     return scaled_surface
 
 
-def gram_matrix(kernel_function, sources, targets):
-    """
-    Compute Gram matrix of given kernel function. Elements are the pairwise
-        interactions of sources/targets under the action of the kernel function.
-
-    Parameters:
-    -----------
-    kernel_function : function
-        Kernel function
-    sources : np.array(shape=(n, 3))
-        The n source locations on a surface.
-    targets : np.array(shape=(m, 3))
-        The m target locations on a surface.
-
-    Returns:
-    --------
-    np.array(shape=(n, m))
-        The Gram matrix.
-    """
-    n_sources = len(sources)
-    n_targets = len(targets)
-
-    matrix = np.zeros(shape=(n_targets, n_sources))
-
-    for row_idx in range(n_targets):
-        target = targets[row_idx]
-        for col_idx in range(n_sources):
-            source = sources[col_idx]
-            matrix[row_idx][col_idx] = kernel_function(target, source)
-
-    return matrix
-
-
 def compute_pseudo_inverse(matrix, cond=None):
     """
     Compute pseudo-inverse using SVD of a given matrix. Based on the backward-
@@ -165,11 +129,12 @@ def compute_pseudo_inverse(matrix, cond=None):
 
     tol = np.finfo(float).eps*4*max(a)
 
-    for i, val in enumerate(a):
+    for i in range(len(a)):
+        val = a[i]
         if  abs(val) < tol:
-            a[i] = 0
+            a[i] = 0.
         else:
-            a[i] = 1/val
+            a[i] = 1./val
 
     s = np.matmul(np.diag(a), np.diag(s))
 
@@ -178,43 +143,3 @@ def compute_pseudo_inverse(matrix, cond=None):
     au = u.T
 
     return av, au
-
-
-def compute_check_to_equivalent_inverse(
-        kernel_function,
-        check_surface,
-        equivalent_surface,
-        cond=None
-        ):
-    """
-    Compute the inverse of the upward check-to-equivalent gram matrix, and the
-        same for it's transpose - which amounts to the inverse of the downward
-        check-to-equivalent gram matrix.
-
-    Parameters:
-    -----------
-    kernel_function : function
-    check_surface : np.array(shape=(n, 3))
-    equivalent_surface : np.array(shape=(n, 3))
-    cond : float [optional]
-        Regularisation parameter
-
-    Returns:
-    --------
-    tuple
-        Tuple of upward check-to-equivalent inverse stored as two compoennts,
-        and downard check-to-equivalent inverse stored as two components.
-    """
-    c2e = gram_matrix(
-        kernel_function=kernel_function,
-        sources=equivalent_surface,
-        targets=check_surface
-    )
-
-    # Compute Inverse of Gram Matrix
-    if cond is None:
-        c2e_inverse_v, c2e_inverse_u = compute_pseudo_inverse(c2e)
-    else:
-        c2e_inverse_v, c2e_inverse_u = compute_pseudo_inverse(c2e, cond)
-
-    return c2e_inverse_v, c2e_inverse_u
