@@ -13,6 +13,7 @@ import time
 
 import cupy as cp
 import numpy as np
+import scipy.linalg as linalg
 
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
@@ -139,19 +140,28 @@ def compute_compressed_m2l(
     return (dU.get(), dS.get(), dVT.get())
 
 
-def compute_surface(config, db):
+def compute_surfaces(config, db):
+    """
+    Compute inner and outer surfaces. Check surfaces with a larger number
+        of discretisation points tends to lead to better conditioning.
+    """
+    order_inner = config['order_inner']
+    order_outer = config['order_outer']
+    surface_inner = operator.compute_surface(order_inner)
+    surface_outer = operator.compute_surface(order_outer)
 
-    order = config['order']
-    surface = operator.compute_surface(order)
-
-    print(f"Computing Surface of Order {order}")
+    print(f"Computing Inner Surface of Order {order_inner}")
+    print(f"Computing Outer Surface of Order {order_outer}")
 
     if 'surface' in db.keys():
         del db['surface']
 
-    db['surface'] = surface
+    db.create_group('surface')
 
-    return surface
+    db['surface']['inner'] = surface_inner
+    db['surface']['outer'] = surface_outer
+
+    return surface_inner, surface_outer
 
 
 def compute_octree(config, db):
@@ -222,13 +232,14 @@ def compute_octree(config, db):
     return x0, r0, depth, octree, complete, u, x, v, w
 
 
-def compute_inv_c2e(config, db, kernel, surface, x0, r0):
+def compute_inv_c2e(config, db, kernel, surface_inner, surface_outer, x0, r0):
 
     gram_matrix = KERNELS[kernel]['dense_gram']
-    print(f"Computing Inverse of Check To Equivalent Gram Matrix of Order {config['order']}")
+
+    print("Computing Inverse of Check To Equivalent Gram Matrix")
 
     upward_equivalent_surface = operator.scale_surface(
-        surface=surface,
+        surface=surface_inner,
         radius=r0,
         level=0,
         center=x0,
@@ -236,11 +247,27 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
     )
 
     upward_check_surface = operator.scale_surface(
-        surface=surface,
+        surface=surface_outer,
         radius=r0,
         level=0,
         center=x0,
         alpha=config['alpha_outer']
+    )
+
+    downward_equivalent_surface = operator.scale_surface(
+        surface=surface_inner,
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_outer']
+    )
+
+    downward_check_surface = operator.scale_surface(
+        surface=surface_outer,
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_inner']
     )
 
     uc2e = gram_matrix(
@@ -248,45 +275,31 @@ def compute_inv_c2e(config, db, kernel, surface, x0, r0):
         sources=upward_equivalent_surface,
     )
 
-    uc2e_v, uc2e_u = operator.compute_pseudo_inverse(
-        matrix=uc2e,
-        cond=config['cond']
-    )
+    uc2e_inv = linalg.pinv2(uc2e)
 
     dc2e = gram_matrix(
-        targets=upward_equivalent_surface,
-        sources=upward_check_surface,
+        targets=downward_check_surface,
+        sources=downward_equivalent_surface,
     )
 
-    dc2e_v, dc2e_u = operator.compute_pseudo_inverse(
-        matrix=dc2e,
-        cond=config['cond']
-    )
+    dc2e_inv = linalg.pinv2(dc2e)
 
-    if 'uc2e' in db.keys() and 'dc2e' in db.keys():
+    if 'uc2e_inv' in db.keys() and 'dc2e_inv' in db.keys():
 
-        del db['uc2e']['u']
-        del db['dc2e']['u']
-        del db['uc2e']['v']
-        del db['dc2e']['v']
+        del db['uc2e_inv']
+        del db['dc2e_inv']
 
-    else:
+    db['uc2e_inv']= uc2e_inv
+    db['dc2e_inv']= dc2e_inv
 
-        db.create_group('uc2e')
-        db.create_group('dc2e')
-
-    db['uc2e']['u'] = uc2e_u
-    db['uc2e']['v'] = uc2e_v
-    db['dc2e']['u'] = dc2e_u
-    db['dc2e']['v'] = dc2e_v
-
-    return uc2e_u, uc2e_v, dc2e_u, dc2e_v
+    return uc2e_inv, dc2e_inv
 
 
 def compute_m2m_and_l2l(
-        config, db, surface, kernel, uc2e_u, uc2e_v, dc2e_u, dc2e_v,
+        config, db, surface_inner, surface_outer, kernel, uc2e_inv, dc2e_inv,
         parent_center, parent_radius
     ):
+
     parent_level = 0
     child_level = 1
 
@@ -296,12 +309,29 @@ def compute_m2m_and_l2l(
     ]
 
     parent_upward_check_surface = operator.scale_surface(
-        surface=surface,
+        surface=surface_outer,
         radius=parent_radius,
         level=parent_level,
         center=parent_center,
         alpha=config['alpha_outer']
-        )
+    )
+
+    parent_downward_check_surface = operator.scale_surface(
+        surface=surface_outer,
+        radius=parent_radius,
+        level=parent_level,
+        center=parent_center,
+        alpha=config['alpha_inner']
+    )
+
+    parent_downward_equivalent_surface = operator.scale_surface(
+        surface=surface_inner,
+        radius=parent_radius,
+        level=parent_level,
+        center=parent_center,
+        alpha=config['alpha_outer']
+    )
+
 
     m2m = []
     l2l = []
@@ -312,12 +342,21 @@ def compute_m2m_and_l2l(
     kernel_scale = KERNELS[kernel]['scale']
     scale = kernel_scale(child_level)
 
-    print(f"Computing M2M & L2L Operators of Order {config['order']}")
+    print("Computing M2M & L2L Operators")
+
     for child_idx, child_center in enumerate(child_centers):
         print(f'Computed ({child_idx+1}/{loading}) M2M/L2L operators')
 
         child_upward_equivalent_surface = operator.scale_surface(
-            surface=surface,
+            surface=surface_inner,
+            radius=parent_radius,
+            level=child_level,
+            center=child_center,
+            alpha=config['alpha_inner']
+        )
+
+        child_downward_check_surface = operator.scale_surface(
+            surface=surface_outer,
             radius=parent_radius,
             level=child_level,
             center=child_center,
@@ -330,17 +369,15 @@ def compute_m2m_and_l2l(
         )
 
         # Compute M2M operator for this octant
-        tmp = np.matmul(uc2e_u, pc2ce)
-        m2m.append(np.matmul(uc2e_v, tmp))
+        m2m.append(np.matmul(uc2e_inv, pc2ce))
 
         # Compute L2L operator for this octant
         cc2pe = gram_matrix(
-            targets=child_upward_equivalent_surface,
-            sources=parent_upward_check_surface
+            targets=child_downward_check_surface,
+            sources=parent_downward_equivalent_surface
         )
 
-        tmp = np.matmul(dc2e_u, cc2pe)
-        l2l.append(np.matmul(scale*dc2e_v, tmp))
+        l2l.append(np.matmul(scale*dc2e_inv, cc2pe))
 
     # Save m2m & l2l operators
     m2m = np.array(m2m)
@@ -420,20 +457,19 @@ def main(**config):
     kernel = config['kernel']
 
     # Step 1: Compute a surface of a given order
-    surface = compute_surface(config, db)
+    surface_inner, surface_outer = compute_surfaces(config, db)
 
     # # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # # This is a useful quantity that will form the basis of most operators.
-    uc2e_u, uc2e_v, dc2e_u, dc2e_v = compute_inv_c2e(config, db, kernel, surface, x0, r0)
+    uc2e_inv, dc2e_inv = compute_inv_c2e(config, db, kernel, surface_inner, surface_outer, x0, r0)
 
     # Step 3: Compute M2M/L2L operators
     compute_m2m_and_l2l(
-        config, db, surface, kernel, uc2e_u, uc2e_v, dc2e_u, dc2e_v,
-        x0, r0
+        config, db, surface_inner, surface_outer, kernel, uc2e_inv, dc2e_inv, x0, r0
     )
 
-    # Step 4: Compute M2L operators
-    compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete)
+    # # Step 4: Compute M2L operators
+    # compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete)
 
     minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
     print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")

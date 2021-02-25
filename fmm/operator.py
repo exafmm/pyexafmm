@@ -119,27 +119,22 @@ def compute_pseudo_inverse(matrix, cond=None):
         inverse of the matrix's transpose.
     """
     # Compute SVD
-    u, s, v_t = np.linalg.svd(matrix)
+    u, s, vt = np.linalg.svd(matrix)
 
     # Compute inverse of diagonal matrix with regularisation, hand tuned.
     if cond is None:
         cond = max(s)*0.00725
 
-    a = cond*np.ones(len(s)) + s*s
+    # tol = np.finfo(float).eps*4*max(s)
+    tol = 1e-9
 
-    tol = np.finfo(float).eps*4*max(a)
-
-    for i in range(len(a)):
-        val = a[i]
+    for i in range(len(s)):
+        val = s[i]
         if  abs(val) < tol:
-            a[i] = 0.
+            s[i] = 0.
         else:
-            a[i] = 1./val
-
-    s = np.matmul(np.diag(a), np.diag(s))
+            s[i] = 1./val
 
     # Components of the inverse of the matrix
-    av = np.matmul(v_t.T, s)
-    au = u.T
 
-    return av, au
+    return vt.T, np.diag(s) @  u.T
