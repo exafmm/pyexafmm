@@ -8,8 +8,8 @@ from numba import cuda
 import numpy as np
 
 # GPU Kernel parameters
-BLOCK_WIDTH = 31
-BLOCK_HEIGHT = 1023
+BLOCK_WIDTH = 32
+BLOCK_HEIGHT = 1024
 
 TOL = 1e-6
 

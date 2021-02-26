@@ -31,7 +31,7 @@ TPB = BLOCK_HEIGHT
 
 
 def compute_compressed_m2l(
-        node, kernel, surface, alpha_inner, x0, r0, ddc2e_v, ddc2e_u, v_list,
+        node, kernel, surface_inner, surface_outer, alpha_inner, x0, r0, v_list,
         k, implicit_gram_matrix
     ):
     """
@@ -55,22 +55,24 @@ def compute_compressed_m2l(
 
     # Convert to single precision before transferring to GPU
     target_check_surface = operator.scale_surface(
-        surface=surface,
+        surface=surface_outer,
         radius=r0,
         level=level,
         center=target_center,
         alpha=alpha_inner
     ).astype(np.float32)
 
-
     # Allocate space on the GPU for sources and targets
-    ntargets = len(target_check_surface)
-    nsources = len(v_list)*ntargets
+    n_targets_per_node = len(surface_outer)
+    n_sources_per_node = len(surface_inner)
+    n_source_nodes = len(v_list)
+
     dtargets = cp.asarray(target_check_surface)
-    csources = np.zeros((nsources, 3), dtype=np.float32)
+
+    csources = np.zeros((n_sources_per_node*n_source_nodes, 3), dtype=np.float32)
 
     # Compute source equivalent surfaces and transfer to GPU
-    for idx in range(len(v_list)):
+    for idx in range(n_source_nodes):
 
         source = v_list[idx]
 
@@ -81,50 +83,51 @@ def compute_compressed_m2l(
         )
 
         source_equivalent_surface = operator.scale_surface(
-            surface=surface,
+            surface=surface_inner,
             radius=r0,
             level=level,
             center=source_center,
             alpha=alpha_inner
         ).astype(np.float32)
 
-        lidx = idx*ntargets
-        ridx = (idx+1)*ntargets
+        lidx = idx*n_sources_per_node
+        ridx = (idx+1)*n_sources_per_node
 
         csources[lidx:ridx] = source_equivalent_surface
 
     dsources = cp.asarray(csources)
 
     # Height and width of Gram matrix
-    height = nsources
-    width = ntargets
+    height = n_sources_per_node*n_source_nodes
+    width = n_targets_per_node
 
     bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
 
     # Result data, in the language of RSVD
-    dY = cp.zeros((nsources, k)).astype(np.float32)
+    dY = cp.zeros((height, k)).astype(np.float32)
 
     # Random matrix, for compressed basis, premultiplied by transpose of
     # Inverse components needed for M2L operator, so that implicit Kernel
     # matrix can be applied
-    dOmega = cp.random.rand(k, ntargets).astype(np.float32)
-
-    dDT = cp.matmul(scale*ddc2e_v, ddc2e_u).T
-    dRHS = cp.matmul(dDT, dOmega.T).T
+    dOmega = cp.random.rand(n_targets_per_node, k).astype(np.float32)
+    dOmegaT = dOmega.T
 
     # Perform implicit matrix matrix product between Gram matrix and random
     # matrix Omega
     for idx in range(k):
-        implicit_gram_matrix[bpg, TPB](dsources, dtargets, dRHS, dY, height, width, idx)
+        implicit_gram_matrix[bpg, TPB](
+            dsources, dtargets, dOmegaT, dY, height, width, idx
+        )
 
     # Perform QR decomposition on the GPU
     dQ, _ = cp.linalg.qr(dY)
     dQT = dQ.T
 
     # Perform transposed matrix-matrix multiplication implicitly
-    height = ntargets
-    width = nsources
-    dBT = cp.zeros((ntargets, k)).astype(np.float32)
+    height = n_targets_per_node
+    width = n_sources_per_node*n_source_nodes
+
+    dBT = cp.zeros((n_targets_per_node, k)).astype(np.float32)
 
     # Blocking is transposed
     bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
@@ -391,15 +394,10 @@ def compute_m2m_and_l2l(
     db['l2l'] = l2l
 
 
-def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
+def compute_m2l(config, db, kernel, surface_inner, surface_outer, x0, r0, dc2e_inv, complete):
 
     # Get required GPU kernel
     implicit_gram_matrix = KERNELS[kernel]['implicit_gram']
-
-    # Transfer required data to GPU
-    ddc2e_v = cp.asarray(dc2e_v.astype(np.float32))
-    ddc2e_u = cp.asarray(dc2e_u.astype(np.float32))
-
 
     # Required config, not explicitly passed
     k = config['target_rank']
@@ -423,14 +421,16 @@ def compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete):
         v_list = db['interaction_lists']['v'][node_idx]
         v_list = v_list[v_list != -1]
 
-        if len(v_list) > 0:
+        if len(v_list) > 0 and node != 0:
+
             U, S, VT = compute_compressed_m2l(
-                node, kernel, surface, config['alpha_inner'],
-                x0, r0, ddc2e_v, ddc2e_u, v_list, k, implicit_gram_matrix
+                node, kernel, surface_inner, surface_outer, config['alpha_inner'],
+                x0, r0, v_list, k, implicit_gram_matrix
             )
 
             if node_str in group.keys():
                 del db['m2l'][node_str]
+
             else:
                 group.create_group(node_str)
 
@@ -469,7 +469,7 @@ def main(**config):
     )
 
     # # Step 4: Compute M2L operators
-    # compute_m2l(config, db, kernel, surface, x0, r0, dc2e_v, dc2e_u, complete)
+    compute_m2l(config, db, kernel, surface_inner, surface_outer, x0, r0, dc2e_inv, complete)
 
     minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
     print(f"Total time elapsed {minutes:.0f} minutes and {seconds:.0f} seconds")
