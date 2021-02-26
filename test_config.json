@@ -1,9 +1,9 @@
 {
     "experiment": "test",
-    "npoints": 10000,
+    "npoints": 1000,
     "data_type": "random",
-    "order_inner": 2,
-    "order_outer": 10,
+    "order_equivalent": 2,
+    "order_check": 12,
     "kernel": "laplace",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,

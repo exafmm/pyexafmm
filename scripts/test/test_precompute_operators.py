@@ -36,11 +36,9 @@ def test_m2m(db):
 
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...]
-    surface_inner = db["surface"]["inner"][...]
-    surface_outer = db["surface"]["outer"][...]
+    equivalent_surface = db["surface"]["equivalent"][...]
 
-    npoints_inner = len(surface_inner)
-    npoints_outer = len(surface_outer)
+    npoints_equivalent = len(equivalent_surface)
 
     kernel = CONFIG["kernel"]
     p2p_function = KERNELS[kernel]["p2p"]
@@ -53,7 +51,7 @@ def test_m2m(db):
 
     operator_idx = 0
 
-    child_equivalent_density = np.ones(shape=(npoints_inner))
+    child_equivalent_density = np.ones(shape=npoints_equivalent)
 
     parent_equivalent_density = np.matmul(
         db["m2m"][operator_idx], child_equivalent_density
@@ -62,7 +60,7 @@ def test_m2m(db):
     distant_point = np.array([[1e2, 0, 0]])
 
     child_equivalent_surface = operator.scale_surface(
-        surface=surface_inner,
+        surface=equivalent_surface,
         radius=r0,
         level=child_level,
         center=child_center,
@@ -70,7 +68,7 @@ def test_m2m(db):
     )
 
     parent_equivalent_surface = operator.scale_surface(
-        surface=surface_inner,
+        surface=equivalent_surface,
         radius=r0,
         level=parent_level,
         center=parent_center,
@@ -94,17 +92,15 @@ def test_m2m(db):
 
 def test_l2l(db):
 
-    parent_key = 9
+    parent_key = 1
     child_key = morton.find_children(parent_key)[-1]
 
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...]
 
-    surface_inner = db["surface"]['inner'][...]
-    surface_outer = db["surface"]["outer"][...]
+    equivalent_surface = db["surface"]['equivalent'][...]
 
-    npoints_inner = len(surface_inner)
-    npoints_outer = len(surface_outer)
+    npoints_equivalent = len(equivalent_surface)
 
     kernel = CONFIG["kernel"]
     p2p_function = KERNELS[kernel]["p2p"]
@@ -115,7 +111,7 @@ def test_l2l(db):
     parent_level = morton.find_level(parent_key)
     child_level = morton.find_level(child_key)
 
-    parent_equivalent_density = np.ones(shape=(npoints_inner))
+    parent_equivalent_density = np.ones(shape=npoints_equivalent)
 
     operator_idx = 0
 
@@ -124,12 +120,12 @@ def test_l2l(db):
     )
 
     child_equivalent_surface = operator.scale_surface(
-        surface=surface_inner, radius=r0, level=child_level,
+        surface=equivalent_surface, radius=r0, level=child_level,
         center=child_center, alpha=CONFIG['alpha_outer']
     )
 
     parent_equivalent_surface = operator.scale_surface(
-        surface=surface_inner, radius=r0, level=parent_level,
+        surface=equivalent_surface, radius=r0, level=parent_level,
         center=parent_center, alpha=CONFIG['alpha_outer']
     )
 
@@ -155,10 +151,8 @@ def test_m2l(db):
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...]
     dc2e_inv = db['dc2e_inv'][...]
-    surface_inner = db["surface"]["inner"][...]
-    surface_outer= db["surface"]["outer"][...]
-    npoints_inner = len(surface_inner)
-    npoints_outer = len(surface_outer)
+    equivalent_surface = db["surface"]["equivalent"][...]
+    npoints_equivalent = len(equivalent_surface)
     kernel = CONFIG["kernel"]
     p2p_function = KERNELS[kernel]["p2p"]
 
@@ -183,27 +177,27 @@ def test_m2l(db):
     target_center = morton.find_physical_center_from_key(target_key, x0, r0)
 
     # Construct a vector of source points for all boxes in v_list
-    sources = np.zeros(shape=(npoints_inner*len(v_list), 3))
+    sources = np.zeros(shape=(npoints_equivalent*len(v_list), 3))
     for idx in range(len(v_list)):
         source_key = v_list[idx]
         source_center = morton.find_physical_center_from_key(source_key, x0, r0)
 
         source_equivalent_surface = operator.scale_surface(
-            surface=surface_inner,
+            surface=equivalent_surface,
             radius=r0,
             level=source_level,
             center=source_center,
             alpha=CONFIG['alpha_inner']
         )
 
-        lidx = idx*npoints_inner
-        ridx = (idx+1)*npoints_inner
+        lidx = idx*npoints_equivalent
+        ridx = (idx+1)*npoints_equivalent
 
         sources[lidx:ridx] = source_equivalent_surface
 
     # # place unit densities on source boxes
-    source_equivalent_density = np.ones(len(v_list)*npoints_inner)
-    # source_equivalent_density = np.random.rand(len(v_list)*npoints)
+    source_equivalent_density = np.ones(len(v_list)*npoints_equivalent)
+    source_equivalent_density = np.random.rand(len(v_list)*npoints_equivalent)
 
 
     U = db['m2l'][str(target_key)]['U']
@@ -215,7 +209,7 @@ def test_m2l(db):
     target_equivalent_density = m2l_matrix @ source_equivalent_density
 
     targets = operator.scale_surface(
-        surface=surface_inner,
+        surface=equivalent_surface,
         radius=r0,
         level=target_level,
         center=target_center,
