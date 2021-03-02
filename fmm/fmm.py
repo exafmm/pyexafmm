@@ -5,13 +5,16 @@ import pathlib
 import h5py
 import numpy as np
 
+import adaptoctree.morton as morton
+
 import fmm.operator as operator
-import fmm.kernel as kernel
+from fmm.kernel import KERNELS
 
 import utils.data as data
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
+
 
 class Fmm:
     """
@@ -31,31 +34,63 @@ class Fmm:
 
         self.config = data.load_json(config_filepath)
 
-        db_filepath = config_filepath / self.config['experiment']
+        db_filepath = PARENT / f"{self.config['experiment']}.hdf5"
         self.db = h5py.File(db_filepath, 'r')
 
         # Coefficients discretising surface of a node
-        self.ncoefficients = 6*(self.order-1)**2 + 2
+        # self.ncoefficients = 6*(self.order-1)**2 + 2
+
+        # Load required data from disk
+        self.check_surface = self.db['surface']['check'][...]
+        self.equivalent_surface = self.db['surface']['equivalent'][...]
+        self.nequivalent_points = len(self.equivalent_surface)
+        self.uc2e_inv = self.db['uc2e_inv'][...]
+
+        self.x0 = self.db['octree']['x0'][...]
+        self.r0 = self.db['octree']['r0'][...]
+        self.depth = self.db['octree']['depth'][...][0]
+        self.leaves = self.db['octree']['keys'][...]
+        self.nleaves = len(self.leaves)
+        self.complete = self.db['octree']['complete'][...]
+        self.ncomplete = len(self.complete)
+        self.complete_levels = morton.find_level(self.complete)
+
+        self.sources = self.db['particle_data']['sources'][...]
+        self.nsources = len(self.sources)
+        self.source_densities = self.db['particle_data']['source_densities'][...]
+        self.sources_to_keys = self.db['particle_data']['sources_to_keys'][...]
+
+        self.kernel = self.config['kernel']
+        self.eval = KERNELS[self.kernel]['eval']
+        self.p2p = KERNELS[self.kernel]['p2p']
+        self.scale = KERNELS[self.kernel]['scale']
+
+        self.m2m = self.db['m2m'][...]
 
         # Containers for results
         self.result_data = []
 
-        self.source_data = []
+        self.upward_equivalent_densities = {
+            key: np.zeros(self.nequivalent_points) for key in self.complete
+        }
 
-        self.target_data = []
+        self.downward_equivalent_densities = {
+            key: np.zeros(self.nequivalent_points) for key in self.complete
+        }
 
     def upward_pass(self):
         """Upward pass loop."""
-        nleaves = len(self.octree.source_index_ptr) - 1
 
         # Form multipole expansions for all leaf nodes
-        for index in range(nleaves):
-            self.particle_to_multipole(index)
+        for idx in range(self.nleaves):
+            leaf = self.leaves[idx]
+            self.particle_to_multipole(leaf)
 
         # Post-order traversal of octree, translating multipole expansions from
         # leaf nodes to root
-        for level in range(self.octree.maximum_level-1, -1, -1):
-            for key in self.octree.non_empty_source_nodes_by_level[level]:
+        for level in range(self.depth-1, -1, -1):
+            idxs = self.complete_levels == level
+            for key in self.complete[idxs]:
                 self.multipole_to_multipole(key)
 
     def downward_pass(self):
@@ -80,53 +115,43 @@ class Fmm:
             self.local_to_particle(leaf_node_index)
             self.compute_near_field(leaf_node_index)
 
-    def particle_to_multipole(self, leaf_node_index):
+    def particle_to_multipole(self, leaf):
         """Compute multipole expansions from leaf particles."""
 
         # Source indices in a given leaf
-        source_indices = self.octree.sources_by_leafs[
-            self.octree.source_index_ptr[leaf_node_index]
-            : self.octree.source_index_ptr[leaf_node_index + 1]
-        ]
+        source_indices = (self.sources_to_keys == leaf)
 
         # Find leaf sources, and leaf source densities
-        leaf_sources = self.octree.sources[source_indices]
-        leaf_source_densities = self.octree.source_densities[source_indices]
-
-        # Just adding index from argsort (sources by leafs)
-        self.source_data[
-            self.octree.source_leaf_nodes[leaf_node_index]
-            ].indices.update(source_indices)
-
-        # Compute key corresponding to this leaf index
-        leaf_key = self.octree.non_empty_source_nodes[leaf_node_index]
+        leaf_sources = self.sources[source_indices]
+        leaf_source_densities = self.source_densities[source_indices]
 
         # Compute center of leaf box in cartesian coordinates
-        leaf_center = hilbert.get_center_from_key(
-            leaf_key, self.octree.center, self.octree.radius
+        leaf_center = morton.find_physical_center_from_key(
+            key=leaf,
+            x0=self.x0,
+            r0=self.r0
         )
 
+        leaf_level = morton.find_level(leaf)
+
         upward_check_surface = operator.scale_surface(
-            surface=self.surface,
-            radius=self.octree.radius,
-            level=self.octree.maximum_level,
+            surface=self.check_surface,
+            radius=self.r0,
+            level=leaf_level,
             center=leaf_center,
             alpha=self.config['alpha_outer']
         )
 
-        scale = (1/self.kernel_function.scale)**self.octree.maximum_level
+        scale = self.scale(leaf_level)
 
-        check_potential = operator.p2p(
-            kernel_function=self.kernel_function,
+        check_potential = self.p2p(
             targets=upward_check_surface,
             sources=leaf_sources,
             source_densities=leaf_source_densities
-            ).density
+        )
 
-        tmp = np.matmul(scale*self.uc2e_u, check_potential)
-        upward_equivalent_density = np.matmul(self.uc2e_v, tmp)
-
-        self.source_data[leaf_key].expansion = upward_equivalent_density
+        upward_equivalent_density = scale*self.uc2e_inv @ check_potential
+        self.upward_equivalent_densities[leaf] += upward_equivalent_density
 
     def multipole_to_multipole(self, key):
         """
@@ -134,27 +159,22 @@ class Fmm:
             own multipole expansion.
         """
 
-        for child in hilbert.get_children(key):
-            # Only going through non-empty child nodes
-            if self.octree.source_node_to_index[child] != -1:
+        children = morton.find_children(key)
 
-                # Compute operator index
-                operator_idx = (child % 8) - 1
+        for child in children:
 
-                # Updating indices
-                self.source_data[key].indices.update(
-                    self.source_data[child].indices
-                    )
+            # Compute operator index
+            operator_idx = np.where(children==child)[0]
 
-                # Get child equivalent density
-                child_equivalent_density = self.source_data[child].expansion
+            # Get child equivalent density
+            child_equivalent_density = self.upward_equivalent_densities[child]
 
-                # Compute parent equivalent density
-                parent_equivalent_density = np.matmul(
-                    self.m2m[operator_idx], child_equivalent_density)
+            # Compute parent equivalent density
+            parent_equivalent_density = self.m2m[operator_idx] @ child_equivalent_density
 
-                # Add to source data
-                self.source_data[key].expansion += parent_equivalent_density
+            # Add to source data
+            self.upward_equivalent_densities[key] += np.ravel(parent_equivalent_density)
+
 
     def multipole_to_local(self, target_key):
         """
