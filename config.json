@@ -1,6 +1,6 @@
 {
     "experiment": "fmm",
-    "npoints": 1000,
+    "npoints": 1000000,
     "data_type": "random",
     "order_equivalent": 2,
     "order_check": 12,
