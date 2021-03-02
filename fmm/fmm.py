@@ -6,6 +6,7 @@ import h5py
 import numpy as np
 
 import adaptoctree.morton as morton
+from numpy.lib.utils import source
 
 import fmm.operator as operator
 from fmm.kernel import KERNELS
@@ -35,45 +36,45 @@ class Fmm:
         self.config = data.load_json(config_filepath)
 
         db_filepath = PARENT / f"{self.config['experiment']}.hdf5"
-        self.db = h5py.File(db_filepath, 'r')
+        self.db = h5py.File(db_filepath, "r")
 
         # Coefficients discretising surface of a node
         # self.ncoefficients = 6*(self.order-1)**2 + 2
 
         # Load required data from disk
-        self.check_surface = self.db['surface']['check'][...]
-        self.equivalent_surface = self.db['surface']['equivalent'][...]
+        self.check_surface = self.db["surface"]["check"][...]
+        self.equivalent_surface = self.db["surface"]["equivalent"][...]
         self.nequivalent_points = len(self.equivalent_surface)
-        self.uc2e_inv = self.db['uc2e_inv'][...]
-        self.dc2e_inv = self.db['dc2e_inv'][...]
+        self.uc2e_inv = self.db["uc2e_inv"][...]
+        self.dc2e_inv = self.db["dc2e_inv"][...]
 
-        self.x0 = self.db['octree']['x0'][...]
-        self.r0 = self.db['octree']['r0'][...]
-        self.depth = self.db['octree']['depth'][...][0]
-        self.leaves = self.db['octree']['keys'][...]
+        self.x0 = self.db["octree"]["x0"][...]
+        self.r0 = self.db["octree"]["r0"][...]
+        self.depth = self.db["octree"]["depth"][...][0]
+        self.leaves = self.db["octree"]["keys"][...]
         self.nleaves = len(self.leaves)
-        self.complete = self.db['octree']['complete'][...]
+        self.complete = self.db["octree"]["complete"][...]
         self.ncomplete = len(self.complete)
         self.complete_levels = morton.find_level(self.complete)
 
-        self.sources = self.db['particle_data']['sources'][...]
+        self.sources = self.db["particle_data"]["sources"][...]
         self.nsources = len(self.sources)
-        self.source_densities = self.db['particle_data']['source_densities'][...]
-        self.sources_to_keys = self.db['particle_data']['sources_to_keys'][...]
+        self.source_densities = self.db["particle_data"]["source_densities"][...]
+        self.sources_to_keys = self.db["particle_data"]["sources_to_keys"][...]
 
-        self.kernel = self.config['kernel']
-        self.eval = KERNELS[self.kernel]['eval']
-        self.p2p = KERNELS[self.kernel]['p2p']
-        self.scale = KERNELS[self.kernel]['scale']
+        self.kernel = self.config["kernel"]
+        self.eval = KERNELS[self.kernel]["eval"]
+        self.p2p = KERNELS[self.kernel]["p2p"]
+        self.scale = KERNELS[self.kernel]["scale"]
 
-        self.m2m = self.db['m2m'][...]
-        self.m2l = self.db['m2l'][...]
-        self.l2l = self.db['l2l'][...]
+        self.m2m = self.db["m2m"][...]
+        self.m2l = self.db["m2l"]
+        self.l2l = self.db["l2l"][...]
 
-        self.v_lists = self.db['interaction_lists']['v']
-        self.x_lists = self.db['interaction_lists']['x']
+        self.v_lists = self.db["interaction_lists"]["v"]
+        self.x_lists = self.db["interaction_lists"]["x"]
 
-        # Containers for results
+        #  Containers for results
         self.result_data = []
 
         self.upward_equivalent_densities = {
@@ -93,7 +94,7 @@ class Fmm:
             self.particle_to_multipole(leaf)
 
         # Post-order traversal of octree
-        for level in range(self.depth-1, -1, -1):
+        for level in range(self.depth - 1, -1, -1):
             idxs = self.complete_levels == level
             for key in self.complete[idxs]:
                 self.multipole_to_multipole(key)
@@ -102,7 +103,7 @@ class Fmm:
         """Downward pass loop."""
 
         # Pre-order traversal of octree
-        for level in range(2, self.depth+1):
+        for level in range(2, self.depth + 1):
 
             idxs = self.complete_levels == level
 
@@ -128,7 +129,7 @@ class Fmm:
         """Compute multipole expansions from leaf particles."""
 
         # Source indices in a given leaf
-        source_indices = (self.sources_to_keys == leaf)
+        source_indices = self.sources_to_keys == leaf
 
         # Find leaf sources, and leaf source densities
         leaf_sources = self.sources[source_indices]
@@ -136,9 +137,7 @@ class Fmm:
 
         # Compute center of leaf box in cartesian coordinates
         leaf_center = morton.find_physical_center_from_key(
-            key=leaf,
-            x0=self.x0,
-            r0=self.r0
+            key=leaf, x0=self.x0, r0=self.r0
         )
 
         leaf_level = morton.find_level(leaf)
@@ -148,7 +147,7 @@ class Fmm:
             radius=self.r0,
             level=leaf_level,
             center=leaf_center,
-            alpha=self.config['alpha_outer']
+            alpha=self.config["alpha_outer"],
         )
 
         scale = self.scale(leaf_level)
@@ -156,10 +155,10 @@ class Fmm:
         check_potential = self.p2p(
             targets=upward_check_surface,
             sources=leaf_sources,
-            source_densities=leaf_source_densities
+            source_densities=leaf_source_densities,
         )
 
-        upward_equivalent_density = scale*self.uc2e_inv @ check_potential
+        upward_equivalent_density = scale * self.uc2e_inv @ check_potential
         self.upward_equivalent_densities[leaf] += upward_equivalent_density
 
     def multipole_to_multipole(self, key):
@@ -172,14 +171,16 @@ class Fmm:
 
         for child in children:
 
-            # Compute operator index
-            operator_idx = np.where(children==child)[0]
+            #  Compute operator index
+            operator_idx = np.where(children == child)[0]
 
             # Get child equivalent density
             child_equivalent_density = self.upward_equivalent_densities[child]
 
             # Compute parent equivalent density
-            parent_equivalent_density = self.m2m[operator_idx] @ child_equivalent_density
+            parent_equivalent_density = (
+                self.m2m[operator_idx] @ child_equivalent_density
+            )
 
             # Add to source data
             self.upward_equivalent_densities[key] += np.ravel(parent_equivalent_density)
@@ -192,21 +193,26 @@ class Fmm:
         level = morton.find_level(key)
         scale = self.scale(level)
 
-        # Find source densities for v list of the key
+        #  Find source densities for v list of the key
         idx = np.where(self.complete == key)[0]
 
         v_list = self.v_lists[idx]
-        _, idxs, _ = np.intersect1e(self.complete, v_list)
-        source_equivalent_density = self.source_densities[idxs]
+        v_list = v_list[v_list != -1]
 
-        # M2L operator stored in terms of its SVD components
-        u, s, vt = self.m2l[str(key)]
+        source_equivalent_density = []
+        for source in v_list:
+            source_equivalent_density.extend(self.upward_equivalent_densities[source])
 
-        # Calculate target equivalent density
-        target_equivalent_density = vt @ source_equivalent_density
-        target_equivalent_density = np.diag(s) @ target_equivalent_density
-        target_equivalent_density = (scale*self.dc2e_inv) @ u @ target_equivalent_density
+        source_equivalent_density = np.array(source_equivalent_density)
 
+        #  M2L operator stored in terms of its SVD components
+        str_key = str(key)
+        u = self.m2l[str_key]["U"][...]
+        s = self.m2l[str_key]["S"][...]
+        vt = self.m2l[str_key]["VT"][...]
+
+        # Calculate target equivalent density, from assembled M2L matrix
+        target_equivalent_density = (scale*self.dc2e_inv) @ (u @ np.diag(s) @ vt).T @ source_equivalent_density
         self.downward_equivalent_densities[key] += target_equivalent_density
 
     def local_to_local(self, key):
@@ -215,15 +221,16 @@ class Fmm:
         """
 
         parent_equivalent_density = self.downward_equivalent_densities[key]
-
         children = morton.find_children(key)
 
         for child in children:
 
-            # Compute operator index
+            #  Compute operator index
             operator_idx = child == children
 
-            child_equivalent_density = self.l2l[operator_idx] @ parent_equivalent_density
+            child_equivalent_density = (
+                self.l2l[operator_idx] @ parent_equivalent_density
+            )
 
             self.downward_equivalent_densities[child] += child_equivalent_density
 
@@ -231,4 +238,9 @@ class Fmm:
         """
         X List interactions.
         """
-        pass
+
+        idx = np.where(self.complete == key)[0]
+
+        x_list = self.x_lists[idx]
+        x_list = x_list[x_list != 0]
+
