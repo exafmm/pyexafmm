@@ -24,7 +24,7 @@ def _particle_to_multipole(
         sources,
         source_densities,
         sources_to_keys,
-        upward_equivalent_densities,
+        multipole_expansions,
         x0,
         r0,
         alpha_outer,
@@ -64,12 +64,12 @@ def _particle_to_multipole(
     )
 
     upward_equivalent_density = scale * uc2e_inv @ check_potential
-    upward_equivalent_densities[key] += upward_equivalent_density
+    multipole_expansions[key] += upward_equivalent_density
 
 
 def _multipole_to_multipole(
         key,
-        upward_equivalent_densities,
+        multipole_expansions,
         m2m,
     ):
 
@@ -81,7 +81,7 @@ def _multipole_to_multipole(
         operator_idx = np.where(children == child)[0]
 
         # Get child equivalent density
-        child_equivalent_density = upward_equivalent_densities[child]
+        child_equivalent_density = multipole_expansions[child]
 
         # Compute parent equivalent density
         parent_equivalent_density = (
@@ -89,7 +89,7 @@ def _multipole_to_multipole(
         )
 
         # Add to source data
-        upward_equivalent_densities[key] += np.ravel(parent_equivalent_density)
+        multipole_expansions[key] += np.ravel(parent_equivalent_density)
 
 
 def _multipole_to_local(
@@ -98,8 +98,8 @@ def _multipole_to_local(
         complete_tree,
         v_lists,
         dc2e_inv,
-        upward_equivalent_densities,
-        downward_equivalent_densities,
+        multipole_expansions,
+        local_expansions,
         m2l,
     ):
 
@@ -114,7 +114,7 @@ def _multipole_to_local(
 
     source_equivalent_density = []
     for source in v_list:
-        source_equivalent_density.extend(upward_equivalent_densities[source])
+        source_equivalent_density.extend(multipole_expansions[source])
 
     source_equivalent_density = np.array(source_equivalent_density)
 
@@ -126,17 +126,17 @@ def _multipole_to_local(
 
     # Calculate target equivalent density, from assembled M2L matrix
     target_equivalent_density = (scale*dc2e_inv) @ (u @ np.diag(s) @ vt).T @ source_equivalent_density
-    downward_equivalent_densities[key] += target_equivalent_density
+    local_expansions[key] += target_equivalent_density
 
 
 
 def _local_to_local(
         key,
-        downward_equivalent_densities,
+        local_expansions,
         l2l,
      ):
 
-    parent_equivalent_density = downward_equivalent_densities[key]
+    parent_equivalent_density = local_expansions[key]
     children = morton.find_children(key)
 
     for child in children:
@@ -146,7 +146,7 @@ def _local_to_local(
 
         child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
 
-        downward_equivalent_densities[child] += np.ravel(child_equivalent_density)
+        local_expansions[child] += np.ravel(child_equivalent_density)
 
 
 def _source_to_local(
@@ -160,7 +160,7 @@ def _source_to_local(
         alpha_inner,
         x0,
         r0,
-        downward_equivalent_densities,
+        local_expansions,
         p2p_function,
         scale_function
     ):
@@ -196,11 +196,45 @@ def _source_to_local(
     )
 
     downward_equivalent_density = (scale*dc2e_inv) @ downward_check_potential
-    downward_equivalent_densities[key] += downward_equivalent_density
+    local_expansions[key] += downward_equivalent_density
 
 
-def _multipole_to_target(key):
-    pass
+
+def _multipole_to_target(
+        key,
+        x_list,
+        multipole_expansions,
+        targets,
+        target_potentials,
+        equivalent_surface,
+        x0,
+        r0,
+        alpha_inner,
+        p2p_function
+    ):
+
+    # Find target particles
+    target_indices = targets == key
+    target_coordinates = targets[target_indices]
+
+    for source in x_list:
+
+        source_level = morton.find_level(source)
+        source_center = morton.find_physical_center_from_key(source, x0, r0)
+
+        upward_equivalent_surface = operator.scale_surface(
+            surface=equivalent_surface,
+            radius=r0,
+            level=source_level,
+            center=source_center,
+            alpha=alpha_inner
+        )
+
+        target_potentials[target_indices] += p2p_function(
+            sources=upward_equivalent_surface,
+            targets=target_coordinates,
+            source_densities=multipole_expansions[source]
+        )
 
 
 def _near_field(key):
@@ -277,11 +311,11 @@ class Fmm:
         #  Containers for results
         self.target_potentials = np.zeros(self.ntargets)
 
-        self.upward_equivalent_densities = {
+        self.multipole_expansions = {
             key: np.zeros(self.nequivalent_points) for key in self.complete
         }
 
-        self.downward_equivalent_densities = {
+        self.local_expansions = {
             key: np.zeros(self.nequivalent_points) for key in self.complete
         }
 
@@ -330,11 +364,19 @@ class Fmm:
         # Leaf near-field computations
         for key in self.leaves:
 
+            idx = np.where(self.complete == key)
+
+            w_list = self.w_lists[idx]
+            w_list = x_list[w_list != -1]
+
+            u_list = self.u_lists[idx]
+            u_list = x_list[u_list != -1]
+
             # W List interactions
-            self.multipole_to_target(key)
+            self.multipole_to_target(key, w_list)
 
             # U List interactions
-            self.near_field(key)
+            self.near_field(key, u_list)
 
     def particle_to_multipole(self, key):
         """Compute multipole expansions from leaf particles."""
@@ -343,7 +385,7 @@ class Fmm:
             self.sources,
             self.source_densities,
             self.sources_to_keys,
-            self.upward_equivalent_densities,
+            self.multipole_expansions,
             self.x0,
             self.r0,
             self.config["alpha_outer"],
@@ -360,7 +402,7 @@ class Fmm:
         """
         _multipole_to_multipole(
             key,
-            self.upward_equivalent_densities,
+            self.multipole_expansions,
             self.m2m,
         )
 
@@ -374,8 +416,8 @@ class Fmm:
             self.complete,
             self.v_lists,
             self.dc2e_inv,
-            self.upward_equivalent_densities,
-            self.downward_equivalent_densities,
+            self.multipole_expansions,
+            self.local_expansions,
             self.m2l,
         )
 
@@ -385,7 +427,7 @@ class Fmm:
         """
         _local_to_local(
             key,
-            self.downward_equivalent_densities,
+            self.local_expansions,
             self.l2l,
         )
 
@@ -404,16 +446,27 @@ class Fmm:
                 self.config["alpha_inner"],
                 self.x0,
                 self.r0,
-                self.downward_equivalent_densities,
+                self.local_expansions,
                 self.p2p,
                 self.scale
-            )
+        )
 
-    def multipole_to_target(self, key):
+    def multipole_to_target(self, key, x_list):
         """
         W List interactions
         """
-        _multipole_to_target(key)
+        _multipole_to_target(
+            key,
+            x_list,
+            self.multipole_expansions,
+            self.targets,
+            self.target_potentials,
+            self.equivalent_surface,
+            self.x0,
+            self.r0,
+            self.config["alpha_inner"],
+            self.p2p
+        )
 
     def near_field(self, key):
         """
