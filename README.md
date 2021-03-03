@@ -2,18 +2,11 @@
 PyExaFMM
 </h1>
 
-The goal of PyExaFMM is to develop a highly performant implementation of the
-particle FMM that is written in Python.
+PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in pure Python with some extensions. Representing a compromise between portability, ease of use, and performance. Optimisations are currently implemented  using Numba, Numpy, and CUDA acceleration.
 
-The utility of FMM algorithms are hindered  by their relatively complex implementation, especially for achieving high-performance.
+The goal of PyExaFMM is to develop a highly performant implementation of the adaptive particle FMM written in Python, as the utility of FMM algorithms are hindered by their relatively complex implementation, especially for achieving high-performance.
 
-PyExaFMM is a particle kernel-independent FMM based on [1], written in pure Python
-with some extensions. Representing a compromise between portability, ease of use,
-and performance. Optimisations are currently implemented  using Numba, Numpy, and
-CUDA acceleration.
-
-The vision of the project is to eventually provide optimisations fully taking advantage
-distributed and heterogenous computing environments, and to scale from desktops to HPC clusters. Most importantly however, PyExaFMM will allow non-specialist scientists and engineers to solve particle FMM problems, from a Jupyter notebook!
+The vision of the project is to eventually provide optimisations fully taking advantage distributed and heterogenous computing environments, and to scale from desktops to HPC clusters. Most importantly however, PyExaFMM will allow non-specialist scientists and engineers to solve particle FMM problems, from a Jupyter notebook!
 
 ## System Requirements
 
@@ -98,6 +91,28 @@ fmm compute-operators
 ```
 
 Once this is done, you are ready to start programming with PyExaFMM.
+
+
+## Usage
+
+Example usage of the API presented by the `Fmm` class is as follows:
+
+```python
+from fmm import Fmm
+
+# Instantiate an FMM object, with config
+fmm = Fmm()
+
+# Optionally specify non-default config:
+# fmm = Fmm('test')
+
+# Run upward & downward pass
+fmm.run()
+
+# Result data
+print(fmm.target_potentials)
+```
+
 
 ## CLI
 
