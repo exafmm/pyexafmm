@@ -399,6 +399,11 @@ class Fmm:
             # U List interactions
             self.near_field(key, u_list)
 
+    def run(self):
+        """Run full algorithm"""
+        self.upward_pass()
+        self.downward_pass()
+
     def particle_to_multipole(self, key):
         """Compute multipole expansions from leaf particles."""
         _particle_to_multipole(

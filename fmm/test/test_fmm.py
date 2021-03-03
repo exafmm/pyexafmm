@@ -26,7 +26,7 @@ def fmm():
     return Fmm(config_filename='test_config.json')
 
 
-def test_m2m(fmm):
+def test_upward_pass(fmm):
 
     fmm.upward_pass()
 
@@ -56,6 +56,10 @@ def test_m2m(fmm):
     )
 
     assert np.allclose(direct, equivalent, rtol=RTOL)
+
+
+def test_downward_pass():
+    pass
 
 
 # def test_fmm(fmm):
