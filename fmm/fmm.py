@@ -9,7 +9,6 @@ import h5py
 import numpy as np
 
 import adaptoctree.morton as morton
-from numpy.lib.utils import source
 
 import fmm.operator as operator
 from fmm.kernel import KERNELS
@@ -155,9 +154,20 @@ def _source_to_local(
         x_list,
         sources,
         source_densities,
-        sources_to_keys
+        sources_to_keys,
+        check_surface,
+        dc2e_inv,
+        alpha_inner,
+        x0,
+        r0,
+        downward_equivalent_densities,
+        p2p_function,
+        scale_function
     ):
 
+    level = morton.find_level(key)
+    scale = scale_function(level)
+    center = morton.find_physical_center_from_key(key, x0, r0)
     sources = []
     source_densities = []
 
@@ -169,7 +179,24 @@ def _source_to_local(
         source_densities.append(source_densities[source_indices])
 
     sources = np.array(sources)
-    print(sources, x_list)
+    source_densities = np.array(source_densities)
+
+    downward_check_surface = operator.scale_surface(
+        surface=check_surface,
+        radius=r0,
+        level=level,
+        center=center,
+        alpha=alpha_inner
+    )
+
+    downward_check_potential = p2p_function(
+        sources=sources,
+        targets=downward_check_surface,
+        source_densities=source_densities
+    )
+
+    downward_equivalent_density = (scale*dc2e_inv) @ downward_check_potential
+    downward_equivalent_densities[key] += downward_equivalent_density
 
 
 def _multipole_to_target(key):
@@ -367,12 +394,20 @@ class Fmm:
         X List interactions.
         """
         _source_to_local(
-            key,
-            x_list,
-            self.sources,
-            self.source_densities,
-            self.sources_to_keys
-        )
+                key,
+                x_list,
+                self.sources,
+                self.source_densities,
+                self.sources_to_keys,
+                self.check_surface,
+                self.dc2e_inv,
+                self.config["alpha_inner"],
+                self.x0,
+                self.r0,
+                self.downward_equivalent_densities,
+                self.p2p,
+                self.scale
+            )
 
     def multipole_to_target(self, key):
         """
