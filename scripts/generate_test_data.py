@@ -67,18 +67,33 @@ def well_separated_data(npoints):
     return (targets, sources, source_densities)
 
 
+def spiral_data(npoints):
+
+    theta = np.linspace(0, np.pi, npoints)
+    phi = np.linspace(0, 2*np.pi, npoints)
+
+    x = np.sin(theta)*np.cos(phi)
+    y = np.sin(theta)*np.sin(phi)
+    z = np.cos(theta)
+
+    sources = np.vstack([x, y, z]).T
+    targets = sources
+    source_densities = np.ones(npoints)
+
+    return (targets, sources, source_densities)
+
+
 DATA_FUNCTIONS = {
     'random': random_data,
-    'separated': well_separated_data
+    'separated': well_separated_data,
+    'spiral': spiral_data
 }
 
 
 def main(**config):
 
     npoints = config['npoints']
-    dtype = config['dtype']
-
-    data_function = DATA_FUNCTIONS[dtype]
+    data_function = DATA_FUNCTIONS[config['data_type']]
 
     sources, targets, source_densities = data_function(npoints)
 
@@ -88,37 +103,29 @@ def main(**config):
         del db[f'particle_data']['sources']
         del db[f'particle_data']['targets']
         del db[f'particle_data']['source_densities']
-        
+
         db[f'particle_data']['sources'] = sources
         db[f'particle_data']['targets'] = targets
-        db[f'particle_data']['source_densities'] = source_densities 
+        db[f'particle_data']['source_densities'] = source_densities
 
     else:
         db.create_group(f'particle_data')
 
         db[f'particle_data']['sources'] = sources
         db[f'particle_data']['targets'] = targets
-        db[f'particle_data']['source_densities'] = source_densities 
-    
+        db[f'particle_data']['source_densities'] = source_densities
+
     db.close()
 
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 3:
+    if sys.argv[2] not in DATA_FUNCTIONS.keys():
         raise ValueError(
-            f'Must Specify Config Filepath and data type!\
-                e.g. `python generate_test_data.py /path/to/config.json random`'
-                )
-
-    elif sys.argv[2] not in DATA_FUNCTIONS.keys():
-        raise ValueError(
-            f'Data type `{sys.argv[2]}` not valid. Must be either`separated` or `random`'
+            f'Data type `{sys.argv[2]}` not valid'
              )
 
     else:
         config_filepath = sys.argv[1]
-        dtype = sys.argv[2]
         config = data.load_json(config_filepath)
-        config['dtype'] = dtype
         main(**config)
