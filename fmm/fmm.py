@@ -77,19 +77,21 @@ def _multipole_to_multipole(
 
     for child in children:
 
-        #  Compute operator index
-        operator_idx = np.where(children == child)[0]
+        if child in multipole_expansions:
 
-        # Get child equivalent density
-        child_equivalent_density = multipole_expansions[child]
+            #  Compute operator index
+            operator_idx = np.where(children == child)[0]
 
-        # Compute parent equivalent density
-        parent_equivalent_density = (
-            m2m[operator_idx] @ child_equivalent_density
-        )
+            # Get child equivalent density
+            child_equivalent_density = multipole_expansions[child]
 
-        # Add to source data
-        multipole_expansions[key] += np.ravel(parent_equivalent_density)
+            # Compute parent equivalent density
+            parent_equivalent_density = (
+                m2m[operator_idx] @ child_equivalent_density
+            )
+
+            # Add to source data
+            multipole_expansions[key] += np.ravel(parent_equivalent_density)
 
 
 def _multipole_to_local(
@@ -136,12 +138,14 @@ def _local_to_local(
 
     for child in children:
 
-        #  Compute operator index
-        operator_idx = child == children
+        if child in local_expansions:
 
-        child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
+            #  Compute operator index
+            operator_idx = child == children
 
-        local_expansions[child] += np.ravel(child_equivalent_density)
+            child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
+
+            local_expansions[child] += np.ravel(child_equivalent_density)
 
 
 def _source_to_local(
@@ -163,35 +167,37 @@ def _source_to_local(
     level = morton.find_level(key)
     scale = scale_function(level)
     center = morton.find_physical_center_from_key(key, x0, r0)
-    sources = []
-    source_densities = []
+    source_coodinates = []
+    densities = []
 
     for source in x_list:
         source_indices = sources_to_keys == source
+        if np.any(source_indices == True):
+            source_coodinates.extend(sources[source_indices])
+            densities.extend(source_densities[source_indices])
 
-        # Find sources, and source densities
-        sources.append(sources[source_indices])
-        source_densities.append(source_densities[source_indices])
+    source_coodinates = np.array(source_coodinates)
+    densities = np.array(densities)
 
-    sources = np.array(sources)
-    source_densities = np.array(source_densities)
+    if len(densities) > 0:
 
-    downward_check_surface = operator.scale_surface(
-        surface=check_surface,
-        radius=r0,
-        level=level,
-        center=center,
-        alpha=alpha_inner
-    )
+        downward_check_surface = operator.scale_surface(
+            surface=check_surface,
+            radius=r0,
+            level=level,
+            center=center,
+            alpha=alpha_inner
+        )
 
-    downward_check_potential = p2p_function(
-        sources=sources,
-        targets=downward_check_surface,
-        source_densities=source_densities
-    )
+        downward_check_potential = p2p_function(
+            sources=source_coodinates,
+            targets=downward_check_surface,
+            source_densities=densities
+        )
 
-    downward_equivalent_density = (scale*dc2e_inv) @ downward_check_potential
-    local_expansions[key] += downward_equivalent_density
+        downward_equivalent_density = (scale*dc2e_inv) @ downward_check_potential
+
+        local_expansions[key] += downward_equivalent_density
 
 
 def _multipole_to_target(
@@ -237,6 +243,8 @@ def _near_field(
         targets,
         target_potentials,
         sources,
+        complete,
+        sources_to_keys,
         source_densities,
         p2p_function
     ):
@@ -246,7 +254,7 @@ def _near_field(
 
     for source in u_list:
 
-        source_indices = sources == source
+        source_indices = complete == source
         source_coordinates = sources[source_indices]
         densities = source_densities[source_indices]
 
@@ -382,22 +390,22 @@ class Fmm:
                 if level < self.depth:
                     self.local_to_local(key)
 
-        # Leaf near-field computations
-        for key in self.leaves:
+        # # Leaf near-field computations
+        # for key in self.leaves:
 
-            idx = np.where(self.complete == key)
+        #     idx = np.where(self.complete == key)
 
-            w_list = self.w_lists[idx]
-            w_list = x_list[w_list != -1]
+        #     w_list = self.w_lists[idx]
+        #     w_list = w_list[w_list != -1]
 
-            u_list = self.u_lists[idx]
-            u_list = x_list[u_list != -1]
+        #     u_list = self.u_lists[idx]
+        #     u_list = u_list[u_list != -1]
 
-            # W List interactions
-            self.multipole_to_target(key, w_list)
+        #     # W List interactions
+        #     self.multipole_to_target(key, w_list)
 
             # U List interactions
-            self.near_field(key, u_list)
+            # self.near_field(key, u_list)
 
     def run(self):
         """Run full algorithm"""
@@ -469,7 +477,7 @@ class Fmm:
                 self.sources_to_keys,
                 self.check_surface,
                 self.dc2e_inv,
-                self.config["alpha_inner"],
+                self.config['alpha_inner'],
                 self.x0,
                 self.r0,
                 self.local_expansions,
@@ -504,6 +512,8 @@ class Fmm:
             self.targets,
             self.target_potentials,
             self.sources,
+            self.complete,
+            self.sources_to_keys,
             self.source_densities,
             self.p2p
         )
