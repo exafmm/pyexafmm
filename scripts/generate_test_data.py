@@ -4,7 +4,6 @@ Generate random test data
 """
 import os
 import pathlib
-import shutil
 import sys
 
 import numpy as np

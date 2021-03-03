@@ -2,7 +2,6 @@
 Test the FMM
 """
 import numpy as np
-import pytest
 
 import adaptoctree.morton as morton
 
