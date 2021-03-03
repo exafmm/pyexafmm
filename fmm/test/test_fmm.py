@@ -126,8 +126,4 @@ def test_fmm():
         source_densities=fmm.source_densities
     )
 
-
-    print(fmm.target_potentials[:10])
-    print(direct[:10])
-
-    assert False
+    assert np.allclose(direct, fmm.target_potentials, rtol=RTOL)

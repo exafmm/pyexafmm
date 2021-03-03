@@ -213,7 +213,6 @@ def _multipole_to_target(
         alpha_inner,
         p2p_function
     ):
-
     # Find target particles
     target_indices = targets_to_keys == key
     target_coordinates = targets[target_indices]
@@ -238,6 +237,41 @@ def _multipole_to_target(
         )
 
 
+def _local_to_target(
+        key,
+        targets,
+        target_potentials,
+        targets_to_keys,
+        local_expansions,
+        equivalent_surface,
+        alpha_outer,
+        x0,
+        r0,
+        p2p_function
+    ):
+
+    level = morton.find_level(key)
+    center = morton.find_physical_center_from_key(key, x0, r0)
+
+    downward_equivalent_surface = operator.scale_surface(
+        equivalent_surface,
+        r0,
+        level,
+        center,
+        alpha_outer
+    )
+
+    target_idxs = key == targets_to_keys
+    target_coordinates = targets[target_idxs]
+
+    target_potentials[target_idxs] += p2p_function(
+        sources=downward_equivalent_surface,
+        targets=target_coordinates,
+        source_densities=local_expansions[key]
+    )
+
+
+
 def _near_field(
         key,
         u_list,
@@ -250,10 +284,10 @@ def _near_field(
         p2p_function
     ):
 
-
     target_indices = targets_to_keys == key
     target_coordinates = targets[target_indices]
 
+    # Sources in U list
     for source in u_list:
 
         source_indices = sources_to_keys == source
@@ -265,6 +299,17 @@ def _near_field(
             targets=target_coordinates,
             source_densities=densities
         )
+
+    # Sources in target node
+    local_source_indices = sources_to_keys == key
+    local_source_coordinates = sources[local_source_indices]
+    local_densities = source_densities[local_source_indices]
+
+    target_potentials[target_indices] += p2p_function(
+        sources=local_source_coordinates,
+        targets=target_coordinates,
+        source_densities=local_densities
+    )
 
 
 class Fmm:
@@ -404,6 +449,9 @@ class Fmm:
             u_list = self.u_lists[idx]
             u_list = u_list[u_list != -1]
 
+            # Evaluate local expansions at targets
+            self.local_to_target(key)
+
             # W List interactions
             self.multipole_to_target(key, w_list)
 
@@ -503,6 +551,23 @@ class Fmm:
             self.x0,
             self.r0,
             self.config["alpha_inner"],
+            self.p2p
+        )
+
+    def local_to_target(self, key):
+        """
+        Evaluate local potentials at target points
+        """
+        _local_to_target(
+            key,
+            self.targets,
+            self.target_potentials,
+            self.targets_to_keys,
+            self.local_expansions,
+            self.equivalent_surface,
+            self.config["alpha_outer"],
+            self.x0,
+            self.r0,
             self.p2p
         )
 
