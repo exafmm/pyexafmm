@@ -96,7 +96,7 @@ def _multipole_to_local(
         key,
         scale_function,
         complete_tree,
-        v_lists,
+        v_list,
         dc2e_inv,
         multipole_expansions,
         local_expansions,
@@ -107,10 +107,6 @@ def _multipole_to_local(
     scale = scale_function(level)
 
     #  Find source densities for v list of the key
-    idx = np.where(complete_tree == key)[0]
-
-    v_list = v_lists[idx]
-    v_list = v_list[v_list != -1]
 
     source_equivalent_density = []
     for source in v_list:
@@ -127,7 +123,6 @@ def _multipole_to_local(
     # Calculate target equivalent density, from assembled M2L matrix
     target_equivalent_density = (scale*dc2e_inv) @ (u @ np.diag(s) @ vt).T @ source_equivalent_density
     local_expansions[key] += target_equivalent_density
-
 
 
 def _local_to_local(
@@ -199,7 +194,6 @@ def _source_to_local(
     local_expansions[key] += downward_equivalent_density
 
 
-
 def _multipole_to_target(
         key,
         x_list,
@@ -237,8 +231,30 @@ def _multipole_to_target(
         )
 
 
-def _near_field(key):
-    pass
+def _near_field(
+        key,
+        u_list,
+        targets,
+        target_potentials,
+        sources,
+        source_densities,
+        p2p_function
+    ):
+
+    target_indices = targets == key
+    target_coordinates = targets[target_indices]
+
+    for source in u_list:
+
+        source_indices = sources == source
+        source_coordinates = sources[source_indices]
+        densities = source_densities[source_indices]
+
+        target_potentials[target_indices] += p2p_function(
+            sources=source_coordinates,
+            targets=target_coordinates,
+            source_densities=densities
+        )
 
 
 class Fmm:
@@ -347,8 +363,13 @@ class Fmm:
 
             for key in self.complete[idxs]:
 
+                idx = np.where(self.complete== key)[0]
+
+                v_list = self.v_lists[idx]
+                v_list = v_list[v_list != -1]
+
                 # V List interactions
-                self.multipole_to_local(key)
+                self.multipole_to_local(key, v_list)
 
                 # X List interactions
                 idx = np.where(self.complete == key)
@@ -406,7 +427,7 @@ class Fmm:
             self.m2m,
         )
 
-    def multipole_to_local(self, key):
+    def multipole_to_local(self, key, v_list):
         """
         V List interactions.
         """
@@ -414,7 +435,7 @@ class Fmm:
             key,
             self.scale,
             self.complete,
-            self.v_lists,
+            v_list,
             self.dc2e_inv,
             self.multipole_expansions,
             self.local_expansions,
@@ -468,8 +489,16 @@ class Fmm:
             self.p2p
         )
 
-    def near_field(self, key):
+    def near_field(self, key, u_list):
         """
         U List interactions
         """
-        _near_field(key)
+        _near_field(
+            key,
+            u_list,
+            self.targets,
+            self.target_potentials,
+            self.sources,
+            self.source_densities,
+            self.p2p
+        )
