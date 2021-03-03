@@ -205,6 +205,7 @@ def _multipole_to_target(
         x_list,
         multipole_expansions,
         targets,
+        targets_to_keys,
         target_potentials,
         equivalent_surface,
         x0,
@@ -214,7 +215,7 @@ def _multipole_to_target(
     ):
 
     # Find target particles
-    target_indices = targets == key
+    target_indices = targets_to_keys == key
     target_coordinates = targets[target_indices]
 
     for source in x_list:
@@ -241,20 +242,21 @@ def _near_field(
         key,
         u_list,
         targets,
+        targets_to_keys,
         target_potentials,
         sources,
-        complete,
         sources_to_keys,
         source_densities,
         p2p_function
     ):
 
-    target_indices = targets == key
+
+    target_indices = targets_to_keys == key
     target_coordinates = targets[target_indices]
 
     for source in u_list:
 
-        source_indices = complete == source
+        source_indices = sources_to_keys == source
         source_coordinates = sources[source_indices]
         densities = source_densities[source_indices]
 
@@ -314,6 +316,7 @@ class Fmm:
         self.sources_to_keys = self.db["particle_data"]["sources_to_keys"][...]
         self.targets = self.db["particle_data"]["targets"][...]
         self.ntargets = len(self.targets)
+        self.targets_to_keys = self.db["particle_data"]["targets_to_keys"][...]
 
         ## Load pre-computed operators
         self.m2m = self.db["m2m"][...]
@@ -390,22 +393,22 @@ class Fmm:
                 if level < self.depth:
                     self.local_to_local(key)
 
-        # # Leaf near-field computations
-        # for key in self.leaves:
+        # Leaf near-field computations
+        for key in self.leaves:
 
-        #     idx = np.where(self.complete == key)
+            idx = np.where(self.complete == key)
 
-        #     w_list = self.w_lists[idx]
-        #     w_list = w_list[w_list != -1]
+            w_list = self.w_lists[idx]
+            w_list = w_list[w_list != -1]
 
-        #     u_list = self.u_lists[idx]
-        #     u_list = u_list[u_list != -1]
+            u_list = self.u_lists[idx]
+            u_list = u_list[u_list != -1]
 
-        #     # W List interactions
-        #     self.multipole_to_target(key, w_list)
+            # W List interactions
+            self.multipole_to_target(key, w_list)
 
             # U List interactions
-            # self.near_field(key, u_list)
+            self.near_field(key, u_list)
 
     def run(self):
         """Run full algorithm"""
@@ -494,6 +497,7 @@ class Fmm:
             x_list,
             self.multipole_expansions,
             self.targets,
+            self.targets_to_keys,
             self.target_potentials,
             self.equivalent_surface,
             self.x0,
@@ -510,9 +514,9 @@ class Fmm:
             key,
             u_list,
             self.targets,
+            self.targets_to_keys,
             self.target_potentials,
             self.sources,
-            self.complete,
             self.sources_to_keys,
             self.source_densities,
             self.p2p
