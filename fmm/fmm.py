@@ -1,374 +1,788 @@
-"""Implementation of the main FMM loop."""
+"""
+Implementation of the main FMM loop.
+"""
+
 import os
 import pathlib
 
+import h5py
 import numpy as np
 
-import fmm.hilbert as hilbert
-import fmm.density as density
-import fmm.node as node
-import fmm.operator as operator
-import fmm.kernel as kernel
-import fmm.octree as octree
+import adaptoctree.morton as morton
+
+import fmm.surface as surface
+from fmm.kernel import KERNELS
 
 import utils.data as data
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
+
+def _particle_to_multipole(
+        key,
+        sources,
+        source_densities,
+        sources_to_keys,
+        multipole_expansions,
+        x0,
+        r0,
+        alpha_outer,
+        check_surface,
+        uc2e_inv,
+        scale_function,
+        p2p_function,
+    ):
+    """
+    P2M operator. Form a multipole expansion from source points within a given
+        source node.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    sources : np.array(shape=(nsources, 3), dtype=np.float32)
+        Source coordinates.
+    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
+        Charge densities at source points.
+    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) source lies.
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+        Dictionary containing multipole expansions, indexed by Morton key of
+        source nodes.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_outer : np.float32
+        Relative size of outer surface
+    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+        Discretised check surface.
+    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
+    scale_function : function
+        Function handle for kernel scaling.
+    p2p_function : function
+        Function handle for kernel P2P.
+    """
+    # Source indices in a given leaf
+    source_indices = sources_to_keys == key
+
+    # Find leaf sources, and leaf source densities
+    leaf_sources = sources[source_indices]
+    leaf_source_densities = source_densities[source_indices]
+
+    # Compute center of leaf box in cartesian coordinates
+    leaf_center = morton.find_physical_center_from_key(
+        key=key, x0=x0, r0=r0
+    )
+
+    leaf_level = morton.find_level(key)
+
+    upward_check_surface = surface.scale_surface(
+        surf=check_surface,
+        radius=r0,
+        level=leaf_level,
+        center=leaf_center,
+        alpha=alpha_outer,
+    )
+
+    scale = scale_function(leaf_level)
+
+    check_potential = p2p_function(
+        targets=upward_check_surface,
+        sources=leaf_sources,
+        source_densities=leaf_source_densities,
+    )
+
+    upward_equivalent_density = scale * uc2e_inv @ check_potential
+    multipole_expansions[key] += upward_equivalent_density
+
+
+def _multipole_to_multipole(
+        key,
+        multipole_expansions,
+        m2m,
+    ):
+    """
+    M2M operator. Add the contribution of the multipole expansions of a given
+        source node's children to it's own multipole expansion.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+        Dictionary containing multipole expansions, indexed by Morton key of
+        source nodes.
+    m2m : np.array(shape=(8, n_equivalent, n_equivalent), dtype=np.float32)
+        Unscaled pre-computed M2M operators for all children. Implicitly
+            indexed by order of Morton encoding from
+            adaptoctree.morton.find_children.
+    """
+    children = morton.find_children(key)
+
+    for child in children:
+
+        if child in multipole_expansions:
+
+            #  Compute operator index
+            operator_idx = np.where(children == child)[0]
+
+            # Get child equivalent density
+            child_equivalent_density = multipole_expansions[child]
+
+            # Compute parent equivalent density
+            parent_equivalent_density = (
+                m2m[operator_idx] @ child_equivalent_density
+            )
+
+            # Add to source data
+            multipole_expansions[key] += np.ravel(parent_equivalent_density)
+
+
+def _multipole_to_local(
+        key,
+        v_list,
+        multipole_expansions,
+        local_expansions,
+        dc2e_inv,
+        m2l,
+        scale_function,
+    ):
+    """
+    M2L operator. Translate the multipole expansion of all source nodes in a
+        given target node's V list, into a local expansion centered on the
+        target node.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    v_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
+        Morton keys of V list members.
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+        Dictionary containing multipole expansions, indexed by Morton key of
+        source nodes.
+    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+        Dictionary containing local expansions, indexed by Morton key of
+        target nodes.
+    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    m2l : h5py.Group
+        HDF5 group, indexed by source node key, storing compressed M2L
+        components.
+    scale_function : function
+        Function handle for kernel scaling.
+    """
+    level = morton.find_level(key)
+    scale = scale_function(level)
+
+    #  Find source densities for v list of the key
+
+    source_equivalent_density = []
+    for source in v_list:
+        source_equivalent_density.extend(multipole_expansions[source])
+
+    source_equivalent_density = np.array(source_equivalent_density)
+
+    #  M2L operator stored in terms of its SVD components
+    str_key = str(key)
+    u = m2l[str_key]["U"][...]
+    s = m2l[str_key]["S"][...]
+    vt = m2l[str_key]["VT"][...]
+
+    # Calculate target equivalent density, from assembled M2L matrix
+    target_equivalent_density = (scale*dc2e_inv) @ (u @ np.diag(s) @ vt).T @ source_equivalent_density
+    local_expansions[key] += target_equivalent_density
+
+
+def _local_to_local(
+        key,
+        local_expansions,
+        l2l,
+     ):
+    """
+    L2L operator. Translate the local expansion of a parent node, to each of
+        it's children.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+        Dictionary containing local expansions, indexed by Morton key of
+        target nodes.
+    l2l : np.array(shape=(8, n_check, n_check), dtype=np.float32)
+        Unscaled pre-computed L2L operators for all children. Implicitly
+            indexed by order of Morton encoding from
+            adaptoctree.morton.find_children.
+    """
+    parent_equivalent_density = local_expansions[key]
+    children = morton.find_children(key)
+
+    for child in children:
+
+        if child in local_expansions:
+
+            #  Compute operator index
+            operator_idx = child == children
+
+            child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
+
+            local_expansions[child] += np.ravel(child_equivalent_density)
+
+
+def _source_to_local(
+        key,
+        x_list,
+        sources,
+        source_densities,
+        sources_to_keys,
+        local_expansions,
+        x0,
+        r0,
+        alpha_inner,
+        check_surface,
+        dc2e_inv,
+        scale_function,
+        p2p_function
+    ):
+    """
+    S2L operator. For source nodes in a target node's X list, the multipole
+        expansion of the source node doesn't apply, as the target node lies
+        within it's upward check surface, therefore the sources are used to
+        compute the contribution to the local expansion of the target node
+        directly.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    x_list : np.array(shape=(n_x_list, 1), dtype=np.int64)
+        Morton keys of X list members.
+    sources : np.array(shape=(nsources, 3), dtype=np.float32)
+        Source coordinates.
+    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
+        Charge densities at source points.
+    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) source lies.
+    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+        Dictionary containing local expansions, indexed by Morton key of
+        target nodes.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_inner: np.float32
+        Relative size of inner surface
+    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+        Discretised check surface.
+    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    scale_function : function
+        Function handle for kernel scaling.
+    p2p_function : function
+        Function handle for kernel P2P.
+    """
+    level = morton.find_level(key)
+    scale = scale_function(level)
+    center = morton.find_physical_center_from_key(key, x0, r0)
+    source_coodinates = []
+    densities = []
+
+    for source in x_list:
+        source_indices = sources_to_keys == source
+        if np.any(source_indices == True):
+            source_coodinates.extend(sources[source_indices])
+            densities.extend(source_densities[source_indices])
+
+    source_coodinates = np.array(source_coodinates)
+    densities = np.array(densities)
+
+    if len(densities) > 0:
+
+        downward_check_surface = surface.scale_surface(
+            surf=check_surface,
+            radius=r0,
+            level=level,
+            center=center,
+            alpha=alpha_inner
+        )
+
+        downward_check_potential = p2p_function(
+            sources=source_coodinates,
+            targets=downward_check_surface,
+            source_densities=densities
+        )
+
+        downward_equivalent_density = (scale*dc2e_inv) @ downward_check_potential
+
+        local_expansions[key] += downward_equivalent_density
+
+
+def _multipole_to_target(
+        key,
+        w_list,
+        targets,
+        targets_to_keys,
+        target_potentials,
+        multipole_expansions,
+        x0,
+        r0,
+        alpha_inner,
+        equivalent_surface,
+        p2p_function
+    ):
+    """
+    M2T operator. M2L translations aren't applicable, as the source nodes in
+        the W list are not outside of the downward equivalent surface of the
+        target node.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    w_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
+        Morton keys of W list members.
+    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target coordinates.
+    targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) target lies.
+    targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
+        Potentials at all target points, due to all source points.
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+        Dictionary containing multipole expansions, indexed by Morton key of
+        source nodes.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_inner : np.float32
+        Relative size of inner surface
+    equivalent_surface : np.array(shape=(n_equivalent, 3), dtype=np.float32)
+        Discretised equivalent surface.
+    p2p_function : function
+        Function handle for kernel P2P.
+    """
+    # Find target particles
+    target_indices = targets_to_keys == key
+    target_coordinates = targets[target_indices]
+
+    for source in w_list:
+
+        source_level = morton.find_level(source)
+        source_center = morton.find_physical_center_from_key(source, x0, r0)
+
+        upward_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
+            radius=r0,
+            level=source_level,
+            center=source_center,
+            alpha=alpha_inner
+        )
+
+        target_potentials[target_indices] += p2p_function(
+            sources=upward_equivalent_surface,
+            targets=target_coordinates,
+            source_densities=multipole_expansions[source]
+        )
+
+
+def _local_to_target(
+        key,
+        targets,
+        targets_to_keys,
+        target_potentials,
+        local_expansions,
+        x0,
+        r0,
+        alpha_outer,
+        equivalent_surface,
+        p2p_function
+    ):
+    """
+    L2T operator. Evaluate the local expansion at the target points in a given
+        target node.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target coordinates.
+    targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) target lies.
+    targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
+        Potentials at all target points, due to all source points.
+    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+        Dictionary containing local expansions, indexed by Morton key of
+        target nodes.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_outer : np.float32
+        Relative size of outer surface
+    equivalent_surface : np.array(shape=(n_equivalent, 3), dtype=np.float32)
+        Discretised equivalent surface.
+    p2p_function : function
+        Function handle for kernel P2P.
+    """
+    level = morton.find_level(key)
+    center = morton.find_physical_center_from_key(key, x0, r0)
+
+    downward_equivalent_surface = surface.scale_surface(
+        equivalent_surface,
+        r0,
+        level,
+        center,
+        alpha_outer
+    )
+
+    target_idxs = key == targets_to_keys
+    target_coordinates = targets[target_idxs]
+
+    target_potentials[target_idxs] += p2p_function(
+        sources=downward_equivalent_surface,
+        targets=target_coordinates,
+        source_densities=local_expansions[key]
+    )
+
+
+def _near_field(
+        key,
+        u_list,
+        targets,
+        targets_to_keys,
+        target_potentials,
+        sources,
+        source_densities,
+        sources_to_keys,
+        p2p_function
+    ):
+    """
+    Evaluate all near field particles for source nodes within a given target
+        node's U list directly.
+
+    Parameters:
+    -----------
+    key : np.int64
+        Morton key of source node.
+    u_list : np.array(shape=(n_u_list, 1), dtype=np.int64)
+        Morton keys of U list members.
+    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target coordinates.
+    targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) target lies.
+    targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
+        Potentials at all target points, due to all source points.
+    sources : np.array(shape=(nsources, 3), dtype=np.float32)
+        Source coordinates.
+    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
+        Charge densities at source points.
+    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) source lies.
+    p2p_function : function
+        Function handle for kernel P2P.
+    """
+
+    target_indices = targets_to_keys == key
+    target_coordinates = targets[target_indices]
+
+    # Sources in U list
+    for source in u_list:
+
+        source_indices = sources_to_keys == source
+        source_coordinates = sources[source_indices]
+        densities = source_densities[source_indices]
+
+        target_potentials[target_indices] += p2p_function(
+            sources=source_coordinates,
+            targets=target_coordinates,
+            source_densities=densities
+        )
+
+    # Sources in target node
+    local_source_indices = sources_to_keys == key
+    local_source_coordinates = sources[local_source_indices]
+    local_densities = source_densities[local_source_indices]
+
+    target_potentials[target_indices] += p2p_function(
+        sources=local_source_coordinates,
+        targets=target_coordinates,
+        source_densities=local_densities
+    )
+
+
 class Fmm:
     """
-    Main FMM loop.
-    Initialising with an Octree, run the FMM loop with a specified kernel
-    function, computing the expansion at a given precision specified by an
-    expansion order.
+    FMM class. Configure with pre-computed operators and octree.
+
+    Parameters:
+    -----------
+    config_filename : str
+        Filename of configuration json file used to pre-compute operators.
     """
 
     def __init__(self, config_filename=None):
 
+        # Load experimental database
         if config_filename is not None:
-            config_filepath = PARENT / config_filename
+            config_filepath = PARENT / f"{config_filename}.json"
         else:
             config_filepath = PARENT / "config.json"
 
         self.config = data.load_json(config_filepath)
 
-        data_dirpath = PARENT / self.config["data_dirname"]
-        operator_dirpath = PARENT/ self.config["operator_dirname"]
-        source_filename = self.config['source_filename']
-        target_filename = self.config['target_filename']
-        source_densities_filename = self.config['source_densities_filename']
+        db_filepath = PARENT / f"{self.config['experiment']}.hdf5"
+        self.db = h5py.File(db_filepath, "r")
 
-        # Load sources, targets and source densities
-        self.surface = data.load_hdf5_to_array('surface', 'surface', operator_dirpath)
-        self.sources = data.load_hdf5_to_array(source_filename, source_filename, data_dirpath)
-        self.targets = data.load_hdf5_to_array(target_filename, target_filename, data_dirpath)
-        self.source_densities = data.load_hdf5_to_array(
-            source_densities_filename, source_densities_filename, data_dirpath
-            )
+        # Load required data from disk
+        ## Load surfaces, and inverse gram matrices
+        self.check_surface = self.db["surface"]["check"][...]
+        self.equivalent_surface = self.db["surface"]["equivalent"][...]
+        self.nequivalent_points = len(self.equivalent_surface)
+        self.uc2e_inv = self.db["uc2e_inv"][...]
+        self.dc2e_inv = self.db["dc2e_inv"][...]
 
-        # Load precomputed operators
-        self.uc2e_u = data.load_hdf5_to_array('uc2e_u', 'uc2e_u', operator_dirpath)
-        self.uc2e_v = data.load_hdf5_to_array('uc2e_v', 'uc2e_v', operator_dirpath)
-        self.m2m = data.load_hdf5_to_array('m2m', 'm2m', operator_dirpath)
-        self.l2l = data.load_hdf5_to_array('l2l', 'l2l', operator_dirpath)
-        self.m2l = data.load_pickle('m2l_compressed', operator_dirpath)
+        ## Load linear, and complete octrees alongside their parameters
+        self.x0 = self.db["octree"]["x0"][...]
+        self.r0 = self.db["octree"]["r0"][...]
+        self.depth = self.db["octree"]["depth"][...][0]
+        self.leaves = self.db["octree"]["keys"][...]
+        self.nleaves = len(self.leaves)
+        self.complete = self.db["octree"]["complete"][...]
+        self.ncomplete = len(self.complete)
+        self.complete_levels = morton.find_level(self.complete)
 
-        # Load configuration properties
-        self.maximum_level = self.config['octree_max_level']
-        self.kernel_function = kernel.KERNELS[self.config['kernel']]()
-        self.order = self.config['order']
-        self.octree = octree.Octree(
-            self.sources, self.targets, self.maximum_level, self.source_densities
-            )
+        ## Load source and target data
+        self.sources = self.db["particle_data"]["sources"][...]
+        self.nsources = len(self.sources)
+        self.source_densities = self.db["particle_data"]["source_densities"][...]
+        self.sources_to_keys = self.db["particle_data"]["sources_to_keys"][...]
+        self.targets = self.db["particle_data"]["targets"][...]
+        self.ntargets = len(self.targets)
+        self.targets_to_keys = self.db["particle_data"]["targets_to_keys"][...]
 
-        # Coefficients discretising surface of a node
-        self.ncoefficients = 6*(self.order-1)**2 + 2
+        ## Load pre-computed operators
+        self.m2m = self.db["m2m"][...]
+        self.m2l = self.db["m2l"]
+        self.l2l = self.db["l2l"][...]
 
-        # Containers for results
-        self.result_data = [
-            density.Potential(target, np.zeros(1, dtype='float64'))
-            for target in self.octree.targets
-            ]
+        # Load interaction lists
+        self.v_lists = self.db["interaction_lists"]["v"]
+        self.x_lists = self.db["interaction_lists"]["x"]
+        self.u_lists = self.db["interaction_lists"]["u"]
+        self.w_lists = self.db["interaction_lists"]["w"]
 
-        self.source_data = {
-            key: node.Node(key, self.ncoefficients)
-            for key in self.octree.non_empty_source_nodes
+        # Configure a kernel
+        self.kernel = self.config["kernel"]
+        self.eval = KERNELS[self.kernel]["eval"]
+        self.p2p = KERNELS[self.kernel]["p2p"]
+        self.scale = KERNELS[self.kernel]["scale"]
+
+        #  Containers for results
+        self.target_potentials = np.zeros(self.ntargets)
+
+        self.multipole_expansions = {
+            key: np.zeros(self.nequivalent_points) for key in self.complete
         }
 
-        self.target_data = {
-            key: node.Node(key, self.ncoefficients)
-            for key in self.octree.non_empty_target_nodes
+        self.local_expansions = {
+            key: np.zeros(self.nequivalent_points) for key in self.complete
         }
 
     def upward_pass(self):
-        """Upward pass loop."""
-        nleaves = len(self.octree.source_index_ptr) - 1
+        """
+        Post-order traversal of tree, compute multipole expansions for all
+            nodes.
+        """
 
         # Form multipole expansions for all leaf nodes
-        for index in range(nleaves):
-            self.particle_to_multipole(index)
+        for idx in range(self.nleaves):
+            leaf = self.leaves[idx]
+            self.particle_to_multipole(leaf)
 
-        # Post-order traversal of octree, translating multipole expansions from
-        # leaf nodes to root
-        for level in range(self.octree.maximum_level-1, -1, -1):
-            for key in self.octree.non_empty_source_nodes_by_level[level]:
+        # Post-order traversal
+        for level in range(self.depth-1, -1, -1):
+            idxs = self.complete_levels == level
+            for key in self.complete[idxs]:
                 self.multipole_to_multipole(key)
 
     def downward_pass(self):
-        """Downward pass loop."""
+        """
+        Pre-order traversal of tree. Compute local expansions for all nodes,
+            and evaluate these at target points.
+        """
 
         # Pre-order traversal of octree
-        for level in range(2, 1 + self.octree.maximum_level):
+        for level in range(2, self.depth + 1):
 
-            for target in self.octree.non_empty_target_nodes_by_level[level]:
-                # Translate multipole expansions from non-empty source nodes
-                # in this target's interaction list to a local expansion about
-                # the target.
-                self.multipole_to_local(target)
+            idxs = self.complete_levels == level
+
+            for key in self.complete[idxs]:
+
+                idx = np.where(self.complete== key)[0]
+
+                v_list = self.v_lists[idx]
+                v_list = v_list[v_list != -1]
+
+                # V List interactions
+                self.multipole_to_local(key, v_list)
+
+                # X List interactions
+                idx = np.where(self.complete == key)
+                x_list = self.x_lists[idx]
+                x_list = x_list[x_list != -1]
+                if len(x_list) > 0:
+                    self.source_to_local(key, x_list)
 
                 # Translate local expansion to the node's children
-                if level < self.octree.maximum_level:
-                    self.local_to_local(target)
+                if level < self.depth:
+                    self.local_to_local(key)
 
-        # Treat local expansion as charge density, and evaluate at each particle
-        # at leaf node, compute near field.
-        for leaf_node_index in range(len(self.octree.target_index_ptr) - 1):
-            self.local_to_particle(leaf_node_index)
-            self.compute_near_field(leaf_node_index)
+        # Leaf near-field computations
+        for key in self.leaves:
 
-    def particle_to_multipole(self, leaf_node_index):
+            idx = np.where(self.complete == key)
+
+            w_list = self.w_lists[idx]
+            w_list = w_list[w_list != -1]
+
+            u_list = self.u_lists[idx]
+            u_list = u_list[u_list != -1]
+
+            # Evaluate local expansions at targets
+            self.local_to_target(key)
+
+            # W List interactions
+            self.multipole_to_target(key, w_list)
+
+            # U List interactions
+            self.near_field(key, u_list)
+
+    def run(self):
+        """Run full algorithm"""
+        self.upward_pass()
+        self.downward_pass()
+
+    def particle_to_multipole(self, key):
         """Compute multipole expansions from leaf particles."""
-
-        # Source indices in a given leaf
-        source_indices = self.octree.sources_by_leafs[
-            self.octree.source_index_ptr[leaf_node_index]
-            : self.octree.source_index_ptr[leaf_node_index + 1]
-        ]
-
-        # Find leaf sources, and leaf source densities
-        leaf_sources = self.octree.sources[source_indices]
-        leaf_source_densities = self.octree.source_densities[source_indices]
-
-        # Just adding index from argsort (sources by leafs)
-        self.source_data[
-            self.octree.source_leaf_nodes[leaf_node_index]
-            ].indices.update(source_indices)
-
-        # Compute key corresponding to this leaf index
-        leaf_key = self.octree.non_empty_source_nodes[leaf_node_index]
-
-        # Compute center of leaf box in cartesian coordinates
-        leaf_center = hilbert.get_center_from_key(
-            leaf_key, self.octree.center, self.octree.radius
+        _particle_to_multipole(
+            key=key,
+            sources=self.sources,
+            source_densities=self.source_densities,
+            sources_to_keys=self.sources_to_keys,
+            multipole_expansions=self.multipole_expansions,
+            x0=self.x0,
+            r0=self.r0,
+            alpha_outer=self.config["alpha_outer"],
+            check_surface=self.check_surface,
+            uc2e_inv=self.uc2e_inv,
+            scale_function=self.scale,
+            p2p_function=self.p2p,
         )
-
-        upward_check_surface = operator.scale_surface(
-            surface=self.surface,
-            radius=self.octree.radius,
-            level=self.octree.maximum_level,
-            center=leaf_center,
-            alpha=self.config['alpha_outer']
-        )
-
-        scale = (1/self.kernel_function.scale)**self.octree.maximum_level
-
-        check_potential = operator.p2p(
-            kernel_function=self.kernel_function,
-            targets=upward_check_surface,
-            sources=leaf_sources,
-            source_densities=leaf_source_densities
-            ).density
-
-        tmp = np.matmul(scale*self.uc2e_u, check_potential)
-        upward_equivalent_density = np.matmul(self.uc2e_v, tmp)
-
-        self.source_data[leaf_key].expansion = upward_equivalent_density
 
     def multipole_to_multipole(self, key):
         """
         Combine multipole expansions of a node's children to approximate its
             own multipole expansion.
         """
-
-        for child in hilbert.get_children(key):
-            # Only going through non-empty child nodes
-            if self.octree.source_node_to_index[child] != -1:
-
-                # Compute operator index
-                operator_idx = (child % 8) - 1
-
-                # Updating indices
-                self.source_data[key].indices.update(
-                    self.source_data[child].indices
-                    )
-
-                # Get child equivalent density
-                child_equivalent_density = self.source_data[child].expansion
-
-                # Compute parent equivalent density
-                parent_equivalent_density = np.matmul(
-                    self.m2m[operator_idx], child_equivalent_density)
-
-                # Add to source data
-                self.source_data[key].expansion += parent_equivalent_density
-
-    def multipole_to_local(self, target_key):
-        """
-        Translate all multipole expansions of source nodes in target node's
-            interaction list into a local expansion about the target node.
-        """
-
-        # Lookup all non-empty source nodes in target's interaction list, and
-        # vstack their equivalent densities
-
-        target_index = self.octree.target_node_to_index[target_key]
-
-        source_equivalent_density = None
-        for neighbor_list in self.octree.interaction_list[target_index]:
-
-            for source_key in neighbor_list:
-                if source_key != -1:
-
-                    if source_equivalent_density is None:
-                        source_equivalent_density = self.source_data[source_key].expansion
-                    else:
-
-                        source_equivalent_density = np.vstack(
-                                (
-                                    source_equivalent_density,
-                                    self.source_data[source_key].expansion
-                                )
-                            )
-        source_equivalent_density = np.ravel(source_equivalent_density)
-
-        # Lookup (compressed) m2l operator
-        m2l_operator = self.m2l[target_key]
-
-        # M2L operator stored in terms of its SVD components
-        u, s, vt = m2l_operator
-
-        # Calculate target equivalent density
-        target_equivalent_density = np.matmul(vt, source_equivalent_density)
-        target_equivalent_density = np.matmul(np.diag(s), target_equivalent_density)
-        target_equivalent_density = np.matmul(u, target_equivalent_density)
-
-        self.target_data[target_key].expansion += target_equivalent_density
-
-    def local_to_local(self, key):
-        """Translate local expansion of a node to it's children."""
-
-        parent_equivalent_density = self.target_data[key].expansion
-
-        for child in hilbert.get_children(key):
-            if self.octree.target_node_to_index[child] != -1:
-
-                # Compute operator index
-                operator_idx = (child % 8) - 1
-
-                # Updating indices
-                self.target_data[child].indices.update(
-                    self.target_data[key].indices
-                )
-
-                child_equivalent_density = np.matmul(
-                    self.l2l[operator_idx], parent_equivalent_density
-                )
-
-                self.target_data[child].expansion = child_equivalent_density
-
-    def local_to_particle(self, leaf_index):
-        """
-        Directly evaluate potential at particles in a leaf node, treating the
-            local expansion points as sources.
-        """
-
-        target_indices = self.octree.targets_by_leafs[
-            self.octree.target_index_ptr[leaf_index]
-            : self.octree.target_index_ptr[leaf_index + 1]
-        ]
-
-        leaf_key = self.octree.target_leaf_nodes[leaf_index]
-        leaf_center = hilbert.get_center_from_key(
-            leaf_key, self.octree.center, self.octree.radius)
-
-        leaf_density = self.target_data[leaf_key].expansion
-
-        leaf_surface = operator.scale_surface(
-            surface=self.surface,
-            radius=self.octree.radius,
-            level=self.octree.maximum_level,
-            center=leaf_center,
-            alpha=self.config['alpha_outer']
+        _multipole_to_multipole(
+            key=key,
+            multipole_expansions=self.multipole_expansions,
+            m2m=self.m2m,
         )
 
-        for target_index in target_indices:
-
-            # Updating indices
-            self.result_data[target_index].indices.update(
-                self.target_data[leaf_key].indices
-            )
-
-            target = self.octree.targets[target_index].reshape(1, 3)
-
-            result = operator.p2p(
-                kernel_function=self.kernel_function,
-                targets=target,
-                sources=leaf_surface,
-                source_densities=leaf_density
-            )
-
-            self.result_data[target_index].density = result.density
-
-    def compute_near_field(self, leaf_node_index):
+    def multipole_to_local(self, key, v_list):
         """
-        Compute near field influence from neighbouring box's local expansions.
+        V List interactions.
         """
+        _multipole_to_local(
+            key=key,
+            v_list=v_list,
+            multipole_expansions=self.multipole_expansions,
+            local_expansions=self.local_expansions,
+            dc2e_inv=self.dc2e_inv,
+            m2l=self.m2l,
+            scale_function=self.scale,
+        )
 
-        target_indices = self.octree.targets_by_leafs[
-            self.octree.target_index_ptr[leaf_node_index]
-            : self.octree.target_index_ptr[leaf_node_index + 1]
-        ]
+    def local_to_local(self, key):
+        """
+        Translate local expansion of a node to it's children.
+        """
+        _local_to_local(
+            key=key,
+            local_expansions=self.local_expansions,
+            l2l=self.l2l,
+        )
 
-        leaf_node_key = self.octree.target_leaf_nodes[leaf_node_index]
+    def source_to_local(self, key, x_list):
+        """
+        X List interactions.
+        """
+        _source_to_local(
+                key=key,
+                x_list=x_list,
+                sources=self.sources,
+                source_densities=self.source_densities,
+                sources_to_keys=self.sources_to_keys,
+                local_expansions=self.local_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_inner=self.config['alpha_inner'],
+                check_surface=self.check_surface,
+                dc2e_inv=self.dc2e_inv,
+                scale_function=self.scale,
+                p2p_function=self.p2p
+        )
 
-        for neighbor_key in self.octree.target_neighbors[
-                self.octree.target_node_to_index[leaf_node_key]
-                ]:
-            if neighbor_key != -1:
+    def multipole_to_target(self, key, w_list):
+        """
+        W List interactions
+        """
+        _multipole_to_target(
+            key=key,
+            w_list=w_list,
+            targets=self.targets,
+            targets_to_keys=self.targets_to_keys,
+            target_potentials=self.target_potentials,
+            multipole_expansions=self.multipole_expansions,
+            x0=self.x0,
+            r0=self.r0,
+            alpha_inner=self.config["alpha_inner"],
+            equivalent_surface=self.equivalent_surface,
+            p2p_function=self.p2p
+        )
 
-                neighbor_index = self.octree.source_node_to_index[neighbor_key]
+    def local_to_target(self, key):
+        """
+        Evaluate local potentials at target points
+        """
+        _local_to_target(
+            key=key,
+            targets=self.targets,
+            targets_to_keys=self.targets_to_keys,
+            target_potentials=self.target_potentials,
+            local_expansions=self.local_expansions,
+            x0=self.x0,
+            r0=self.r0,
+            alpha_outer=self.config["alpha_outer"],
+            equivalent_surface=self.equivalent_surface,
+            p2p_function=self.p2p
+        )
 
-                neighbor_source_indices = self.octree.sources_by_leafs[
-                    self.octree.source_index_ptr[neighbor_index]:
-                    self.octree.source_index_ptr[neighbor_index + 1]
-                ]
-
-                neighbor_sources = self.octree.sources[neighbor_source_indices]
-                neighbor_source_densities = self.octree.source_densities[neighbor_source_indices]
-
-                for target_index in target_indices:
-
-                    # Updating indices
-                    self.result_data[target_index].indices.update(
-                        self.source_data[neighbor_key].indices
-                    )
-
-                    target = self.octree.targets[target_index].reshape(1, 3)
-
-                    result = operator.p2p(
-                        kernel_function=self.kernel_function,
-                        targets=target,
-                        sources=neighbor_sources,
-                        source_densities=neighbor_source_densities
-                    )
-
-                    self.result_data[target_index].density += result.density
-
-        if self.octree.source_node_to_index[leaf_node_key] != -1:
-
-            leaf_index = self.octree.source_node_to_index[leaf_node_key]
-
-            leaf_source_indices = self.octree.sources_by_leafs[
-                self.octree.source_index_ptr[leaf_index]:
-                self.octree.source_index_ptr[leaf_index + 1]
-            ]
-
-            leaf_sources = self.octree.sources[leaf_source_indices]
-            leaf_source_densities = self.octree.source_densities[leaf_source_indices]
-
-            for target_index in target_indices:
-                target = self.octree.targets[target_index].reshape(1, 3)
-
-                result = operator.p2p(
-                    kernel_function=self.kernel_function,
-                    targets=target,
-                    sources=leaf_sources,
-                    source_densities=leaf_source_densities
-                )
-
-                self.result_data[target_index].density += result.density
-
-                # Updating indices
-                self.result_data[target_index].indices.update(
-                    self.source_data[leaf_node_key].indices)
+    def near_field(self, key, u_list):
+        """
+        U List interactions
+        """
+        _near_field(
+            key=key,
+            u_list=u_list,
+            targets=self.targets,
+            targets_to_keys=self.targets_to_keys,
+            target_potentials=self.target_potentials,
+            sources=self.sources,
+            source_densities=self.source_densities,
+            sources_to_keys=self.sources_to_keys,
+            p2p_function=self.p2p
+        )

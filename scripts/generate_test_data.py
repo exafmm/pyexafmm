@@ -4,9 +4,9 @@ Generate random test data
 """
 import os
 import pathlib
-import shutil
 import sys
 
+import h5py
 import numpy as np
 
 import utils.data as data
@@ -67,48 +67,65 @@ def well_separated_data(npoints):
     return (targets, sources, source_densities)
 
 
-DATA = {
+def spiral_data(npoints):
+
+    theta = np.linspace(0, np.pi, npoints)
+    phi = np.linspace(0, 2*np.pi, npoints)
+
+    x = np.sin(theta)*np.cos(phi)
+    y = np.sin(theta)*np.sin(phi)
+    z = np.cos(theta)
+
+    sources = np.vstack([x, y, z]).T
+    targets = sources
+    source_densities = np.ones(npoints)
+
+    return (targets, sources, source_densities)
+
+
+DATA_FUNCTIONS = {
     'random': random_data,
-    'separated': well_separated_data
+    'separated': well_separated_data,
+    'spiral': spiral_data
 }
 
 
 def main(**config):
 
-    data_dirpath = PARENT / f"{config['data_dirname']}/"
     npoints = config['npoints']
-    dtype = config['dtype']
+    data_function = DATA_FUNCTIONS[config['data_type']]
 
-    if os.path.isdir(data_dirpath):
-        shutil.rmtree(data_dirpath)
+    sources, targets, source_densities = data_function(npoints)
 
-    data_func = DATA[dtype]
+    db = h5py.File(PARENT/f"{config['experiment']}.hdf5", 'a')
 
-    sources, targets, source_densities = data_func(npoints)
+    if f'particle_data' in db.keys():
+        del db[f'particle_data']['sources']
+        del db[f'particle_data']['targets']
+        del db[f'particle_data']['source_densities']
 
-    data.save_array_to_hdf5(data_dirpath, 'sources', sources)
-    data.save_array_to_hdf5(data_dirpath, 'targets', targets)
-    data.save_array_to_hdf5(data_dirpath, 'source_densities', source_densities)
+        db[f'particle_data']['sources'] = sources
+        db[f'particle_data']['targets'] = targets
+        db[f'particle_data']['source_densities'] = source_densities
+
+    else:
+        db.create_group(f'particle_data')
+
+        db[f'particle_data']['sources'] = sources
+        db[f'particle_data']['targets'] = targets
+        db[f'particle_data']['source_densities'] = source_densities
+
+    db.close()
 
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 4:
+    if sys.argv[2] not in DATA_FUNCTIONS.keys():
         raise ValueError(
-            f'Must Specify Config Filepath number of points and data type!\
-                e.g. `python generate_test_data.py /path/to/config.json 100 random`'
-                )
-
-    elif sys.argv[3] not in DATA.keys():
-        raise ValueError(
-            f'Data type `{sys.argv[3]}` not valid. Must be either`separated` or `random`'
+            f'Data type `{sys.argv[2]}` not valid'
              )
 
     else:
         config_filepath = sys.argv[1]
-        npoints = sys.argv[2]
-        dtype = sys.argv[3]
         config = data.load_json(config_filepath)
-        config['npoints'] = int(npoints)
-        config['dtype'] = dtype
         main(**config)

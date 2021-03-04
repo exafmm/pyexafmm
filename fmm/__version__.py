@@ -3,5 +3,5 @@ PyExaFMM
 """
 
 __title__ = 'fmm'
-__version__ = '0.0.0'
-__description__ = 'ExaFMM in Python!'
+__version__ = '1.0.0'
+__description__ = 'An adaptive, kernel-independent, particle FMM implementation Python'

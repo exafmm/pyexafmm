@@ -23,7 +23,9 @@ def cli():
 )
 def build():
     click.echo('Building and installing')
-    subprocess.run(['conda', 'develop', '.'])
+    os.chdir(HERE.parent)
+    subprocess.run(['conda', 'build', 'conda.recipe'])
+    os.chdir(HERE)
 
 
 @click.command(
@@ -47,80 +49,38 @@ def lint():
 @click.command(
     help='Precompute operators using defualt config'
 )
-def compute_operators():
+@click.option(
+    '--config', '-c',
+    default='config',
+    help="""JSON configuration filename e.g. `experiment-1`,
+            file in source root directory."""
+    )
+def compute_operators(config):
     click.echo('Computing operators')
     subprocess.run([
         'python',
         HERE.parent / 'scripts/precompute_operators.py',
-        HERE.parent / 'config.json'
+        HERE.parent / f'{config}.json'
     ])
 
 
 @click.command(
-    help='Recompute operators for current configuration'
+    help='Generate targets and sources with unit density'
 )
-def recompute_operators():
-    click.echo('Deleting operators at this configuration')
-    order = CONFIG['order']
-
-    subprocess.call([
-        'rm',
-        '-rf',
-        HERE.parent / CONFIG['operator_dirname'],
-    ])
-
-    click.echo('Recomputing operators')
-    subprocess.run([
-        'python',
-        HERE.parent / 'scripts/precompute_operators.py',
-        HERE.parent / 'config.json'
-    ])
-
-
-@click.command(
-    help='Generate random targets and sources with unit density'
-)
-@click.argument('npoints')
-@click.argument('dtype')
-def generate_test_data(npoints, dtype):
-    click.echo(f'Generating {npoints} {dtype} sources & targets')
+@click.option(
+    '--config', '-c',
+    default='config',
+    help="""JSON configuration filename e.g. `experiment-1`,
+            file in source root directory."""
+    )
+def generate_test_data(config):
+    data_type = CONFIG['data_type']
+    click.echo(f'Generating {data_type} sources & targets')
     subprocess.run([
         'python',
         HERE.parent/ 'scripts/generate_test_data.py',
-        HERE.parent / 'config.json',
-        npoints,
-        dtype
-    ])
-
-
-
-@click.command(
-    help='Compress pre-computed M2L operators using defualt config'
-)
-def compress_m2l():
-    click.echo('Compressing M2L operators')
-    subprocess.run([
-        'python',
-        HERE.parent / 'scripts/compress_m2l_operators.py',
-        HERE.parent / 'config.json'
-    ])
-
-
-@click.command(
-    help='Re-compress pre-computed M2L operators using defualt config'
-)
-def recompress_m2l():
-    click.echo('Re-compressing M2L operators')
-
-    subprocess.call([
-        'rm',
-        HERE.parent / CONFIG['operator_dirname'] / f"{CONFIG['m2l_compressed_filename']}.pkl",
-    ])
-
-    subprocess.run([
-        'python',
-        HERE.parent / 'scripts/compress_m2l_operators.py',
-        HERE.parent / 'config.json'
+        HERE.parent / f'{config}.json',
+        data_type
     ])
 
 
@@ -129,6 +89,3 @@ cli.add_command(test)
 cli.add_command(lint)
 cli.add_command(compute_operators)
 cli.add_command(generate_test_data)
-cli.add_command(recompute_operators)
-cli.add_command(compress_m2l)
-cli.add_command(recompress_m2l)

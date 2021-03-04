@@ -16,7 +16,8 @@ requirements = [
     "pytest",
     "click",
     "scipy",
-    "h5py"
+    "h5py",
+    "pylint"
 
 ]
 
@@ -39,7 +40,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'exafmm=ci.cli:cli'
+            'fmm=ci.cli:cli'
         ]
     },
 )

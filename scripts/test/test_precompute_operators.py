@@ -2,16 +2,16 @@
 Test the precomputed operators
 """
 import os
-import re
 import pathlib
 
+import h5py
 import numpy as np
 import pytest
 
-import fmm.hilbert as hilbert
+import adaptoctree.morton as morton
+
 from fmm.kernel import KERNELS
-from fmm.octree import Octree
-import fmm.operator as operator
+import fmm.surface as surface
 import utils.data as data
 
 
@@ -20,299 +20,214 @@ ROOT = HERE.parent.parent
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
 CONFIG = data.load_json(CONFIG_FILEPATH)
 
-ORDER = CONFIG['order']
-SURFACE = operator.compute_surface(ORDER)
-KERNEL_FUNCTION = KERNELS['laplace']()
-
-OPERATOR_DIRPATH = HERE.parent.parent / CONFIG['operator_dirname']
-DATA_DIRPATH = HERE.parent.parent / CONFIG['data_dirname']
-
 RTOL = 1e-1
 
-@pytest.fixture
-def octree():
-    sources = data.load_hdf5_to_array('sources', 'sources', DATA_DIRPATH)
-    targets = data.load_hdf5_to_array('targets', 'targets', DATA_DIRPATH)
-
-    source_densities = data.load_hdf5_to_array(
-        'source_densities', 'source_densities', DATA_DIRPATH)
-
-    return Octree(sources, targets, CONFIG['octree_max_level'], source_densities)
-
 
 @pytest.fixture
-def m2m():
-    return data.load_hdf5_to_array('m2m', 'm2m', OPERATOR_DIRPATH)
+def db():
+    experiment = CONFIG["experiment"]
+    return h5py.File(ROOT / f"{experiment}.hdf5", "r")
 
 
-@pytest.fixture
-def l2l():
-    return data.load_hdf5_to_array('l2l', 'l2l', OPERATOR_DIRPATH)
-
-
-class M2L:
-    """
-    Test Class to bundle precomputed M2L operators with their respective lookup table
-        to translate from Hilbert key to index within the precomputed datastructure
-        containing all M2L operators.
-    """
-    def __init__(self, config_filepath):
-        """
-        Parameters:
-        -----------
-        config_filename : None/str
-            Defaults to project config: config.json.
-        """
-
-        self.config = data.load_json(config_filepath)
-        self.m2l_dirpath = ROOT / self.config["operator_dirname"]
-
-        # Load operators and key2index lookup tables
-        operator_files = self.m2l_dirpath.glob('m2l_level*')
-        index_to_key_files = self.m2l_dirpath.glob('index*')
-
-        self.operators = {
-            level: None for level in range(2, self.config['octree_max_level']+1)
-        }
-
-        self.index_to_key = {
-            level: None for level in range(2, self.config['octree_max_level']+1)
-        }
-
-        for filename in operator_files:
-            level = self.get_level(str(filename))
-            self.operators[level] = data.load_pickle(
-                f'm2l_level_{level}', self.m2l_dirpath
-            )
-
-        for filename in index_to_key_files:
-            level = self.get_level(str(filename))
-            self.index_to_key[level] = data.load_pickle(
-                f'index_to_key_level_{level}', self.m2l_dirpath
-            )
-
-    @staticmethod
-    def get_level(filename):
-        """Get level from the m2l operator's filename"""
-        pattern = '(?<=level_)(.*)(?=.pkl)'
-        prog = re.compile(pattern)
-        level = int(prog.search(filename).group())
-        return level
-
-
-@pytest.fixture
-def m2l_operators():
-    return M2L(CONFIG_FILEPATH)
-
-
-@pytest.fixture
-def npoints():
-    return 6*(ORDER-1)**2 + 2
-
-
-def plot_surfaces(source_surface, target_surface, check_surface):
-    """
-    Plot surfaces for testing purposes.
-    """
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(
-        source_surface[:, 0],
-        source_surface[:, 1],
-        source_surface[:, 2],
-        color='red'
-        )
-
-    ax.scatter(
-        target_surface[:, 0],
-        target_surface[:, 1],
-        target_surface[:, 2],
-        color='green'
-     )
-
-    ax.scatter(
-        check_surface[:, 0],
-        check_surface[:, 1],
-        check_surface[:, 2],
-    )
-
-    plt.show()
-
-
-def test_m2m(npoints, octree, m2m):
+def test_m2m(db):
 
     parent_key = 0
-    child_key = hilbert.get_children(parent_key)[0]
+    child_key = morton.find_children(parent_key)[0]
 
-    x0 = octree.center
-    r0 = octree.radius
+    x0 = db["octree"]["x0"][...]
+    r0 = db["octree"]["r0"][...]
+    equivalent_surface = db["surface"]["equivalent"][...]
 
-    parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
-    child_center = hilbert.get_center_from_key(child_key, x0, r0)
+    npoints_equivalent = len(equivalent_surface)
 
-    parent_level = hilbert.get_level(parent_key)
-    child_level = hilbert.get_level(child_key)
+    kernel = CONFIG["kernel"]
+    p2p_function = KERNELS[kernel]["p2p"]
 
-    operator_idx = (child_key % 8) -1
+    parent_center = morton.find_physical_center_from_key(parent_key, x0, r0)
+    child_center = morton.find_physical_center_from_key(child_key, x0, r0)
 
-    child_equivalent_density = np.ones(shape=(npoints))
+    parent_level = morton.find_level(parent_key)
+    child_level = morton.find_level(child_key)
 
-    parent_equivalent_density = np.matmul(m2m[operator_idx], child_equivalent_density)
+    operator_idx = 0
 
-    distant_point = np.array([[1e3, 0, 0]])
+    child_equivalent_density = np.ones(shape=npoints_equivalent)
 
-    child_equivalent_surface = operator.scale_surface(
-        surface=SURFACE,
-        radius=r0,
-        level=child_level,
-        center=child_center,
-        alpha=1.05
-        )
-    parent_equivalent_surface = operator.scale_surface(
-        surface=SURFACE,
-        radius=r0,
-        level=parent_level,
-        center=parent_center,
-        alpha=1.05
-        )
-
-    parent_direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
-        targets=distant_point,
-        sources=parent_equivalent_surface,
-        source_densities=parent_equivalent_density
-        )
-
-    child_direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
-        targets=distant_point,
-        sources=child_equivalent_surface,
-        source_densities=child_equivalent_density
-        )
-
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=RTOL)
-
-
-def test_l2l(npoints, octree, l2l):
-
-    parent_key = 9
-    child_key = hilbert.get_children(parent_key)[-1]
-
-    x0 = octree.center
-    r0 = octree.radius
-
-    parent_center = hilbert.get_center_from_key(parent_key, x0, r0)
-    child_center = hilbert.get_center_from_key(child_key, x0, r0)
-
-    parent_level = hilbert.get_level(parent_key)
-    child_level = hilbert.get_level(child_key)
-
-    parent_equivalent_density = np.ones(shape=(npoints))
-
-    operator_idx = (child_key % 8) - 1
-
-    child_equivalent_density = np.matmul(l2l[operator_idx], parent_equivalent_density)
-
-    child_equivalent_surface = operator.scale_surface(
-        surface=SURFACE,
-        radius=r0,
-        level=child_level,
-        center=child_center,
-        alpha=2.95
+    parent_equivalent_density = np.matmul(
+        db["m2m"][operator_idx], child_equivalent_density
     )
 
-    parent_equivalent_surface = operator.scale_surface(
-        surface=SURFACE,
+    distant_point = np.array([[1e2, 0, 0]])
+
+    child_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
+        radius=r0,
+        level=child_level,
+        center=child_center,
+        alpha=CONFIG["alpha_inner"],
+    )
+
+    parent_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=parent_level,
         center=parent_center,
-        alpha=2.95
+        alpha=CONFIG["alpha_inner"],
+    )
+
+    parent_direct = p2p_function(
+        targets=distant_point,
+        sources=parent_equivalent_surface,
+        source_densities=parent_equivalent_density,
+    )
+
+    child_direct = p2p_function(
+        targets=distant_point,
+        sources=child_equivalent_surface,
+        source_densities=child_equivalent_density,
+    )
+
+    assert np.isclose(parent_direct, child_direct, rtol=RTOL)
+
+
+def test_l2l(db):
+
+    parent_key = 1
+    child_key = morton.find_children(parent_key)[-1]
+
+    x0 = db["octree"]["x0"][...]
+    r0 = db["octree"]["r0"][...]
+
+    equivalent_surface = db["surface"]['equivalent'][...]
+
+    npoints_equivalent = len(equivalent_surface)
+
+    kernel = CONFIG["kernel"]
+    p2p_function = KERNELS[kernel]["p2p"]
+
+    parent_center = morton.find_physical_center_from_key(parent_key, x0, r0)
+    child_center = morton.find_physical_center_from_key(child_key, x0, r0)
+
+    parent_level = morton.find_level(parent_key)
+    child_level = morton.find_level(child_key)
+
+    parent_equivalent_density = np.ones(shape=npoints_equivalent)
+
+    operator_idx = 0
+
+    child_equivalent_density = np.matmul(
+        db['l2l'][operator_idx], parent_equivalent_density
+    )
+
+    child_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface, radius=r0, level=child_level,
+        center=child_center, alpha=CONFIG['alpha_outer']
+    )
+
+    parent_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface, radius=r0, level=parent_level,
+        center=parent_center, alpha=CONFIG['alpha_outer']
     )
 
     local_point = np.array([list(child_center)])
 
-    parent_direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
+    parent_direct = p2p_function(
         targets=local_point,
         sources=parent_equivalent_surface,
-        source_densities=parent_equivalent_density
+        source_densities=parent_equivalent_density,
     )
 
-    child_direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
+    child_direct = p2p_function(
         targets=local_point,
         sources=child_equivalent_surface,
-        source_densities=child_equivalent_density
+        source_densities=child_equivalent_density,
     )
 
-    assert np.isclose(parent_direct.density, child_direct.density, rtol=RTOL)
+    assert np.isclose(parent_direct, child_direct, rtol=RTOL)
 
 
-def test_m2l(npoints, octree, m2l_operators):
+def test_m2l(db):
 
-    # pick a target box on level 2 or below
-    x0 = octree.center
-    r0 = octree.radius
+    x0 = db["octree"]["x0"][...]
+    r0 = db["octree"]["r0"][...]
+    dc2e_inv = db['dc2e_inv'][...]
+    equivalent_surface = db["surface"]["equivalent"][...]
+    npoints_equivalent = len(equivalent_surface)
+    kernel = CONFIG["kernel"]
+    p2p_function = KERNELS[kernel]["p2p"]
 
-    target_key = 72
+    # Pick a target key with a non-empty interaction list
+    complete = db['octree']['complete']
+    v_lists = db['interaction_lists']['v']
 
-    source_level = target_level = hilbert.get_level(target_key)
+    for i, v_list in enumerate(v_lists):
+        if complete[i] != 0:
+            if len(v_list[v_list != -1]) > 0:
+                target_key = complete[i]
+                target_index = i
+                break
 
-    m2l = m2l_operators.operators[source_level]
+    v_list = v_lists[target_index]
+    v_list = v_list[v_list != -1]
 
-    target_index = hilbert.remove_level_offset(target_key)
-    target_center = hilbert.get_center_from_key(target_key, x0, r0)
-    interaction_list = hilbert.get_interaction_list(target_key)
+    source_level = target_level = morton.find_level(target_key)
 
-    # pick a source box in target's interaction list
-    source_key = interaction_list[2]
-    source_center = hilbert.get_center_from_key(source_key, x0, r0)
+    scale = (1/2)**target_level
 
-    # get the operator index from current level lookup table
-    index_to_key = m2l_operators.index_to_key[target_level][target_index]
-    source_index = np.where(source_key == index_to_key)[0][0]
+    target_center = morton.find_physical_center_from_key(target_key, x0, r0)
 
-    # place unit densities on source box
-    # source_equivalent_density = np.ones(shape=(npoints))
-    source_equivalent_density = np.random.rand(npoints)
+    # Construct a vector of source points for all boxes in v_list
+    sources = np.zeros(shape=(npoints_equivalent*len(v_list), 3))
+    for idx in range(len(v_list)):
+        source_key = v_list[idx]
+        source_center = morton.find_physical_center_from_key(source_key, x0, r0)
 
-    source_equivalent_surface = operator.scale_surface(
-        surface=SURFACE,
-        radius=r0,
-        level=source_level,
-        center=source_center,
-        alpha=1.05
-    )
+        source_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
+            radius=r0,
+            level=source_level,
+            center=source_center,
+            alpha=CONFIG['alpha_inner']
+        )
 
-    m2l_matrix = m2l[target_index][source_index]
+        lidx = idx*npoints_equivalent
+        ridx = (idx+1)*npoints_equivalent
 
-    target_equivalent_density = np.matmul(m2l_matrix, source_equivalent_density)
+        sources[lidx:ridx] = source_equivalent_surface
 
-    target_equivalent_surface = operator.scale_surface(
-        surface=SURFACE,
+    # # place unit densities on source boxes
+    source_equivalent_density = np.ones(len(v_list)*npoints_equivalent)
+    source_equivalent_density = np.random.rand(len(v_list)*npoints_equivalent)
+
+
+    U = db['m2l'][str(target_key)]['U']
+    S = db['m2l'][str(target_key)]['S']
+    VT = db['m2l'][str(target_key)]['VT']
+
+    m2l_matrix = (scale*dc2e_inv) @ (U @ np.diag(S) @ VT).T
+
+    target_equivalent_density = m2l_matrix @ source_equivalent_density
+
+    targets = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=target_level,
         center=target_center,
-        alpha=2.95
+        alpha=CONFIG['alpha_outer']
     )
 
     local_point = np.array([list(target_center)])
 
-    target_direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
+    target_direct = p2p_function(
         targets=local_point,
-        sources=target_equivalent_surface,
+        sources=targets,
         source_densities=target_equivalent_density
     )
 
-    source_direct = operator.p2p(
-        kernel_function=KERNEL_FUNCTION,
+    source_direct = p2p_function(
         targets=local_point,
-        sources=source_equivalent_surface,
+        sources=sources,
         source_densities=source_equivalent_density
     )
 
-    assert np.isclose(target_direct.density, source_direct.density, rtol=RTOL)
+    assert np.isclose(target_direct, source_direct, rtol=RTOL)
