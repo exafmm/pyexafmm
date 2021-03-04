@@ -6,7 +6,7 @@ import numpy as np
 import adaptoctree.morton as morton
 
 from fmm.fmm import Fmm
-import fmm.operator as operator
+import fmm.surface as surface
 from fmm.kernel import KERNELS
 
 
@@ -18,8 +18,8 @@ def test_upward_pass():
     fmm = Fmm('test_config')
     fmm.upward_pass()
 
-    upward_equivalent_surface = operator.scale_surface(
-        surface=fmm.equivalent_surface,
+    upward_equivalent_surface = surface.scale_surface(
+        surf=fmm.equivalent_surface,
         radius=fmm.r0,
         level=0,
         center=fmm.x0,
@@ -50,8 +50,7 @@ def test_downward_pass():
 
     fmm = Fmm('test_config')
 
-    fmm.upward_pass()
-    fmm.downward_pass()
+    fmm.run()
 
     kernel = fmm.config['kernel']
     p2p = KERNELS[kernel]['p2p']
@@ -68,8 +67,8 @@ def test_downward_pass():
 
     local_expansion = fmm.local_expansions[key]
 
-    downward_equivalent_surface = operator.scale_surface(
-        surface=fmm.equivalent_surface,
+    downward_equivalent_surface = surface.scale_surface(
+        surf=fmm.equivalent_surface,
         radius=fmm.r0,
         level=level,
         center=center,
@@ -89,8 +88,8 @@ def test_downward_pass():
         source_level = morton.find_level(source)
         source_center = morton.find_physical_center_from_key(source, fmm.x0, fmm.r0)
 
-        upward_equivalent_surface = operator.scale_surface(
-            surface=fmm.equivalent_surface,
+        upward_equivalent_surface = surface.scale_surface(
+            surf=fmm.equivalent_surface,
             radius=fmm.r0,
             level=source_level,
             center=source_center,
@@ -113,8 +112,8 @@ def test_fmm():
     End To End Fmm Test
     """
     fmm = Fmm('test_config')
-    fmm.upward_pass()
-    fmm.downward_pass()
+
+    fmm.run()
 
     kernel = fmm.config['kernel']
     p2p = KERNELS[kernel]['p2p']

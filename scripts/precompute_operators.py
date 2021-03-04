@@ -19,7 +19,7 @@ import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
-import fmm.operator as operator
+import fmm.surface as surface
 import utils.data as data
 import utils.time
 
@@ -84,8 +84,8 @@ def compress_m2l_gram_matrix(
     )
 
     # Convert to single precision before transferring to GPU
-    target_check_surface = operator.scale_surface(
-        surface=check_surface,
+    target_check_surface = surface.scale_surface(
+        surf=check_surface,
         radius=r0,
         level=level,
         center=target_center,
@@ -112,8 +112,8 @@ def compress_m2l_gram_matrix(
             r0=r0
         )
 
-        source_equivalent_surface = operator.scale_surface(
-            surface=equivalent_surface,
+        source_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
             radius=r0,
             level=level,
             center=source_center,
@@ -173,7 +173,7 @@ def compress_m2l_gram_matrix(
     return (dU.get(), dS.get(), dVT.get())
 
 
-def compute_surfaces(config, db):
+def computes(config, db):
     """
     Compute equivalent and check surfaces, and save to disk.
 
@@ -193,8 +193,8 @@ def compute_surfaces(config, db):
     """
     order_equivalent = config['order_equivalent']
     order_check = config['order_check']
-    equivalent_surface = operator.compute_surface(order_equivalent)
-    check_surface = operator.compute_surface(order_check)
+    equivalent_surface = surface.compute_surface(order_equivalent)
+    check_surface = surface.compute_surface(order_check)
 
     print(f"Computing Inner Surface of Order {order_equivalent}")
     print(f"Computing Outer Surface of Order {order_check}")
@@ -333,32 +333,32 @@ def compute_inv_c2e(
 
     print("Computing Inverse of Check To Equivalent Gram Matrix")
 
-    upward_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface,
+    upward_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=0,
         center=x0,
         alpha=config['alpha_inner']
     )
 
-    upward_check_surface = operator.scale_surface(
-        surface=check_surface,
+    upward_check_surface = surface.scale_surface(
+        surf=check_surface,
         radius=r0,
         level=0,
         center=x0,
         alpha=config['alpha_outer']
     )
 
-    downward_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface,
+    downward_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=0,
         center=x0,
         alpha=config['alpha_outer']
     )
 
-    downward_check_surface = operator.scale_surface(
-        surface=check_surface,
+    downward_check_surface = surface.scale_surface(
+        surf=check_surface,
         radius=r0,
         level=0,
         center=x0,
@@ -426,16 +426,16 @@ def compute_m2m_and_l2l(
         for child in morton.find_children(0)
     ]
 
-    parent_upward_check_surface = operator.scale_surface(
-        surface=check_surface,
+    parent_upward_check_surface = surface.scale_surface(
+        surf=check_surface,
         radius=parent_radius,
         level=parent_level,
         center=parent_center,
         alpha=config['alpha_outer']
     )
 
-    parent_downward_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface,
+    parent_downward_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
         radius=parent_radius,
         level=parent_level,
         center=parent_center,
@@ -454,16 +454,16 @@ def compute_m2m_and_l2l(
     for child_idx, child_center in enumerate(child_centers):
         print(f'Computed ({child_idx+1}/{loading}) M2M/L2L operators')
 
-        child_upward_equivalent_surface = operator.scale_surface(
-            surface=equivalent_surface,
+        child_upward_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
             radius=parent_radius,
             level=child_level,
             center=child_center,
             alpha=config['alpha_inner']
         )
 
-        child_downward_check_surface = operator.scale_surface(
-            surface=check_surface,
+        child_downward_check_surface = surface.scale_surface(
+            surf=check_surface,
             radius=parent_radius,
             level=child_level,
             center=child_center,
@@ -587,7 +587,7 @@ def main(**config):
     kernel_scale = KERNELS[kernel]['scale']
 
     # Step 1: Compute a surface of a given order
-    equivalent_surface, check_surface = compute_surfaces(config, db)
+    equivalent_surface, check_surface = computes(config, db)
 
     # # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # # This is a useful quantity that will form the basis of most operators.

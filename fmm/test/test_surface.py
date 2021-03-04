@@ -1,5 +1,5 @@
 """
-Tests for the operator module.
+Tests for the surface module.
 """
 import os
 import pathlib
@@ -7,7 +7,7 @@ import pathlib
 import numpy as np
 import pytest
 
-import fmm.operator as operator
+import fmm.surface as surface
 from fmm.kernel import KERNELS
 import utils.data as data
 
@@ -24,9 +24,9 @@ CONFIG = data.load_json(CONFIG_FILEPATH)
 
 
 @pytest.fixture
-def surface():
+def surf():
     """Order 2 surface"""
-    return operator.compute_surface(order=ORDER)
+    return surface.compute_surface(order=ORDER)
 
 
 @pytest.fixture
@@ -49,22 +49,22 @@ def targets(random):
 
 
 @pytest.fixture
-def upward_check_surface(surface):
-    return operator.scale_surface(
+def upward_check_surface(surf):
+    return  surface.scale_surface(
         surface, 1, 0, np.array([0, 0, 0]), 2.95
     )
 
 
 @pytest.fixture
-def upward_equivalent_surface(surface):
-    return operator.scale_surface(
+def upward_equivalent_surface(surf):
+    return  surface.scale_surface(
         surface, 1, 0, np.array([0, 0, 0]), 1.05
     )
 
 
 @pytest.fixture
 def gram_matrix(upward_check_surface, upward_equivalent_surface):
-    return operator.gram_matrix(
+    return  surface.gram_matrix(
         kernel_function=KERNELS['laplace'](),
         sources=upward_equivalent_surface,
         targets=upward_check_surface
@@ -79,14 +79,14 @@ def gram_matrix(upward_check_surface, upward_equivalent_surface):
 )
 def test_compute_surface(order):
     """Test surface computation"""
-    surface = operator.compute_surface(order)
+    surf =  surface.compute_surface(order)
 
     # Test that surface centered at origin
-    assert np.array_equal(surface.mean(axis=0), np.array([0, 0, 0]))
+    assert np.array_equal(surf.mean(axis=0), np.array([0, 0, 0]))
 
     # Test surface has expected dimension
     n_coeffs = 6*(order-1)**2 + 2
-    assert surface.shape == (n_coeffs, 3)
+    assert surf.shape == (n_coeffs, 3)
 
 
 @pytest.mark.parametrize(
@@ -96,11 +96,11 @@ def test_compute_surface(order):
         (1, 1, np.array([0.5, 0.5, 0.5]), 2)
     ]
 )
-def test_scale_surface(surface, radius, level, center, alpha):
+def test_scale_surface(surf, radius, level, center, alpha):
     """Test shifting/scaling surface"""
 
-    scaled_surface = operator.scale_surface(
-        surface=surface,
+    scaled_surf = surface.scale_surface(
+        surf=surf,
         radius=radius,
         level=level,
         center=center,
@@ -108,17 +108,17 @@ def test_scale_surface(surface, radius, level, center, alpha):
     )
 
     # Test that the center has been shifted as expected
-    assert np.array_equal(scaled_surface.mean(axis=0), center)
+    assert np.array_equal(scaled_surf.mean(axis=0), center)
 
     # Test that the scaling of the radius is as expected
     for i in range(3):
 
         expected_diameter = 2*alpha*radius*(0.5)**level
         assert(
-            (max(scaled_surface[:, i]) - min(scaled_surface[:, i]))
+            (max(scaled_surf[:, i]) - min(scaled_surf[:, i]))
             == expected_diameter
             )
 
     # Test that the original surface remains unchanged
-    assert ~np.array_equal(surface, scaled_surface)
-    assert np.array_equal(surface, operator.compute_surface(ORDER))
+    assert ~np.array_equal(surf, scaled_surf)
+    assert np.array_equal(surf,  surface.compute_surface(ORDER))

@@ -11,7 +11,7 @@ import pytest
 import adaptoctree.morton as morton
 
 from fmm.kernel import KERNELS
-import fmm.operator as operator
+import fmm.surface as surface
 import utils.data as data
 
 
@@ -59,16 +59,16 @@ def test_m2m(db):
 
     distant_point = np.array([[1e2, 0, 0]])
 
-    child_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface,
+    child_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=child_level,
         center=child_center,
         alpha=CONFIG["alpha_inner"],
     )
 
-    parent_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface,
+    parent_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=parent_level,
         center=parent_center,
@@ -119,13 +119,13 @@ def test_l2l(db):
         db['l2l'][operator_idx], parent_equivalent_density
     )
 
-    child_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface, radius=r0, level=child_level,
+    child_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface, radius=r0, level=child_level,
         center=child_center, alpha=CONFIG['alpha_outer']
     )
 
-    parent_equivalent_surface = operator.scale_surface(
-        surface=equivalent_surface, radius=r0, level=parent_level,
+    parent_equivalent_surface = surface.scale_surface(
+        surf=equivalent_surface, radius=r0, level=parent_level,
         center=parent_center, alpha=CONFIG['alpha_outer']
     )
 
@@ -182,8 +182,8 @@ def test_m2l(db):
         source_key = v_list[idx]
         source_center = morton.find_physical_center_from_key(source_key, x0, r0)
 
-        source_equivalent_surface = operator.scale_surface(
-            surface=equivalent_surface,
+        source_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
             radius=r0,
             level=source_level,
             center=source_center,
@@ -208,8 +208,8 @@ def test_m2l(db):
 
     target_equivalent_density = m2l_matrix @ source_equivalent_density
 
-    targets = operator.scale_surface(
-        surface=equivalent_surface,
+    targets = surface.scale_surface(
+        surf=equivalent_surface,
         radius=r0,
         level=target_level,
         center=target_center,

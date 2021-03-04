@@ -61,7 +61,7 @@ def compute_surface(order):
 
 
 @numba.njit(cache=True)
-def scale_surface(surface, radius, level, center, alpha):
+def scale_surface(surf, radius, level, center, alpha):
     """
     Shift and scale a given surface to a new center, and radius relative to the
         original surface.
@@ -86,15 +86,15 @@ def scale_surface(surface, radius, level, center, alpha):
         points that discretise the surface of a node.
     """
 
-    n_coeffs = len(surface)
+    n_coeffs = len(surf)
 
     # Translate box to specified centre, and scale
     scaled_radius = (0.5)**level * radius
     dilated_radius = alpha*scaled_radius
 
-    scaled_surface = np.copy(surface)
+    scaled_surf = np.copy(surf)
 
     for i in range(n_coeffs):
-        scaled_surface[i] = surface[i]*dilated_radius + center
+        scaled_surf[i] = surf[i]*dilated_radius + center
 
-    return scaled_surface
+    return scaled_surf

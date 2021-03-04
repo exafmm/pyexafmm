@@ -10,7 +10,7 @@ import numpy as np
 
 import adaptoctree.morton as morton
 
-import fmm.operator as operator
+import fmm.surface as surface
 from fmm.kernel import KERNELS
 
 import utils.data as data
@@ -33,6 +33,9 @@ def _particle_to_multipole(
         scale_function,
         p2p_function,
     ):
+    """
+
+    """
     # Source indices in a given leaf
     source_indices = sources_to_keys == key
 
@@ -47,8 +50,8 @@ def _particle_to_multipole(
 
     leaf_level = morton.find_level(key)
 
-    upward_check_surface = operator.scale_surface(
-        surface=check_surface,
+    upward_check_surface = surface.scale_surface(
+        surf=check_surface,
         radius=r0,
         level=leaf_level,
         center=leaf_center,
@@ -181,8 +184,8 @@ def _source_to_local(
 
     if len(densities) > 0:
 
-        downward_check_surface = operator.scale_surface(
-            surface=check_surface,
+        downward_check_surface = surface.scale_surface(
+            surf=check_surface,
             radius=r0,
             level=level,
             center=center,
@@ -222,8 +225,8 @@ def _multipole_to_target(
         source_level = morton.find_level(source)
         source_center = morton.find_physical_center_from_key(source, x0, r0)
 
-        upward_equivalent_surface = operator.scale_surface(
-            surface=equivalent_surface,
+        upward_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
             radius=r0,
             level=source_level,
             center=source_center,
@@ -253,7 +256,7 @@ def _local_to_target(
     level = morton.find_level(key)
     center = morton.find_physical_center_from_key(key, x0, r0)
 
-    downward_equivalent_surface = operator.scale_surface(
+    downward_equivalent_surface = surface.scale_surface(
         equivalent_surface,
         r0,
         level,
@@ -403,7 +406,7 @@ class Fmm:
             self.particle_to_multipole(leaf)
 
         # Post-order traversal
-        for level in range(self.depth - 1, -1, -1):
+        for level in range(self.depth-1, -1, -1):
             idxs = self.complete_levels == level
             for key in self.complete[idxs]:
                 self.multipole_to_multipole(key)
