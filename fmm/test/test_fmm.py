@@ -1,5 +1,8 @@
 """
-Test the FMM
+Test the fmm module.
+
+Configured with test data 'test.hdf5' and a test config, 'test_config.json',
+bundled with the package.
 """
 import numpy as np
 
@@ -14,7 +17,11 @@ RTOL = 1e-1
 
 
 def test_upward_pass():
-
+    """
+    Test that multipole expansion of root node is the same as a direct
+        computation for a set of source points, at a target point located
+        at a distance.
+    """
     fmm = Fmm('test_config')
     fmm.upward_pass()
 
@@ -46,8 +53,12 @@ def test_upward_pass():
     assert np.allclose(direct, equivalent, rtol=RTOL)
 
 
-def test_downward_pass():
-
+def test_m2l():
+    """
+    Test that the local expansions of a given target node correspond to the
+        multipole expansions of source nodes in its V list at a local point
+        within the target node.
+    """
     fmm = Fmm('test_config')
 
     fmm.run()
@@ -109,7 +120,7 @@ def test_downward_pass():
 
 def test_fmm():
     """
-    End To End Fmm Test
+    End To End Fmm Test.
     """
     fmm = Fmm('test_config')
 

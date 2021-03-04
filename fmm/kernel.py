@@ -18,12 +18,38 @@ TOL = 1e-6
 ###############################################################################
 
 
+@numba.njit(cache=True)
 def laplace_scale(level):
+    """
+    Level scale for the Laplace kernel.
+
+    Parameters:
+    -----------
+    level : np.int64
+
+    Returns:
+    --------
+    np.int64
+    """
     return 1/(2**level)
 
 
 @numba.njit(cache=True)
 def laplace_cpu(x, y):
+    """
+    Numba Laplace CPU kernel.
+
+    Parameters:
+    -----------
+    x : np.array(shape=(3), dtype=np.float32)
+        Source coordinate.
+    y : np.array(shape=(3), dtype=np.float32)
+        Target coordinate.
+
+    Returns:
+    --------
+    np.float32
+    """
     diff = x-y
     diff2 = diff*diff
 
@@ -54,6 +80,10 @@ def laplace_cuda(ax, ay, az, bx, by, bz):
         'y' coordinate of a point.
     bz : np.float32
         'z' coordinate of a point.
+
+    Returns:
+    --------
+    nb.cuda.float32
     """
     rx = ax-bx
     ry = ay-by
@@ -153,9 +183,23 @@ def laplace_implicit_gram_matrix(
     cuda.atomic.add(result, (threadyInd, idx), row_sum)
 
 
-@numba.jit
+@numba.jit(cache=True)
 def laplace_p2p(sources, targets, source_densities):
+    """
+    Numba P2P operator for Laplace kernel.
 
+    Parameters:
+    -----------
+    sources : np.array(shape=(n, 3))
+        The n source locations on a surface.
+    targets : np.array(shape=(m, 3))
+        The m target locations on a surface.
+
+    Returns:
+    --------
+    np.array(shape=(ntargets), dtype=np.float32)
+        Target potential densities.
+    """
     ntargets = len(targets)
     nsources = len(sources)
 
@@ -177,7 +221,7 @@ def laplace_p2p(sources, targets, source_densities):
 @numba.njit(cache=True)
 def laplace_gram_matrix(sources, targets):
     """
-    Compute Gram matrix of Laplace kernel.
+    Dense Numba P2P operator for Laplace kernel.
 
     Parameters:
     -----------
