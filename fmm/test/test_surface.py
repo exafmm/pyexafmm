@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 import fmm.surface as surface
-from fmm.kernel import KERNELS
 import utils.data as data
 
 
@@ -59,15 +58,6 @@ def upward_check_surface(surf):
 def upward_equivalent_surface(surf):
     return  surface.scale_surface(
         surface, 1, 0, np.array([0, 0, 0]), 1.05
-    )
-
-
-@pytest.fixture
-def gram_matrix(upward_check_surface, upward_equivalent_surface):
-    return  surface.gram_matrix(
-        kernel_function=KERNELS['laplace'](),
-        sources=upward_equivalent_surface,
-        targets=upward_check_surface
     )
 
 

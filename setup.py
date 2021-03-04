@@ -16,7 +16,8 @@ requirements = [
     "pytest",
     "click",
     "scipy",
-    "h5py"
+    "h5py",
+    "pylint"
 
 ]
 
