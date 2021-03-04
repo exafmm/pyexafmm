@@ -6,6 +6,7 @@ import os
 import pathlib
 import sys
 
+import h5py
 import numpy as np
 
 import utils.data as data
@@ -96,7 +97,7 @@ def main(**config):
 
     sources, targets, source_densities = data_function(npoints)
 
-    db = data.load_hdf5(config['experiment'], PARENT, 'a')
+    db = h5py.File(PARENT/f"{config['experiment']}.hdf5", 'a')
 
     if f'particle_data' in db.keys():
         del db[f'particle_data']['sources']

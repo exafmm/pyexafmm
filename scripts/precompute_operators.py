@@ -12,6 +12,7 @@ import sys
 import time
 
 import cupy as cp
+import h5py
 import numpy as np
 import scipy.linalg as linalg
 
@@ -173,7 +174,7 @@ def compress_m2l_gram_matrix(
     return (dU.get(), dS.get(), dVT.get())
 
 
-def computes(config, db):
+def compute_surfaces(config, db):
     """
     Compute equivalent and check surfaces, and save to disk.
 
@@ -575,7 +576,7 @@ def main(**config):
     start = time.time()
 
     # Step 0: Construct Octree and load Python config objs
-    db = data.load_hdf5(config['experiment'], PARENT, 'a')
+    db = h5py.File(PARENT / f"{config['experiment']}.hdf5", 'a')
     x0, r0, complete, v_lists = compute_octree(config, db)
 
     # Required config, not explicitly passed
@@ -587,7 +588,7 @@ def main(**config):
     kernel_scale = KERNELS[kernel]['scale']
 
     # Step 1: Compute a surface of a given order
-    equivalent_surface, check_surface = computes(config, db)
+    equivalent_surface, check_surface = compute_surfaces(config, db)
 
     # # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # # This is a useful quantity that will form the basis of most operators.
