@@ -183,6 +183,120 @@ def laplace_implicit_gram_matrix(
     cuda.atomic.add(result, (threadyInd, idx), row_sum)
 
 
+@cuda.jit
+def laplace_implicit_gram_matrix_blocked(
+        sources,
+        targets,
+        rhs,
+        result,
+        height,
+        width,
+        sub_height,
+        sub_width,
+        idx
+    ):
+    """
+    Implicitly apply the Gram matrix to a vector, computing Green's function on
+        the fly on the device, and multiplying by random matrices to approximate
+        the basis. Multiple RHS are computed in a loop, specified by the index.
+        This kernel assumes that the sources/targets specified by the user
+        specify multiple Gram matrices, i.e. the global Gram matrix is 'blocked',
+
+        e.g. gram = ((g_1) | (g_2) | ... | (g_{n-1}) | g_n)
+
+        therefore, one additionally needs to specify the dimensions of the
+        'sub' gram matrices in order to pick out the correct matrix elements
+        for application to a given RHS.
+
+    Parameters:
+    -----------
+    sources : np.array(shape=(nsources, 3))
+        nsources rows of gram matrix
+    targets : np.array(shape=(ntargets, 3))
+        ntargets columns of gram matrix
+    rhs : np.array(shape=(ntargets, nrhs))
+        Multiple right hand sides, indexed by 'idx'
+    result : np.array(shape=(height, nrhs))
+        Dimensions of result matrix defined by matrix height
+        and number of right hand sides
+    height : int
+        'height' of global Gram matrix. Defined by m, where
+        m > n, and m is either ntargets or nsources.
+    width : int
+        'width' of Global gram matrix.
+    sub_height : int
+        height of sub-Gram matrix. Defined by m, where
+        m > n, and m is either ntargets or nsources.
+    sub_width : int
+        'width' of sub-Gram matrix.
+    idx: int
+        RHS index.
+    """
+
+    blockWidth = cuda.shared.array(1, numba.int32)
+    blockxInd = cuda.shared.array(1, numba.int32)
+    blockyInd = cuda.shared.array(1, numba.int32)
+
+    # Calculate once, and share amongs thread-block
+    if cuda.threadIdx.x == 0:
+        if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
+            blockWidth[0] = numba.int32(BLOCK_WIDTH)
+        else:
+            blockWidth[0] = numba.int32(width % BLOCK_WIDTH)
+
+        blockxInd[0] = numba.int32(cuda.blockIdx.x*BLOCK_WIDTH)
+        blockyInd[0] = numba.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
+
+    cuda.syncthreads()
+
+    # Extract tile of RHS, of size up to BLOCK_WIDTH
+    tmp = cuda.shared.array(BLOCK_WIDTH, numba.float32)
+
+    if cuda.threadIdx.x < blockWidth[0]:
+        tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
+
+    cuda.syncthreads()
+
+    # Accumulate matvec of tile into variable
+    row_sum = 0
+
+    threadyInd = blockyInd[0]+cuda.threadIdx.x
+    threadxInd = blockxInd[0]+cuda.threadIdx.x
+
+    # Find the index of the sub-Gram matrix, dependent on orientation.
+    if sub_width == width:
+        submatrixInd = numba.int32(math.floor(threadyInd/sub_height))*sub_width
+
+    if sub_height == height:
+        submatrixInd = numba.int32(math.floor(threadxInd/sub_width))*sub_height
+
+    if threadyInd < height:
+        for i in range(blockWidth[0]):
+            col_idx = (blockxInd[0] + i)
+            row_idx = threadyInd
+
+            # Pick out matrix element for sub-Gram matrix
+            if sub_width == width:
+                source = sources[col_idx+submatrixInd]
+                target  = targets[row_idx]
+
+            elif sub_height == height:
+                source = sources[col_idx]
+                target = targets[row_idx+submatrixInd]
+
+            sx = source[0]
+            sy = source[1]
+            sz = source[2]
+
+            tx = target[0]
+            ty = target[1]
+            tz = target[2]
+
+            row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
+
+    cuda.atomic.add(result, (threadyInd, idx), row_sum)
+
+
 @numba.jit(cache=True)
 def laplace_p2p(sources, targets, source_densities):
     """
@@ -256,6 +370,7 @@ KERNELS = {
         'cuda': laplace_cuda,
         'dense_gram': laplace_gram_matrix,
         'implicit_gram': laplace_implicit_gram_matrix,
+        'implicit_gram_blocked': laplace_implicit_gram_matrix_blocked,
         'p2p': laplace_p2p
     },
 }

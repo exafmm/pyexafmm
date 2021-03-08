@@ -32,36 +32,33 @@ TPB = BLOCK_HEIGHT
 
 
 def compress_m2l_gram_matrix(
-        target, equivalent_surface, check_surface, alpha_inner, x0, r0, v_list,
-        k, implicit_gram_matrix
+        level, x0, r0, depth, alpha_inner, check_surface,
+        equivalent_surface, k, implicit_gram_matrix
     ):
     """
-    Compute a compressed representation of the Gram matrix between a target
-        node and all of the source nodes in it's V list. This is the the Gram
-        matrix used in the M2L interaction. We follow the algorithm presented
-        by Halko et. al. (2011).
+    Compute compressed representation of unique Gram matrices for targets and
+    sources at a given level of the octree, specified by their unique transfer
+    vectors. Compression is computed using the randomised-SVD of Halko et. al.
+    (2011), and accelerated using CUDA.
 
     Parameters:
     -----------
-    target : np.int64
-        Target node's Morton key.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=np.float32)
-        Discretised equivalent surface.
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
-        Discretised check surface.
-    alpha_inner : np.float32
-        Relative size of inner surface
+    level : np.int64
+        Octree level at which M2L operators are being calculated.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
         Physical center of octree root node.
     r0 : np.float32
         Half side length of octree root node.
-    v_list : np.array(shape=(n_v_list, 1), dtype=np.float32)
-        V list of the target node.
+    alpha_inner : np.float32
+        Relative size of inner surface
+    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+        Discretised check surface.
+    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=np.float32)
+        Discretised equivalent surface.
     k : np.int32
         Target compression rank.
     implicit_gram_matrix : CUDA JIT function handle.
         Function to apply gram matrix implicitly to a given RHS.
-        CUDA JIT function handle.
 
     Returns:
     --------
@@ -70,42 +67,32 @@ def compress_m2l_gram_matrix(
         np.array(ns, dtype=np.float32),
         np.array((k, k), dtype=np.float32)
     )
-        SVD of gram matrix of the target points with the source points in it's
-        V list, compressed with a randomised SVD, in the form (U, S, VT)
+        SVD of gram matrices corresponding to all unique transfer vectors.
+        These are indexed by the hash of all transfer vectors for a given
+        Octree level.
     """
-
-    # Get level
-    level = morton.find_level(target)
-
-    # Compute target check surface
-    target_center = morton.find_physical_center_from_key(
-        key=target,
-        x0=x0,
-        r0=r0
+    sources, targets, hashes = tree.find_unique_v_list_interactions(
+        level, x0, r0, depth
     )
 
-    # Convert to single precision before transferring to GPU
-    target_check_surface = surface.scale_surface(
-        surf=check_surface,
-        radius=r0,
-        level=level,
-        center=target_center,
-        alpha=alpha_inner
-    ).astype(np.float32)
-
-    # Allocate space on the GPU for sources and targets
     n_targets_per_node = len(check_surface)
     n_sources_per_node = len(equivalent_surface)
-    n_source_nodes = len(v_list)
+    n_targets = len(targets)
+    n_sources = len(sources)
 
-    dtargets = cp.asarray(target_check_surface)
+    dsources = cp.zeros((n_sources*n_sources_per_node, 3)).astype(np.float32)
+    dtargets = cp.zeros((n_targets*n_targets_per_node, 3)).astype(np.float32)
 
-    csources = np.zeros((n_sources_per_node*n_source_nodes, 3), dtype=np.float32)
+    for idx in range(len(targets)):
 
-    # Compute source equivalent surfaces and transfer to GPU
-    for idx in range(n_source_nodes):
+        target = targets[idx]
+        source = sources[idx]
 
-        source = v_list[idx]
+        target_center = morton.find_physical_center_from_key(
+            key=target,
+            x0=x0,
+            r0=r0
+        )
 
         source_center = morton.find_physical_center_from_key(
             key=source,
@@ -113,41 +100,54 @@ def compress_m2l_gram_matrix(
             r0=r0
         )
 
-        source_equivalent_surface = surface.scale_surface(
+        lidx_targets = (idx)*n_targets_per_node
+        ridx_targets = (idx+1)*n_targets_per_node
+
+        lidx_sources = (idx)*n_sources_per_node
+        ridx_sources = (idx+1)*n_sources_per_node
+
+        target_coordinates = surface.scale_surface(
+            surf=check_surface,
+            radius=r0,
+            level=level,
+            center=target_center,
+            alpha=alpha_inner
+        )
+
+        source_coordinates = surface.scale_surface(
             surf=equivalent_surface,
             radius=r0,
             level=level,
             center=source_center,
             alpha=alpha_inner
-        ).astype(np.float32)
+        )
 
-        lidx = idx*n_sources_per_node
-        ridx = (idx+1)*n_sources_per_node
+        # Compress the Gram matrix between these sources/targets
+        dsources[lidx_sources:ridx_sources, :] = cp.asarray(source_coordinates)
+        dtargets[lidx_targets:ridx_targets, :] = cp.asarray(target_coordinates)
 
-        csources[lidx:ridx] = source_equivalent_surface
-
-    dsources = cp.asarray(csources)
 
     # Height and width of Gram matrix
-    height = n_sources_per_node*n_source_nodes
-    width = n_targets_per_node
+    height = n_targets_per_node*n_targets
+    sub_height = n_targets_per_node
+
+    width = n_sources_per_node
+    sub_width = n_sources_per_node
 
     bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
 
     # Result data, in the language of RSVD
     dY = cp.zeros((height, k)).astype(np.float32)
 
-    # Random matrix, for compressed basis, premultiplied by transpose of
-    # Inverse components needed for M2L operator, so that implicit Kernel
-    # matrix can be applied
-    dOmega = cp.random.rand(n_targets_per_node, k).astype(np.float32)
+    # Random matrix, for compressed basis
+    dOmega = cp.random.rand(n_sources_per_node, k).astype(np.float32)
     dOmegaT = dOmega.T
 
     # Perform implicit matrix matrix product between Gram matrix and random
     # matrix Omega
     for idx in range(k):
         implicit_gram_matrix[bpg, TPB](
-            dsources, dtargets, dOmegaT, dY, height, width, idx
+            dsources, dtargets, dOmegaT, dY, height, width, sub_height, sub_width, idx
         )
 
     # Perform QR decomposition on the GPU
@@ -155,23 +155,27 @@ def compress_m2l_gram_matrix(
     dQT = dQ.T
 
     # Perform transposed matrix-matrix multiplication implicitly
-    height = n_targets_per_node
-    width = n_sources_per_node*n_source_nodes
+    height = n_sources_per_node
+    sub_height = n_sources_per_node
+    width = n_targets_per_node*n_targets
+    sub_width = n_targets_per_node
 
-    dBT = cp.zeros((n_targets_per_node, k)).astype(np.float32)
+    dBT = cp.zeros((n_sources_per_node, k)).astype(np.float32)
 
     # Blocking is transposed
     bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
 
     for idx in range(k):
-        implicit_gram_matrix[bpg, TPB](dtargets, dsources, dQT, dBT, height, width, idx)
+        implicit_gram_matrix[bpg, TPB](
+            dtargets, dsources, dQT, dBT, height, width, sub_height, sub_width, idx
+        )
 
     # Perform SVD on reduced matrix
     du, dS, dVT = cp.linalg.svd(dBT.T, full_matrices=False)
     dU = cp.matmul(dQ, du)
 
     # Return compressed SVD components
-    return (dU.get(), dS.get(), dVT.get())
+    return dU.get(), dS.get(), dVT.get(), hashes
 
 
 def compute_surfaces(config, db):
@@ -297,7 +301,7 @@ def compute_octree(config, db):
     db['interaction_lists']['v'] = v
     db['interaction_lists']['w'] = w
 
-    return x0, r0, complete, v
+    return x0, r0, depth
 
 
 def compute_inv_c2e(
@@ -501,7 +505,7 @@ def compute_m2m_and_l2l(
 
 def compute_m2l(
         config, db, implicit_gram_matrix, k,  equivalent_surface, check_surface,
-        x0, r0, complete, v_lists
+        x0, r0, depth
     ):
     """
     Compute RSVD compressed Gram matrices for M2L operators, and save to disk.
@@ -537,36 +541,31 @@ def compute_m2l(
     group = db['m2l']
 
     progress = 0
-    n_complete = len(complete)
 
-    for i in range(n_complete):
+    for level in range(2, depth+1):
 
-        node = complete[i]
-        node_str = str(node)
-        node_idx = db['key_to_index'][node_str][0]
-        v_list = v_lists[node_idx]
-        v_list = v_list[v_list != -1]
+        str_level = str(level)
 
-        if len(v_list) > 0 and node != 0:
+        if str_level in group.keys():
+            del db['m2l'][str_level]
 
-            U, S, VT = compress_m2l_gram_matrix(
-                node, equivalent_surface, check_surface, config['alpha_inner'],
-                x0, r0, v_list, k, implicit_gram_matrix
-            )
+        else:
+            group.create_group(str_level)
 
-            if node_str in group.keys():
-                del db['m2l'][node_str]
+        u, s, vt, hashes = compress_m2l_gram_matrix(
+            level, x0, r0, depth, config['alpha_inner'], check_surface,
+            equivalent_surface, k, implicit_gram_matrix
+        )
 
-            else:
-                group.create_group(node_str)
 
-            db['m2l'][node_str]['U'] = U
-            db['m2l'][node_str]['S'] = S
-            db['m2l'][node_str]['VT'] = VT
+        db['m2l'][str_level]['u'] = u
+        db['m2l'][str_level]['s'] = s
+        db['m2l'][str_level]['vt'] = vt
+        db['m2l'][str_level]['hashes'] = hashes
 
         progress += 1
 
-        print(f'Computed ({progress}/{n_complete}) M2L operators')
+        print(f'Computed operators for ({progress}/{depth-1}) M2L Levels')
 
 
 def main(**config):
@@ -577,13 +576,13 @@ def main(**config):
 
     # Step 0: Construct Octree and load Python config objs
     db = h5py.File(PARENT / f"{config['experiment']}.hdf5", 'a')
-    x0, r0, complete, v_lists = compute_octree(config, db)
+    x0, r0, depth = compute_octree(config, db)
 
     # Required config, not explicitly passed
     kernel = config['kernel']
     k = config['target_rank']
 
-    implicit_gram_matrix = KERNELS[kernel]['implicit_gram']
+    implicit_gram_matrix = KERNELS[kernel]['implicit_gram_blocked']
     dense_gram_matrix = KERNELS[kernel]['dense_gram']
     kernel_scale = KERNELS[kernel]['scale']
 
@@ -605,8 +604,8 @@ def main(**config):
 
     # # Step 4: Compute M2L operators
     compute_m2l(
-        config, db, implicit_gram_matrix, k, equivalent_surface, check_surface,
-        x0, r0, complete, v_lists
+        config, db, implicit_gram_matrix, k,  equivalent_surface, check_surface,
+        x0, r0, depth
     )
 
     minutes, seconds = utils.time.seconds_to_minutes(time.time() - start)
