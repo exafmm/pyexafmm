@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 import adaptoctree.morton as morton
+import adaptoctree.utils as utils
 
 from fmm.kernel import KERNELS
 import fmm.surface as surface
@@ -151,10 +152,14 @@ def test_m2l(db):
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...]
     dc2e_inv = db['dc2e_inv'][...]
+    depth = db['octree']['depth'][0]
     equivalent_surface = db["surface"]["equivalent"][...]
     npoints_equivalent = len(equivalent_surface)
+    check_surface = db['surface']['check'][...]
+    npoints_check = len(check_surface)
     kernel = CONFIG["kernel"]
     p2p_function = KERNELS[kernel]["p2p"]
+
 
     # Pick a target key with a non-empty interaction list
     complete = db['octree']['complete']
@@ -195,18 +200,32 @@ def test_m2l(db):
 
         sources[lidx:ridx] = source_equivalent_surface
 
-    # # place unit densities on source boxes
+    # place unit densities on source boxes
     source_equivalent_density = np.ones(len(v_list)*npoints_equivalent)
     source_equivalent_density = np.random.rand(len(v_list)*npoints_equivalent)
 
+    u = db['m2l'][str(target_level)]['u']
+    s = db['m2l'][str(target_level)]['s']
+    vt = db['m2l'][str(target_level)]['vt']
+    hashes = db['m2l'][str(target_level)]['hashes'][...]
 
-    U = db['m2l'][str(target_key)]['U']
-    S = db['m2l'][str(target_key)]['S']
-    VT = db['m2l'][str(target_key)]['VT']
+    target_equivalent_density = np.zeros(npoints_equivalent)
 
-    m2l_matrix = (scale*dc2e_inv) @ (U @ np.diag(S) @ VT).T
+    for i in range(len(v_list)):
 
-    target_equivalent_density = m2l_matrix @ source_equivalent_density
+        source_key = v_list[i]
+        transfer_vec = str(morton.find_transfer_vector(target_key, source_key, depth))
+        hash_vec = utils.deterministic_hash(transfer_vec, 5)
+        m2l_idx = np.where(hash_vec == hashes)[0][0]
+        m2l_lidx = (m2l_idx)*npoints_check
+        m2l_ridx = (m2l_idx+1)*npoints_check
+        u_sub = u[m2l_lidx:m2l_ridx]
+        m2l_matrix = (scale*dc2e_inv) @ (u_sub @ np.diag(s) @ vt)
+
+        lidx = i*npoints_equivalent
+        ridx = (i+1)*npoints_equivalent
+        target_equivalent_density_sub = m2l_matrix @ source_equivalent_density[lidx:ridx]
+        target_equivalent_density += target_equivalent_density_sub
 
     targets = surface.scale_surface(
         surf=equivalent_surface,

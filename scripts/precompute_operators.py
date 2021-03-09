@@ -72,8 +72,10 @@ def compress_m2l_gram_matrix(
         Octree level.
     """
     sources, targets, hashes = tree.find_unique_v_list_interactions(
-        level, x0, r0, depth
+        level, x0, r0, depth, digest_size=5
     )
+
+    print(sources, targets, hashes)
 
     n_targets_per_node = len(check_surface)
     n_sources_per_node = len(equivalent_surface)
@@ -561,7 +563,8 @@ def compute_m2l(
         db['m2l'][str_level]['u'] = u
         db['m2l'][str_level]['s'] = s
         db['m2l'][str_level]['vt'] = vt
-        db['m2l'][str_level]['hashes'] = hashes
+        print('HERE!!!!', hashes, type(hashes), type(hashes[0]))
+        db['m2l'][str_level]['hashes'] = hashes.astype(np.int64)
 
         progress += 1
 
