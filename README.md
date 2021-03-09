@@ -107,7 +107,7 @@ fmm generate-test-data
 fmm compute-operators
 ```
 
-Once this is done, you'll be left with a `.hdf5` database of precomputed parametrisations, with the same name as your specified `experiment` parameter from your `config.json`, and you are finally ready to start programming with PyExaFMM.
+Once this is done, you'll be left with a `.hdf5` database of precomputed parametrisations, with the same name as your specified `experiment` parameter from your `config.json`. If you've used your own data, then the operator precomputations will be written into the same HDF5 file. Now you are ready to start programming with PyExaFMM.
 
 
 ## Usage
