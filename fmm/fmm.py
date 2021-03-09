@@ -1,7 +1,6 @@
 """
 Implementation of the main FMM loop.
 """
-
 import os
 import pathlib
 
@@ -13,6 +12,7 @@ from adaptoctree.utils import deterministic_hash
 
 import fmm.surface as surface
 from fmm.kernel import KERNELS
+from fmm.parameters import DIGEST_SIZE
 
 import utils.data as data
 
@@ -161,6 +161,8 @@ def _multipole_to_local(
     -----------
     key : np.int64
         Morton key of source node.
+    depth : np.int64
+        Maximum depth of the octree, used to find transfer vectors.
     v_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
         Morton keys of V list members.
     multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
@@ -170,6 +172,8 @@ def _multipole_to_local(
         Dictionary containing local expansions, indexed by Morton key of
         target nodes.
     dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    ncheck_points : np.int64
+        Number of points discretising the check surface.
     m2l : h5py.Group
         HDF5 group, indexed by source node key, storing compressed M2L
         components.
@@ -179,29 +183,30 @@ def _multipole_to_local(
     level = morton.find_level(key)
     scale = scale_function(level)
 
-    #  M2L operator stored in terms of its SVD components
+    #  M2L operator stored in terms of its SVD components for each level
     str_level = str(level)
     u = m2l[str_level]["u"]
     s = np.diag(m2l[str_level]["s"][...])
     vt = m2l[str_level]["vt"][...]
+
+    # Hashed transfer vectors for a given level, provide index for M2L operators
     hashes = m2l[str_level]["hashes"][...]
 
     for idx in range(len(v_list)):
 
-        #  Find source densities for v list of the key
+        # Find source densities for v list of the key
         source = v_list[idx]
-        source_equivalent_density = multipole_expansions[source]
 
-        # Find compressed m2l operator for this transfer vector
+        # Find compressed M2L operator for this transfer vector
         str_vec = str(morton.find_transfer_vector(key, source, depth))
-        hash_vector = deterministic_hash(str_vec, digest_size=5)
-
+        hash_vector = deterministic_hash(str_vec, digest_size=DIGEST_SIZE)
         m2l_idx = np.where(hash_vector == hashes)[0][0]
         m2l_lidx = m2l_idx*ncheck_points
         m2l_ridx = (m2l_idx+1)*ncheck_points
         u_sub = u[m2l_lidx:m2l_ridx][...]
         m2l_matrix = (scale*dc2e_inv) @ (u_sub @ s @ vt)
 
+        # Compute contribution from source, to the local expansion
         local_expansions[key] += m2l_matrix @ multipole_expansions[source]
 
 
@@ -233,11 +238,11 @@ def _local_to_local(
 
         if child in local_expansions:
 
-            #  Compute operator index
+            # Compute operator index
             operator_idx = child == children
 
+            # Compute contribution to local expansion of child from parent
             child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
-
             local_expansions[child] += np.ravel(child_equivalent_density)
 
 

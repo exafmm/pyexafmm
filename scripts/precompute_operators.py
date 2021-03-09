@@ -1,10 +1,5 @@
 """
 Precompute and store M2M/L2L/M2L operators for a given points dataset.
-
-We use a Randomised SVD to compress the effect of all M2L operator matrices on
-a single target node. This is accellerated with a GPU. Furthermore, dense
-interactions are computed on-the-fly, rather than being stored in a dense
-interaction matrix.
 """
 import os
 import pathlib
@@ -21,6 +16,8 @@ import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
 import fmm.surface as surface
+from fmm.parameters import DIGEST_SIZE
+
 import utils.data as data
 import utils.time
 
@@ -33,13 +30,16 @@ TPB = BLOCK_HEIGHT
 
 def compress_m2l_gram_matrix(
         level, x0, r0, depth, alpha_inner, check_surface,
-        equivalent_surface, k, implicit_gram_matrix
+        equivalent_surface, k, implicit_gram_matrix, digest_size=DIGEST_SIZE
     ):
     """
     Compute compressed representation of unique Gram matrices for targets and
     sources at a given level of the octree, specified by their unique transfer
     vectors. Compression is computed using the randomised-SVD of Halko et. al.
-    (2011), and accelerated using CUDA.
+    (2011), and accelerated using CUDA. The Gram matrix is potentially extremely
+    large for meshes of useful order of discretisation, therefore it is never
+    computed explicitly, instead matrix elements are computed on the fly and
+    applied to a given RHS where needed.
 
     Parameters:
     -----------
@@ -59,6 +59,8 @@ def compress_m2l_gram_matrix(
         Target compression rank.
     implicit_gram_matrix : CUDA JIT function handle.
         Function to apply gram matrix implicitly to a given RHS.
+    digest_size : np.int64
+        Size of the hash computed for each transfer vector.
 
     Returns:
     --------
@@ -67,15 +69,13 @@ def compress_m2l_gram_matrix(
         np.array(ns, dtype=np.float32),
         np.array((k, k), dtype=np.float32)
     )
-        SVD of gram matrices corresponding to all unique transfer vectors.
-        These are indexed by the hash of all transfer vectors for a given
-        Octree level.
+        SVD of Gram matrices corresponding to all unique transfer vectors for
+        each level. For a given level, these are indexed by the hash of the
+        transfer vectors.
     """
     sources, targets, hashes = tree.find_unique_v_list_interactions(
-        level, x0, r0, depth, digest_size=5
+        level, x0, r0, depth, digest_size=digest_size
     )
-
-    print(sources, targets, hashes)
 
     n_targets_per_node = len(check_surface)
     n_sources_per_node = len(equivalent_surface)
@@ -231,14 +231,12 @@ def compute_octree(config, db):
 
     Returns:
     --------
-    np.array(shape=(ncomplete), np.int64)
-        Complete tree.
     np.array(shape=(1, 3), dtype=np.float64)
         Physical center of octree root node.
     np.float64
         Half side length of octree root node.
-    np.array(shape=(n_complete, 189))
-        All V lists, required for M2L.
+    np.int64
+        Depth of octree.
     """
     max_level = config['max_level']
     max_points = config['max_points']
@@ -493,7 +491,7 @@ def compute_m2m_and_l2l(
 
         l2l.append(np.matmul(scale*dc2e_inv, cc2pe))
 
-    # Save m2m & l2l operators
+    # Save M2M & L2L operators
     m2m = np.array(m2m)
     l2l = np.array(l2l)
 
@@ -520,6 +518,8 @@ def compute_m2l(
         HDF5 file handle containing all experimental data.
     implicit_gram_matrix : CUDA JIT function handle.
         Function to apply gram matrix implicitly to a given RHS.
+    k : np.int64
+        Target SVD compression rank of M2L matrix.
     equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=np.float64)
         Discretised equivalent surface.
     check_surface : np.array(shape=(n_check, 3), dtype=np.float64)
@@ -528,10 +528,8 @@ def compute_m2l(
         Physical center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
-    complete : np.array(shape=(ncomplete), dtype=np.int64)
-        Completed tree.
-    v_lists : np.array(shape=(n_v_list, n_sources), dtype=np.float64)
-        All V lists.
+    depth : np.int64
+        Depth of octree.
     """
 
     if 'm2l' in db.keys():
@@ -559,11 +557,9 @@ def compute_m2l(
             equivalent_surface, k, implicit_gram_matrix
         )
 
-
         db['m2l'][str_level]['u'] = u
         db['m2l'][str_level]['s'] = s
         db['m2l'][str_level]['vt'] = vt
-        print('HERE!!!!', hashes, type(hashes), type(hashes[0]))
         db['m2l'][str_level]['hashes'] = hashes.astype(np.int64)
 
         progress += 1
@@ -592,8 +588,8 @@ def main(**config):
     # Step 1: Compute a surface of a given order
     equivalent_surface, check_surface = compute_surfaces(config, db)
 
-    # # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
-    # # This is a useful quantity that will form the basis of most operators.
+    # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
+    # This is a useful quantity that will form the basis of most operators.
     uc2e_inv, dc2e_inv = compute_inv_c2e(
         config, db, dense_gram_matrix, equivalent_surface, check_surface,
         x0, r0
@@ -605,7 +601,7 @@ def main(**config):
         kernel_scale, uc2e_inv, dc2e_inv, x0, r0
     )
 
-    # # Step 4: Compute M2L operators
+    # Step 4: Compute M2L operators for each level, and their transfer vectors
     compute_m2l(
         config, db, implicit_gram_matrix, k,  equivalent_surface, check_surface,
         x0, r0, depth
