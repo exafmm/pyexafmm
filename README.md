@@ -52,7 +52,7 @@ python setup.py develop
 
 After installation, you must precompute and cache the FMM operators for your dataset. Most of these are calculated using the techniques in [1], notably M2M and L2L matrices can be computed for a single parent node and its children, and scaled in a simple fashion for the kernels implemented by PyExaFMM. For the M2L operators, we introduce a randomised SVD compression [2], to avoid storing and applying potentially very large dense matrices.
 
-This is done via a `config.json` file,
+This is done via a `config.json` file, PyExaFMM will look for this in your **current working directory**,
 
 ```json
 {
@@ -73,11 +73,11 @@ This is done via a `config.json` file,
 
 |Parameter      | Description                                        |
 |--------------	|-----------------------------------------------	 |
-| `experiment`	| Order of local and multipole expansions.           |
+| `experiment`	| Experiment name, used to label HDF5 database          |
 | `npoints`     | Number of points to generate in test data.         |
 | `data_type`   | Type of test data to generate.                     |
-| `order_equivalent`| Expansion order of equivalent surface  |
-| `order_check`     | Expansion order of check surface.           |
+| `order_equivalent`| Order of multipole expansions, same as discretisation of equivalent surface.  |
+| `order_check`     | Order of local expansions, same as discretisation of check surface.           |
 | `kernel`      | Kernel function to use.                            |
 | `alpha_inner`	| Relative size of inner surface's radius.           |
 | `alpha_outer`	| Relative size of outer surface's radius.           |
@@ -107,7 +107,7 @@ fmm generate-test-data
 fmm compute-operators
 ```
 
-Once this is done, you are ready to start programming with PyExaFMM.
+Once this is done, you'll be left with a `.hdf5` database of precomputed parametrisations, with the same name as your specified `experiment` parameter from your `config.json`, and you are finally ready to start programming with PyExaFMM.
 
 
 ## Usage
@@ -118,16 +118,16 @@ Example usage of the API presented by the `Fmm` class is as follows:
 from fmm import Fmm
 
 # Instantiate an FMM object, with config
-fmm = Fmm()
+experiment = Fmm()
 
-# Optionally specify non-default config:
+# Optionally specify non-default config filename:
 # fmm = Fmm('test')
 
 # Run upward & downward pass
-fmm.run()
+experiment.run()
 
-# Result data
-print(fmm.target_potentials)
+# Result data, potentials of due to all sources evaluated at all targets.
+print(experiment.target_potentials)
 ```
 
 
@@ -137,12 +137,12 @@ print(fmm.target_potentials)
 fmm [OPTIONS] COMMAND [ARGS]
 ```
 
-|Command               | Action |
-|--------------        |------------------------------------	 |
-| `build`	           | Build Conda recipe                      |
-| `test`	           | Run test suite	                         |
-| `compute-operators`  | Run operator pre-computations           |
-| `generate-test-data` | Generate `npoints` sources & targets    |
+|Command               | Action                                  | Options                 |
+|--------------        |------------------------------------	 |--------------           |
+| `compute-operators`  | Run operator pre-computations           | `-c <config_filename>`  |
+| `generate-test-data` | Generate `npoints` sources & targets    | `-c <config_filename>`  |
+
+The option to specify a custom config filename `-c` overrides the PyExaFMM default to search for a file named `config.json` in your current working directory to parameterise precomputations.
 
 
 ## References

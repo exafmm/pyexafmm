@@ -15,6 +15,8 @@ import utils.data as data
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 
+WORKING_DIR = pathlib.Path(os.getcwd())
+
 
 def random_data(npoints):
     """
@@ -97,7 +99,7 @@ def main(**config):
 
     sources, targets, source_densities = data_function(npoints)
 
-    db = h5py.File(PARENT/f"{config['experiment']}.hdf5", 'a')
+    db = h5py.File(WORKING_DIR/f"{config['experiment']}.hdf5", 'a')
 
     if f'particle_data' in db.keys():
         del db[f'particle_data']['sources']
