@@ -9,6 +9,7 @@ import h5py
 import numpy as np
 
 import adaptoctree.morton as morton
+from adaptoctree.utils import deterministic_hash
 
 import fmm.surface as surface
 from fmm.kernel import KERNELS
@@ -142,10 +143,12 @@ def _multipole_to_multipole(
 
 def _multipole_to_local(
         key,
+        depth,
         v_list,
         multipole_expansions,
         local_expansions,
         dc2e_inv,
+        ncheck_points,
         m2l,
         scale_function,
     ):
@@ -176,23 +179,30 @@ def _multipole_to_local(
     level = morton.find_level(key)
     scale = scale_function(level)
 
-    #  Find source densities for v list of the key
-
-    source_equivalent_density = []
-    for source in v_list:
-        source_equivalent_density.extend(multipole_expansions[source])
-
-    source_equivalent_density = np.array(source_equivalent_density)
-
     #  M2L operator stored in terms of its SVD components
-    str_key = str(key)
-    u = m2l[str_key]["U"][...]
-    s = m2l[str_key]["S"][...]
-    vt = m2l[str_key]["VT"][...]
+    str_level = str(level)
+    u = m2l[str_level]["u"]
+    s = np.diag(m2l[str_level]["s"][...])
+    vt = m2l[str_level]["vt"][...]
+    hashes = m2l[str_level]["hashes"][...]
 
-    # Calculate target equivalent density, from assembled M2L matrix
-    target_equivalent_density = (scale*dc2e_inv) @ (u @ np.diag(s) @ vt).T @ source_equivalent_density
-    local_expansions[key] += target_equivalent_density
+    for idx in range(len(v_list)):
+
+        #  Find source densities for v list of the key
+        source = v_list[idx]
+        source_equivalent_density = multipole_expansions[source]
+
+        # Find compressed m2l operator for this transfer vector
+        str_vec = str(morton.find_transfer_vector(key, source, depth))
+        hash_vector = deterministic_hash(str_vec, digest_size=5)
+
+        m2l_idx = np.where(hash_vector == hashes)[0][0]
+        m2l_lidx = m2l_idx*ncheck_points
+        m2l_ridx = (m2l_idx+1)*ncheck_points
+        u_sub = u[m2l_lidx:m2l_ridx][...]
+        m2l_matrix = (scale*dc2e_inv) @ (u_sub @ s @ vt)
+
+        local_expansions[key] += m2l_matrix @ multipole_expansions[source]
 
 
 def _local_to_local(
@@ -538,6 +548,7 @@ class Fmm:
         # Load required data from disk
         ## Load surfaces, and inverse gram matrices
         self.check_surface = self.db["surface"]["check"][...]
+        self.ncheck_points = len(self.check_surface)
         self.equivalent_surface = self.db["surface"]["equivalent"][...]
         self.nequivalent_points = len(self.equivalent_surface)
         self.uc2e_inv = self.db["uc2e_inv"][...]
@@ -698,10 +709,12 @@ class Fmm:
         """
         _multipole_to_local(
             key=key,
+            depth=self.depth,
             v_list=v_list,
             multipole_expansions=self.multipole_expansions,
             local_expansions=self.local_expansions,
             dc2e_inv=self.dc2e_inv,
+            ncheck_points=self.ncheck_points,
             m2l=self.m2l,
             scale_function=self.scale,
         )
