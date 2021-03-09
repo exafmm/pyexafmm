@@ -1,7 +1,6 @@
 """
 Implementation of the main FMM loop.
 """
-
 import os
 import pathlib
 
@@ -9,9 +8,11 @@ import h5py
 import numpy as np
 
 import adaptoctree.morton as morton
+from adaptoctree.utils import deterministic_hash
 
 import fmm.surface as surface
 from fmm.kernel import KERNELS
+from fmm.parameters import DIGEST_SIZE
 
 import utils.data as data
 
@@ -142,10 +143,12 @@ def _multipole_to_multipole(
 
 def _multipole_to_local(
         key,
+        depth,
         v_list,
         multipole_expansions,
         local_expansions,
         dc2e_inv,
+        ncheck_points,
         m2l,
         scale_function,
     ):
@@ -158,6 +161,8 @@ def _multipole_to_local(
     -----------
     key : np.int64
         Morton key of source node.
+    depth : np.int64
+        Maximum depth of the octree, used to find transfer vectors.
     v_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
         Morton keys of V list members.
     multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
@@ -167,6 +172,8 @@ def _multipole_to_local(
         Dictionary containing local expansions, indexed by Morton key of
         target nodes.
     dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    ncheck_points : np.int64
+        Number of points discretising the check surface.
     m2l : h5py.Group
         HDF5 group, indexed by source node key, storing compressed M2L
         components.
@@ -176,23 +183,31 @@ def _multipole_to_local(
     level = morton.find_level(key)
     scale = scale_function(level)
 
-    #  Find source densities for v list of the key
+    #  M2L operator stored in terms of its SVD components for each level
+    str_level = str(level)
+    u = m2l[str_level]["u"]
+    s = np.diag(m2l[str_level]["s"][...])
+    vt = m2l[str_level]["vt"][...]
 
-    source_equivalent_density = []
-    for source in v_list:
-        source_equivalent_density.extend(multipole_expansions[source])
+    # Hashed transfer vectors for a given level, provide index for M2L operators
+    hashes = m2l[str_level]["hashes"][...]
 
-    source_equivalent_density = np.array(source_equivalent_density)
+    for idx in range(len(v_list)):
 
-    #  M2L operator stored in terms of its SVD components
-    str_key = str(key)
-    u = m2l[str_key]["U"][...]
-    s = m2l[str_key]["S"][...]
-    vt = m2l[str_key]["VT"][...]
+        # Find source densities for v list of the key
+        source = v_list[idx]
 
-    # Calculate target equivalent density, from assembled M2L matrix
-    target_equivalent_density = (scale*dc2e_inv) @ (u @ np.diag(s) @ vt).T @ source_equivalent_density
-    local_expansions[key] += target_equivalent_density
+        # Find compressed M2L operator for this transfer vector
+        str_vec = str(morton.find_transfer_vector(key, source, depth))
+        hash_vector = deterministic_hash(str_vec, digest_size=DIGEST_SIZE)
+        m2l_idx = np.where(hash_vector == hashes)[0][0]
+        m2l_lidx = m2l_idx*ncheck_points
+        m2l_ridx = (m2l_idx+1)*ncheck_points
+        u_sub = u[m2l_lidx:m2l_ridx][...]
+        m2l_matrix = (scale*dc2e_inv) @ (u_sub @ s @ vt)
+
+        # Compute contribution from source, to the local expansion
+        local_expansions[key] += m2l_matrix @ multipole_expansions[source]
 
 
 def _local_to_local(
@@ -223,11 +238,11 @@ def _local_to_local(
 
         if child in local_expansions:
 
-            #  Compute operator index
+            # Compute operator index
             operator_idx = child == children
 
+            # Compute contribution to local expansion of child from parent
             child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
-
             local_expansions[child] += np.ravel(child_equivalent_density)
 
 
@@ -538,6 +553,7 @@ class Fmm:
         # Load required data from disk
         ## Load surfaces, and inverse gram matrices
         self.check_surface = self.db["surface"]["check"][...]
+        self.ncheck_points = len(self.check_surface)
         self.equivalent_surface = self.db["surface"]["equivalent"][...]
         self.nequivalent_points = len(self.equivalent_surface)
         self.uc2e_inv = self.db["uc2e_inv"][...]
@@ -698,10 +714,12 @@ class Fmm:
         """
         _multipole_to_local(
             key=key,
+            depth=self.depth,
             v_list=v_list,
             multipole_expansions=self.multipole_expansions,
             local_expansions=self.local_expansions,
             dc2e_inv=self.dc2e_inv,
+            ncheck_points=self.ncheck_points,
             m2l=self.m2l,
             scale_function=self.scale,
         )
