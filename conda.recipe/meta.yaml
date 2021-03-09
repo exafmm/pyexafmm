@@ -10,7 +10,7 @@ source:
 build:
   script: python setup.py install
   entry_points:
-    - exafmm = ci.cli:cli
+    - fmm = ci.cli:cli
 
 requirements:
   build:

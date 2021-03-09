@@ -14,20 +14,37 @@ An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
 
 ## Install
 
-Build from source, and install locally into a Conda/Miniconda environment
+Download from Anaconda cloud into a conda/mini-conda environment:
 
 ```bash
-# Clone repository
+
+# Add required channel
+conda config --env --add channels skailasa
+
+# Install
+conda install pyexafmm
+```
+
+Developers may want to build from source:
+
+```bash
+# Add required channels
+conda config --env --add channels skailasa
+conda config --env --add channels conda-forge
+conda config --env --add channels anaconda
+conda config --env --add channels nvidia
+
+# Clone
 git clone git@github.com:exafmm/pyexafmm.git
 cd pyexafmm
 
-# Build Conda package
+# Build
 conda build conda.recipe
 
-# Install conda package
+# Install
 conda install --use-local pyexafmm
 
-# (For developers) Install in editable mode
+# Editable mode for live development
 python setup.py develop
 ```
 
