@@ -24,6 +24,7 @@ import utils.time
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
+WORKING_DIR = pathlib.Path(os.getcwd())
 
 TPB = BLOCK_HEIGHT
 
@@ -574,7 +575,7 @@ def main(**config):
     start = time.time()
 
     # Step 0: Construct Octree and load Python config objs
-    db = h5py.File(PARENT / f"{config['experiment']}.hdf5", 'a')
+    db = h5py.File(WORKING_DIR / f"{config['experiment']}.hdf5", 'a')
     x0, r0, depth = compute_octree(config, db)
 
     # Required config, not explicitly passed

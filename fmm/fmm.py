@@ -18,6 +18,7 @@ import utils.data as data
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
+WORKING_DIR = pathlib.Path(os.getcwd())
 
 
 def _particle_to_multipole(
@@ -541,13 +542,13 @@ class Fmm:
 
         # Load experimental database
         if config_filename is not None:
-            config_filepath = PARENT / f"{config_filename}.json"
+            config_filepath = WORKING_DIR / f"{config_filename}.json"
         else:
-            config_filepath = PARENT / "config.json"
+            config_filepath = WORKING_DIR / "config.json"
 
         self.config = data.load_json(config_filepath)
 
-        db_filepath = PARENT / f"{self.config['experiment']}.hdf5"
+        db_filepath = WORKING_DIR / f"{self.config['experiment']}.hdf5"
         self.db = h5py.File(db_filepath, "r")
 
         # Load required data from disk

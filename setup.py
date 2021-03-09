@@ -11,14 +11,11 @@ with open(PATH_VERSION, mode='r', encoding='utf-8') as f:
     exec(f.read(), ABOUT)
 
 requirements = [
-    "numpy",
-    "numba",
-    "pytest",
-    "click",
-    "scipy",
-    "h5py",
-    "pylint"
-
+    "adaptoctree",
+    "scipy==1.6.1",
+    "h5py==2.10.0",
+    "cupy==8.3.0",
+    "click==7.1.2",
 ]
 
 setup(
