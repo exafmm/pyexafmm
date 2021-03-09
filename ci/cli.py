@@ -39,14 +39,6 @@ def test():
 
 
 @click.command(
-    help='Run linter'
-)
-def lint():
-    click.echo('Running linter')
-    subprocess.run(['pylint', '--rcfile=tox.ini', 'fmm'])
-
-
-@click.command(
     help='Precompute operators using defualt config'
 )
 @click.option(

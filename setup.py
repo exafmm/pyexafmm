@@ -12,11 +12,10 @@ with open(PATH_VERSION, mode='r', encoding='utf-8') as f:
 
 requirements = [
     "adaptoctree",
-    "scipy==1.6.0",
-    "h5py==3.1.0",
-    "cupy==8.5.0",
+    "scipy==1.6.1",
+    "h5py==2.10.0",
+    "cupy==8.3.0",
     "click==7.1.2",
-    # "pylint",
 ]
 
 setup(

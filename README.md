@@ -141,7 +141,6 @@ fmm [OPTIONS] COMMAND [ARGS]
 |--------------        |------------------------------------	 |
 | `build`	           | Build Conda recipe                      |
 | `test`	           | Run test suite	                         |
-| `lint`	           | Run project linter 	                 |
 | `compute-operators`  | Run operator pre-computations           |
 | `generate-test-data` | Generate `npoints` sources & targets    |
 
