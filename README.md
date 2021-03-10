@@ -2,7 +2,7 @@
 PyExaFMM
 </h1>
 
-[![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/version.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/latest_release_date.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/platforms.svg)](https://anaconda.org/skailasa/pyexafmm)
+[![Anaconda-Server Badge](https://img.shields.io/conda/v/skailasa/pyexafmm.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/latest_release_date.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/platforms.svg)](https://anaconda.org/skailasa/pyexafmm)
 
 PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in pure Python with some extensions. Representing a compromise between portability, ease of use, and performance. Optimisations are currently implemented  using Numba, Numpy, and CUDA acceleration.
 
