@@ -2,11 +2,11 @@
 PyExaFMM
 </h1>
 
+[![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/version.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/latest_release_date.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/platforms.svg)](https://anaconda.org/skailasa/pyexafmm)
+
 PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in pure Python with some extensions. Representing a compromise between portability, ease of use, and performance. Optimisations are currently implemented  using Numba, Numpy, and CUDA acceleration.
 
 The goal of PyExaFMM is to develop a highly performant implementation of the adaptive particle FMM written in Python, as the utility of FMM algorithms are hindered by their relatively complex implementation, especially for achieving high-performance.
-
-The vision of the project is to eventually provide optimisations fully taking advantage distributed and heterogenous computing environments, and to scale from desktops to HPC clusters. Most importantly however, PyExaFMM will allow non-specialist scientists and engineers to solve particle FMM problems, from a Jupyter notebook!
 
 ## System Requirements
 
@@ -17,12 +17,7 @@ An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
 Download from Anaconda cloud into a conda/mini-conda environment:
 
 ```bash
-
-# Add required channel
-conda config --env --add channels skailasa
-
-# Install
-conda install pyexafmm
+conda install -c skailasa pyexafmm
 ```
 
 Developers may want to build from source:
@@ -121,7 +116,7 @@ from fmm import Fmm
 experiment = Fmm()
 
 # Optionally specify non-default config filename:
-# fmm = Fmm('test')
+# experiment = Fmm('test')
 
 # Run upward & downward pass
 experiment.run()
