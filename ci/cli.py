@@ -13,8 +13,6 @@ HELP_TEXT = """
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 WORKING_DIR = pathlib.Path(os.getcwd())
 
-CONFIG = load_json(WORKING_DIR/'config.json')
-
 
 @click.group(help=HELP_TEXT)
 def cli():
@@ -49,7 +47,9 @@ def compute_operators(config):
             file in source root directory."""
     )
 def generate_test_data(config):
-    data_type = CONFIG['data_type']
+
+    conf = load_json(WORKING_DIR/f'{config}.json')
+    data_type = conf['data_type']
     click.echo(f'Generating {data_type} sources & targets')
     subprocess.run([
         'python',
