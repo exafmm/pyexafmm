@@ -8,11 +8,9 @@ import numba
 import numpy as np
 
 
-HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
-PARENT = HERE.parent
-
-
-@numba.njit(cache=True)
+@numba.njit(
+    cache=True
+)
 def compute_surface(order):
     """
     Compute surface to a specified order.

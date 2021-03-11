@@ -29,9 +29,9 @@ def laplace_scale(level):
 
     Returns:
     --------
-    np.int64
+    np.float32
     """
-    return 1/(2**level)
+    return np.float32(1/(2**level))
 
 
 @numba.njit(cache=True)
@@ -58,7 +58,7 @@ def laplace_cpu(x, y):
 
     diff2 = np.sqrt(np.sum(diff2))
 
-    return np.reciprocal(4*np.pi*diff2)
+    return np.float32(np.reciprocal(4*np.pi*diff2))
 
 
 @cuda.jit(device=True)
@@ -96,7 +96,7 @@ def laplace_cuda(ax, ay, az, bx, by, bz):
     if math.isinf(inv_dist_sqr):
         return 0.
 
-    return inv_dist_sqr
+    return numba.float32(inv_dist_sqr)
 
 
 @cuda.jit
@@ -317,7 +317,7 @@ def laplace_p2p(sources, targets, source_densities):
     ntargets = len(targets)
     nsources = len(sources)
 
-    target_densities = np.zeros(shape=(ntargets))
+    target_densities = np.zeros(shape=(ntargets), dtype=np.float32)
 
     for i in range(ntargets):
         target = targets[i]
@@ -352,7 +352,7 @@ def laplace_gram_matrix(sources, targets):
     n_sources = len(sources)
     n_targets = len(targets)
 
-    matrix = np.zeros(shape=(n_targets, n_sources))
+    matrix = np.zeros(shape=(n_targets, n_sources), dtype=np.float32)
 
     for row_idx in range(n_targets):
         target = targets[row_idx]

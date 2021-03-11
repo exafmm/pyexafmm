@@ -28,9 +28,9 @@ def test_upward_pass():
     upward_equivalent_surface = surface.scale_surface(
         surf=fmm.equivalent_surface,
         radius=fmm.r0,
-        level=0,
+        level=np.int32(0),
         center=fmm.x0,
-        alpha=fmm.config['alpha_outer']
+        alpha=fmm.alpha_inner
     )
 
     distant_point = np.array([[1e4, 0, 0]])
@@ -66,15 +66,15 @@ def test_m2l():
     kernel = fmm.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
-    key = 1114114
+    key = np.int64(1114114)
     idx = np.where(fmm.complete == key)
     v_list = fmm.v_lists[idx]
     v_list = v_list[v_list != -1]
 
     target_idxs = key == fmm.targets_to_keys
     target_coordinates = fmm.targets[target_idxs]
-    level = morton.find_level(key)
-    center = morton.find_physical_center_from_key(key, fmm.x0, fmm.r0)
+    level = np.int32(morton.find_level(key))
+    center = morton.find_physical_center_from_key(key, fmm.x0, fmm.r0).astype(np.float32)
 
     local_expansion = fmm.local_expansions[key]
 
@@ -83,7 +83,7 @@ def test_m2l():
         radius=fmm.r0,
         level=level,
         center=center,
-        alpha=fmm.config['alpha_outer']
+        alpha=fmm.alpha_outer
     )
 
     equivalent = p2p(
@@ -96,15 +96,15 @@ def test_m2l():
 
     for source in v_list:
 
-        source_level = morton.find_level(source)
-        source_center = morton.find_physical_center_from_key(source, fmm.x0, fmm.r0)
+        source_level = np.int32(morton.find_level(source))
+        source_center = morton.find_physical_center_from_key(source, fmm.x0, fmm.r0).astype(np.float32)
 
         upward_equivalent_surface = surface.scale_surface(
             surf=fmm.equivalent_surface,
             radius=fmm.r0,
             level=source_level,
             center=source_center,
-            alpha=fmm.config['alpha_inner']
+            alpha=fmm.alpha_inner
         )
 
         tmp = p2p(
@@ -135,4 +135,14 @@ def test_fmm():
         source_densities=fmm.source_densities
     )
 
-    assert np.allclose(direct, fmm.target_potentials, rtol=RTOL)
+    failures = []
+
+    for i in range(len(direct)):
+        try:
+            assert np.isclose(direct[i], fmm.target_potentials[i], rtol=0.1)
+        except:
+            failures.append(i)
+
+    print(direct[failures], fmm.target_potentials[failures])
+    assert False
+    # assert False

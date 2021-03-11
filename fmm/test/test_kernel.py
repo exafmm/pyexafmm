@@ -22,7 +22,7 @@ def test_laplace_scale(level, expected):
 @pytest.mark.parametrize(
     "x, y, expected",
     [
-        (np.array([1, 0, 0]), np.array([0, 0, 0]), 1./(4*np.pi))
+        (np.array([1, 0, 0], np.float32), np.array([0, 0, 0], np.float32), np.float32(1./(4*np.pi)))
     ]
 )
 def test_laplace_cpu(x, y, expected):
@@ -33,9 +33,9 @@ def test_laplace_cpu(x, y, expected):
     "sources, targets, source_densities",
     [
         (
-            np.random.rand(10, 3),
-            np.random.rand(10, 3),
-            np.ones(10),
+            np.random.rand(10, 3).astype(np.float32),
+            np.random.rand(10, 3).astype(np.float32),
+            np.ones(10, dtype=np.float32),
 
         )
     ]
@@ -51,13 +51,13 @@ def test_laplace_p2p(sources, targets, source_densities):
     # Check each target
     for i in range(len(targets)):
         target = targets[i]
-        target_potential = 0
+        target_potential = np.float32(0)
         for j in range(len(sources)):
             source = sources[j]
             source_density = source_densities[j]
             target_potential += kernel.laplace_cpu(target, source)*source_density
 
-        assert result[i] == target_potential
+        assert np.isclose(result[i], target_potential)
 
 
 @pytest.mark.parametrize(
