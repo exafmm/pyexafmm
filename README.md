@@ -121,7 +121,7 @@ experiment = Fmm()
 # Run upward & downward pass
 experiment.run()
 
-# Result data, potentials of due to all sources evaluated at all targets.
+# Result data, potentials due to all sources evaluated at all targets.
 print(experiment.target_potentials)
 ```
 
