@@ -1,11 +1,8 @@
 """
 Implementation of the main FMM loop.
 """
-from operator import mul
 import os
 import pathlib
-
-from numba.np.ufunc import parallel
 
 import h5py
 import numpy as np

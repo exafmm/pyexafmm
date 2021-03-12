@@ -8,9 +8,7 @@ import numba
 import numpy as np
 
 
-@numba.njit(
-    cache=True
-)
+@numba.njit(cache=True)
 def compute_surface(order):
     """
     Compute surface to a specified order.
