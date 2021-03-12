@@ -1,8 +1,6 @@
 """
 Operator helper methods.
 """
-import os
-import pathlib
 
 import numba
 import numpy as np

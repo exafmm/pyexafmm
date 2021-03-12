@@ -1,12 +1,15 @@
 """
 Implementation of the main FMM loop.
+
+Matrix-Vector products are computed in single precision, with appropriate
+casting. However, as AdaptOctree's implementation depends on 64 bit Morton
+keys, key-handling is generally left in double precision.
 """
 import os
 import pathlib
 
 import h5py
 import numpy as np
-import numba
 
 import adaptoctree.morton as morton
 from adaptoctree.utils import deterministic_hash
@@ -50,7 +53,7 @@ def _particle_to_multipole(
         Charge densities at source points.
     sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
         (Leaf) Morton key where corresponding (via index) source lies.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points, dtype=np.float32)}
         Dictionary containing multipole expansions, indexed by Morton key of
         source nodes.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
@@ -61,7 +64,7 @@ def _particle_to_multipole(
         Relative size of outer surface
     check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
         Discretised check surface.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
+    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float32)
     scale_function : function
         Function handle for kernel scaling.
     p2p_function : function
@@ -114,7 +117,7 @@ def _multipole_to_multipole(
     -----------
     key : np.int64
         Morton key of source node.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points), dtype=np.float32)}
         Dictionary containing multipole expansions, indexed by Morton key of
         source nodes.
     m2m : np.array(shape=(8, n_equivalent, n_equivalent), dtype=np.float32)
@@ -170,45 +173,49 @@ def _multipole_to_local(
         Maximum depth of the octree, used to find transfer vectors.
     v_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
         Morton keys of V list members.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points), dtype=np.float32)}
         Dictionary containing multipole expansions, indexed by Morton key of
         source nodes.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
         Dictionary containing local expansions, indexed by Morton key of
         target nodes.
     dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
-    ncheck_points : np.int64
+    ncheck_points : np.int32
         Number of points discretising the check surface.
-    m2l : h5py.Group
-        HDF5 group, indexed by source node key, storing compressed M2L
-        components.
     scale_function : function
         Function handle for kernel scaling.
+    u : np.array(np.float32)
+        Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
+    s : np.array(np.float32)
+        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
+    vt : np.array(np.float32)
+        Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
     """
 
     if len(v_list) > 0:
         level = morton.find_level(key)
         scale = np.float32(scale_function(level))
 
+        # Compute the hasehes of transfer vectors in the target's V List.
         transfer_vectors = morton.find_transfer_vectors(key, v_list, depth)
         hash_vectors = np.zeros(len(transfer_vectors), dtype=np.int64)
+
+        # Use the hashes to compute the index of the M2L Gram matrix at this
+        # level
         m2l_lidxs = np.zeros(len(v_list), np.int32)
         m2l_ridxs = np.zeros(len(v_list), np.int32)
 
         for i in range(len(transfer_vectors)):
             hash_vectors[i] = deterministic_hash(transfer_vectors[i], digest_size=DIGEST_SIZE)
-
             m2l_idx = np.where(hash_vectors[i] == hashes)[0][0]
-
             m2l_lidxs[i] = m2l_idx*ncheck_points
             m2l_ridxs[i] = (m2l_idx+1)*ncheck_points
 
         for idx in range(len(v_list)):
-
-            # Find source densities for v list of the key
+            # Find source densities for this source
             source = v_list[idx]
 
-            # Find compressed M2L operator for this transfer vector
+            # Pick out compressed right singular vector for this M2L gram matrix
             u_sub = u[m2l_lidxs[idx]:m2l_ridxs[idx]]
 
             # Compute contribution from source, to the local expansion
@@ -228,7 +235,7 @@ def _local_to_local(
     -----------
     key : np.int64
         Morton key of source node.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
         Dictionary containing local expansions, indexed by Morton key of
         target nodes.
     l2l : np.array(shape=(8, n_check, n_check), dtype=np.float32)
@@ -285,7 +292,7 @@ def _source_to_local(
         Charge densities at source points.
     sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
         (Leaf) Morton key where corresponding (via index) source lies.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
         Dictionary containing local expansions, indexed by Morton key of
         target nodes.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
@@ -296,7 +303,7 @@ def _source_to_local(
         Relative size of inner surface
     check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
         Discretised check surface.
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float32)
     scale_function : function
         Function handle for kernel scaling.
     p2p_function : function
@@ -367,7 +374,7 @@ def _multipole_to_target(
         (Leaf) Morton key where corresponding (via index) target lies.
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points)}
+    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points), dtype=np.float32)}
         Dictionary containing multipole expansions, indexed by Morton key of
         source nodes.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
@@ -407,7 +414,6 @@ def _multipole_to_target(
             )
 
 
-
 def _local_to_target(
         key,
         targets,
@@ -434,7 +440,7 @@ def _local_to_target(
         (Leaf) Morton key where corresponding (via index) target lies.
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points)}
+    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
         Dictionary containing local expansions, indexed by Morton key of
         target nodes.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
@@ -470,7 +476,6 @@ def _local_to_target(
             targets=target_coordinates,
             source_densities=local_expansions[key]
         )
-
 
 
 def _near_field(
