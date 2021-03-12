@@ -111,18 +111,18 @@ def compress_m2l_gram_matrix(
 
         target_coordinates = surface.scale_surface(
             surf=check_surface,
-            radius=r0,
-            level=level,
-            center=target_center,
-            alpha=alpha_inner
+            radius=np.float32(r0),
+            level=np.int32(level),
+            center=target_center.astype(np.float32),
+            alpha=np.float32(alpha_inner)
         )
 
         source_coordinates = surface.scale_surface(
             surf=equivalent_surface,
-            radius=r0,
-            level=level,
-            center=source_center,
-            alpha=alpha_inner
+            radius=np.float32(r0),
+            level=np.int32(level),
+            center=source_center.astype(np.float32),
+            alpha=np.float32(alpha_inner)
         )
 
         # Compress the Gram matrix between these sources/targets
@@ -285,9 +285,9 @@ def compute_octree(config, db):
         db.create_group('key_to_index')
 
     db['octree']['keys'] = octree
-    db['octree']['depth'] = np.array([depth], np.int64)
-    db['octree']['x0'] = np.array([x0], np.float64)
-    db['octree']['r0'] = np.array([r0], np.float64)
+    db['octree']['depth'] = np.array([depth], np.int32)
+    db['octree']['x0'] = np.array([x0], np.float32)
+    db['octree']['r0'] = np.array([r0], np.float32)
     db['octree']['complete'] = complete
 
     db['particle_data']['sources_to_keys'] = sources_to_keys
@@ -341,34 +341,34 @@ def compute_inv_c2e(
 
     upward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=r0,
-        level=0,
-        center=x0,
-        alpha=config['alpha_inner']
+        radius=np.float32(r0),
+        level=np.int32(0),
+        center=x0.astype(np.float32),
+        alpha=np.float32(config['alpha_inner'])
     )
 
     upward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=r0,
-        level=0,
-        center=x0,
-        alpha=config['alpha_outer']
+        radius=np.float32(r0),
+        level=np.int32(0),
+        center=x0.astype(np.float32),
+        alpha=np.float32(config['alpha_outer'])
     )
 
     downward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=r0,
-        level=0,
-        center=x0,
-        alpha=config['alpha_outer']
+        radius=np.float32(r0),
+        level=np.int32(0),
+        center=x0.astype(np.float32),
+        alpha=np.float32(config['alpha_outer'])
     )
 
     downward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=r0,
-        level=0,
-        center=x0,
-        alpha=config['alpha_inner']
+        radius=np.float32(r0),
+        level=np.int32(0),
+        center=x0.astype(np.float32),
+        alpha=np.float32(config['alpha_inner'])
     )
 
     uc2e = dense_gram_matrix(
@@ -376,13 +376,12 @@ def compute_inv_c2e(
         sources=upward_equivalent_surface,
     )
 
-    uc2e_inv = linalg.pinv2(uc2e)
-
     dc2e = dense_gram_matrix(
         targets=downward_check_surface,
         sources=downward_equivalent_surface,
     )
 
+    uc2e_inv = linalg.pinv2(uc2e)
     dc2e_inv = linalg.pinv2(dc2e)
 
     if 'uc2e_inv' in db.keys() and 'dc2e_inv' in db.keys():
@@ -434,18 +433,18 @@ def compute_m2m_and_l2l(
 
     parent_upward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=parent_radius,
-        level=parent_level,
-        center=parent_center,
-        alpha=config['alpha_outer']
+        radius=np.float32(parent_radius),
+        level=np.int32(parent_level),
+        center=parent_center.astype(np.float32),
+        alpha=np.float32(config['alpha_outer'])
     )
 
     parent_downward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=parent_radius,
-        level=parent_level,
-        center=parent_center,
-        alpha=config['alpha_outer']
+        radius=np.float32(parent_radius),
+        level=np.int32(parent_level),
+        center=parent_center.astype(np.float32),
+        alpha=np.float32(config['alpha_outer'])
     )
 
     m2m = []
@@ -462,18 +461,18 @@ def compute_m2m_and_l2l(
 
         child_upward_equivalent_surface = surface.scale_surface(
             surf=equivalent_surface,
-            radius=parent_radius,
-            level=child_level,
-            center=child_center,
-            alpha=config['alpha_inner']
+            radius=np.float32(parent_radius),
+            level=np.int32(child_level),
+            center=child_center.astype(np.float32),
+            alpha=np.float32(config['alpha_inner'])
         )
 
         child_downward_check_surface = surface.scale_surface(
             surf=check_surface,
-            radius=parent_radius,
-            level=child_level,
-            center=child_center,
-            alpha=config['alpha_inner']
+            radius=np.float32(parent_radius),
+            level=np.int32(child_level),
+            center=child_center.astype(np.float32),
+            alpha=np.float32(config['alpha_inner'])
         )
 
         pc2ce = dense_gram_matrix(

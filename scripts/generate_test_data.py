@@ -34,6 +34,7 @@ def random_data(npoints):
             np.array(shape=npoints)
         )
     """
+    np.random.seed(0)
     rand = np.random.rand
     sources = targets = rand(npoints, 3)
     source_densities = np.ones(npoints)

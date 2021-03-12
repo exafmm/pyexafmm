@@ -25,13 +25,13 @@ def laplace_scale(level):
 
     Parameters:
     -----------
-    level : np.int64
+    level : np.int32
 
     Returns:
     --------
-    np.int64
+    np.float32
     """
-    return 1/(2**level)
+    return np.float32(1/(2**level))
 
 
 @numba.njit(cache=True)
@@ -58,7 +58,7 @@ def laplace_cpu(x, y):
 
     diff2 = np.sqrt(np.sum(diff2))
 
-    return np.reciprocal(4*np.pi*diff2)
+    return np.float32(np.reciprocal(4*np.pi*diff2))
 
 
 @cuda.jit(device=True)
@@ -96,7 +96,7 @@ def laplace_cuda(ax, ay, az, bx, by, bz):
     if math.isinf(inv_dist_sqr):
         return 0.
 
-    return inv_dist_sqr
+    return numba.float32(inv_dist_sqr)
 
 
 @cuda.jit
@@ -210,26 +210,26 @@ def laplace_implicit_gram_matrix_blocked(
 
     Parameters:
     -----------
-    sources : np.array(shape=(nsources, 3))
+    sources : np.array(shape=(nsources, 3), dtype=np.float32)
         nsources rows of gram matrix
-    targets : np.array(shape=(ntargets, 3))
+    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
         ntargets columns of gram matrix
-    rhs : np.array(shape=(ntargets, nrhs))
+    rhs : np.array(shape=(ntargets, nrhs), dtype=np.float32)
         Multiple right hand sides, indexed by 'idx'
-    result : np.array(shape=(height, nrhs))
+    result : np.array(shape=(height, nrhs), dtype=np.float32)
         Dimensions of result matrix defined by matrix height
         and number of right hand sides
-    height : int
+    height : np.int32
         'height' of global Gram matrix. Defined by m, where
         m > n, and m is either ntargets or nsources.
-    width : int
+    width : np.int32
         'width' of Global gram matrix.
-    sub_height : int
+    sub_height : np.int32
         height of sub-Gram matrix. Defined by m, where
         m > n, and m is either ntargets or nsources.
-    sub_width : int
+    sub_width : np.int32
         'width' of sub-Gram matrix.
-    idx: int
+    idx: np.int32
         RHS index.
     """
 
@@ -304,10 +304,12 @@ def laplace_p2p(sources, targets, source_densities):
 
     Parameters:
     -----------
-    sources : np.array(shape=(n, 3))
+    sources : np.array(shape=(n, 3), dtype=np.float32)
         The n source locations on a surface.
-    targets : np.array(shape=(m, 3))
+    targets : np.array(shape=(m, 3), dtype=np.float32)
         The m target locations on a surface.
+    source_densities : np.array(shape=(m,), dtype=np.float32)
+        Charge densities at source coordinates.
 
     Returns:
     --------
@@ -317,7 +319,7 @@ def laplace_p2p(sources, targets, source_densities):
     ntargets = len(targets)
     nsources = len(sources)
 
-    target_densities = np.zeros(shape=(ntargets))
+    target_densities = np.zeros(shape=(ntargets), dtype=np.float32)
 
     for i in range(ntargets):
         target = targets[i]
@@ -339,20 +341,20 @@ def laplace_gram_matrix(sources, targets):
 
     Parameters:
     -----------
-    sources : np.array(shape=(n, 3))
+    sources : np.array(shape=(n, 3), dtype=np.float32)
         The n source locations on a surface.
-    targets : np.array(shape=(m, 3))
+    targets : np.array(shape=(m, 3), dtype=np.float32)
         The m target locations on a surface.
 
     Returns:
     --------
-    np.array(shape=(n, m))
+    np.array(shape=(m, n), dtype=np.float32)
         The Gram matrix.
     """
     n_sources = len(sources)
     n_targets = len(targets)
 
-    matrix = np.zeros(shape=(n_targets, n_sources))
+    matrix = np.zeros(shape=(n_targets, n_sources), dtype=np.float32)
 
     for row_idx in range(n_targets):
         target = targets[row_idx]

@@ -1,15 +1,9 @@
 """
 Operator helper methods.
 """
-import os
-import pathlib
 
 import numba
 import numpy as np
-
-
-HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
-PARENT = HERE.parent
 
 
 @numba.njit(cache=True)
