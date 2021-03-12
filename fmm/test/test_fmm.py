@@ -7,8 +7,9 @@ bundled with the package.
 import numpy as np
 
 import adaptoctree.morton as morton
+from adaptoctree.tree import find_dense_v_list
 
-from fmm.fmm import Fmm
+from fmm.fmm import Fmm, _source_to_local
 import fmm.surface as surface
 from fmm.kernel import KERNELS
 
@@ -66,13 +67,16 @@ def test_m2l():
     kernel = fmm.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
-    key = np.int64(1114114)
+    idxs = fmm.complete_levels == 2
+    key = fmm.complete[idxs][0]
     idx = np.where(fmm.complete == key)
     v_list = fmm.v_lists[idx]
     v_list = v_list[v_list != -1]
 
     target_idxs = key == fmm.targets_to_keys
     target_coordinates = fmm.targets[target_idxs]
+
+    print(target_coordinates.shape)
     level = np.int32(morton.find_level(key))
     center = morton.find_physical_center_from_key(key, fmm.x0, fmm.r0).astype(np.float32)
 
@@ -135,14 +139,4 @@ def test_fmm():
         source_densities=fmm.source_densities
     )
 
-    failures = []
-
-    for i in range(len(direct)):
-        try:
-            assert np.isclose(direct[i], fmm.target_potentials[i], rtol=0.1)
-        except:
-            failures.append(i)
-
-    print(direct[failures], fmm.target_potentials[failures])
-    assert False
-    # assert False
+    assert np.allclose(direct, fmm.target_potentials, rtol=0.1)

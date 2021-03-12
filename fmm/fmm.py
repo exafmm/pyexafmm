@@ -1,8 +1,11 @@
 """
 Implementation of the main FMM loop.
 """
+from operator import mul
 import os
 import pathlib
+
+from numba.np.ufunc import parallel
 
 import h5py
 import numpy as np
@@ -185,38 +188,34 @@ def _multipole_to_local(
     scale_function : function
         Function handle for kernel scaling.
     """
-    level = morton.find_level(key)
-    scale = np.float32(scale_function(level))
 
-    transfer_vectors = morton.find_transfer_vectors(key, v_list, depth)
-    hash_vectors = np.zeros(len(transfer_vectors), dtype=np.int64)
-    m2l_lidxs = np.zeros(len(v_list), np.int32)
-    m2l_ridxs = np.zeros(len(v_list), np.int32)
+    if len(v_list) > 0:
+        level = morton.find_level(key)
+        scale = np.float32(scale_function(level))
 
-    for i in range(len(transfer_vectors)):
-        # 940ns (64bit hashes)
-        hash_vectors[i] = deterministic_hash(transfer_vectors[i], digest_size=DIGEST_SIZE)
+        transfer_vectors = morton.find_transfer_vectors(key, v_list, depth)
+        hash_vectors = np.zeros(len(transfer_vectors), dtype=np.int64)
+        m2l_lidxs = np.zeros(len(v_list), np.int32)
+        m2l_ridxs = np.zeros(len(v_list), np.int32)
 
-        # 1.48mus
-        m2l_idx = np.where(hash_vectors[i] == hashes)[0][0]
+        for i in range(len(transfer_vectors)):
+            hash_vectors[i] = deterministic_hash(transfer_vectors[i], digest_size=DIGEST_SIZE)
 
-        # 178ns each
-        m2l_lidxs[i] = m2l_idx*ncheck_points
-        m2l_ridxs[i] = (m2l_idx+1)*ncheck_points
+            m2l_idx = np.where(hash_vectors[i] == hashes)[0][0]
 
-    for idx in range(len(v_list)):
+            m2l_lidxs[i] = m2l_idx*ncheck_points
+            m2l_ridxs[i] = (m2l_idx+1)*ncheck_points
 
-        # Find source densities for v list of the key
-        # 99ns
-        source = v_list[idx]
+        for idx in range(len(v_list)):
 
-        # Find compressed M2L operator for this transfer vector
-        # 382 ns
-        u_sub = u[m2l_lidxs[idx]:m2l_ridxs[idx]]
+            # Find source densities for v list of the key
+            source = v_list[idx]
 
-        # Compute contribution from source, to the local expansion
-        # 5.88mus
-        local_expansions[key] += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[source]))))
+            # Find compressed M2L operator for this transfer vector
+            u_sub = u[m2l_lidxs[idx]:m2l_ridxs[idx]]
+
+            # Compute contribution from source, to the local expansion
+            local_expansions[key] += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[source]))))
 
 
 def _local_to_local(
@@ -254,7 +253,6 @@ def _local_to_local(
             child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
             local_expansions[child] += np.ravel(child_equivalent_density)
 
-            # print(type(parent_equivalent_density[0]), type(l2l[operator_idx][0]))
 
 def _source_to_local(
         key,
@@ -307,40 +305,39 @@ def _source_to_local(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    level = morton.find_level(key)
-    scale = scale_function(level)
-    center = morton.find_physical_center_from_key(key, x0, r0)
-    source_coodinates = []
-    densities = []
+    if len(x_list) > 0:
+        level = np.int32(morton.find_level(key))
+        scale = np.int32(scale_function(level))
+        center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
 
-    for source in x_list:
-        source_indices = sources_to_keys == source
-        if np.any(source_indices == True):
-            source_coodinates.extend(sources[source_indices])
-            densities.extend(source_densities[source_indices])
+        for source in x_list:
+            source_coodinates = []
+            densities = []
+            source_indices = sources_to_keys == source
+            if np.any(source_indices == True):
+                source_coodinates.extend(sources[source_indices])
+                densities.extend(source_densities[source_indices])
 
-    source_coodinates = np.array(source_coodinates)
-    densities = np.array(densities)
+                source_coodinates = np.array(source_coodinates).astype(np.float32)
+                densities = np.array(densities).astype(np.float32)
 
-    if len(densities) > 0:
+                downward_check_surface = surface.scale_surface(
+                    surf=check_surface,
+                    radius=r0,
+                    level=level,
+                    center=center,
+                    alpha=alpha_inner
+                )
 
-        downward_check_surface = surface.scale_surface(
-            surf=check_surface,
-            radius=r0,
-            level=level,
-            center=center,
-            alpha=alpha_inner
-        )
+                downward_check_potential = p2p_function(
+                    sources=source_coodinates,
+                    targets=downward_check_surface,
+                    source_densities=densities
+                )
 
-        downward_check_potential = p2p_function(
-            sources=source_coodinates,
-            targets=downward_check_surface,
-            source_densities=densities
-        )
+                downward_equivalent_density = (dc2e_inv @ downward_check_potential)
 
-        downward_equivalent_density = (dc2e_inv @ downward_check_potential)
-
-        local_expansions[key] += (scale*downward_equivalent_density)
+                local_expansions[key] += (scale*downward_equivalent_density)
 
 
 def _multipole_to_target(
@@ -389,26 +386,29 @@ def _multipole_to_target(
     """
     # Find target particles
     target_indices = targets_to_keys == key
-    target_coordinates = targets[target_indices]
 
-    for source in w_list:
+    if (len(target_indices) > 0) and (len(w_list) > 0):
+        target_coordinates = targets[target_indices]
 
-        source_level = morton.find_level(source)
-        source_center = morton.find_physical_center_from_key(source, x0, r0)
+        for source in w_list:
 
-        upward_equivalent_surface = surface.scale_surface(
-            surf=equivalent_surface,
-            radius=r0,
-            level=source_level,
-            center=source_center,
-            alpha=alpha_inner
-        )
+            source_level = np.int32(morton.find_level(source))
+            source_center = morton.find_physical_center_from_key(source, x0, r0).astype(np.float32)
 
-        target_potentials[target_indices] += p2p_function(
-            sources=upward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=multipole_expansions[source]
-        )
+            upward_equivalent_surface = surface.scale_surface(
+                surf=equivalent_surface,
+                radius=r0,
+                level=source_level,
+                center=source_center,
+                alpha=alpha_inner
+            )
+
+            target_potentials[target_indices] += p2p_function(
+                sources=upward_equivalent_surface,
+                targets=target_coordinates,
+                source_densities=multipole_expansions[source]
+            )
+
 
 
 def _local_to_target(
@@ -421,7 +421,7 @@ def _local_to_target(
         r0,
         alpha_outer,
         equivalent_surface,
-        p2p_function
+        p2p_function,
     ):
     """
     L2T operator. Evaluate the local expansion at the target points in a given
@@ -451,25 +451,29 @@ def _local_to_target(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    level = morton.find_level(key)
-    center = morton.find_physical_center_from_key(key, x0, r0)
-
-    downward_equivalent_surface = surface.scale_surface(
-        equivalent_surface,
-        r0,
-        level,
-        center,
-        alpha_outer
-    )
-
     target_idxs = key == targets_to_keys
-    target_coordinates = targets[target_idxs]
 
-    target_potentials[target_idxs] += p2p_function(
-        sources=downward_equivalent_surface,
-        targets=target_coordinates,
-        source_densities=local_expansions[key]
-    )
+    if len(target_idxs) > 0:
+
+        level = np.int32(morton.find_level(key))
+        center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
+
+        downward_equivalent_surface = surface.scale_surface(
+            equivalent_surface,
+            r0,
+            level,
+            center,
+            alpha_outer
+        )
+
+        target_coordinates = targets[target_idxs]
+
+        target_potentials[target_idxs] += p2p_function(
+            sources=downward_equivalent_surface,
+            targets=target_coordinates,
+            source_densities=local_expansions[key]
+        )
+
 
 
 def _near_field(
@@ -510,31 +514,33 @@ def _near_field(
     """
 
     target_indices = targets_to_keys == key
-    target_coordinates = targets[target_indices]
 
-    # Sources in U list
-    for source in u_list:
+    if len(target_indices) > 0:
 
-        source_indices = sources_to_keys == source
-        source_coordinates = sources[source_indices]
-        densities = source_densities[source_indices]
+        target_coordinates = targets[target_indices]
+        # Sources in U list
+        for source in u_list:
+
+            source_indices = sources_to_keys == source
+            source_coordinates = sources[source_indices]
+            densities = source_densities[source_indices]
+
+            target_potentials[target_indices] += p2p_function(
+                sources=source_coordinates,
+                targets=target_coordinates,
+                source_densities=densities
+            )
+
+        # Sources in target node
+        local_source_indices = sources_to_keys == key
+        local_source_coordinates = sources[local_source_indices]
+        local_densities = source_densities[local_source_indices]
 
         target_potentials[target_indices] += p2p_function(
-            sources=source_coordinates,
+            sources=local_source_coordinates,
             targets=target_coordinates,
-            source_densities=densities
+            source_densities=local_densities
         )
-
-    # Sources in target node
-    local_source_indices = sources_to_keys == key
-    local_source_coordinates = sources[local_source_indices]
-    local_densities = source_densities[local_source_indices]
-
-    target_potentials[target_indices] += p2p_function(
-        sources=local_source_coordinates,
-        targets=target_coordinates,
-        source_densities=local_densities
-    )
 
 
 class Fmm:
@@ -562,9 +568,9 @@ class Fmm:
 
         # Load required data from disk
         ## Load surfaces, and inverse gram matrices
-        self.check_surface = self.db["surface"]["check"][...]
+        self.check_surface = self.db["surface"]["check"][...].astype(np.float32)
         self.ncheck_points = len(self.check_surface)
-        self.equivalent_surface = self.db["surface"]["equivalent"][...]
+        self.equivalent_surface = self.db["surface"]["equivalent"][...].astype(np.float32)
         self.nequivalent_points = len(self.equivalent_surface)
         self.uc2e_inv = self.db["uc2e_inv"][...]
         self.dc2e_inv = self.db["dc2e_inv"][...]
@@ -657,18 +663,15 @@ class Fmm:
 
             for key in self.complete[idxs]:
 
-                idx = np.where(self.complete== key)[0]
+                idx = np.where(self.complete== key)
 
+                # V List interactions
                 v_list = self.v_lists[idx]
                 v_list = v_list[v_list != -1]
-
-                # V List interactions 947 mus
-                # import IPython; IPython.embed()
-                self.multipole_to_local(key, v_list, u, s, vt, hashes)
-                # import sys; sys.exit()
+                if len(v_list) > 0:
+                    self.multipole_to_local(key, v_list, u, s, vt, hashes)
 
                 # X List interactions
-                idx = np.where(self.complete == key)
                 x_list = self.x_lists[idx]
                 x_list = x_list[x_list != -1]
                 if len(x_list) > 0:
@@ -689,16 +692,14 @@ class Fmm:
             u_list = self.u_lists[idx]
             u_list = u_list[u_list != -1]
 
-            # import IPython; IPython.embed()
-            # Evaluate local expansions at targets 291mus
+            # Evaluate local expansions at targets
             self.local_to_target(key)
 
-            # W List interactions  6.2mus
+            # # W List interactions
             self.multipole_to_target(key, w_list)
 
-            # U List interactions 887 mus
+            # U List interactions
             self.near_field(key, u_list)
-            # import sys; sys.exit()
 
     def run(self):
         """Run full algorithm"""
@@ -814,7 +815,7 @@ class Fmm:
             r0=self.r0,
             alpha_outer=self.alpha_outer,
             equivalent_surface=self.equivalent_surface,
-            p2p_function=self.p2p
+            p2p_function=self.p2p,
         )
 
     def near_field(self, key, u_list):
