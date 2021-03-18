@@ -5,10 +5,15 @@ Matrix-Vector products are computed in single precision, with appropriate
 casting. However, as AdaptOctree's implementation depends on 64 bit Morton
 keys, key-handling is generally left in double precision.
 """
+import enum
+import functools
 import os
 import pathlib
 
 import h5py
+import numba
+from numba.np.ufunc import parallel
+import numba.typed
 import numpy as np
 
 import adaptoctree.morton as morton
@@ -25,89 +30,117 @@ PARENT = HERE.parent
 WORKING_DIR = pathlib.Path(os.getcwd())
 
 
-def _particle_to_multipole(
-        key,
+@numba.njit(cache=True)
+def find_physical_center_from_anchor(anchor, x0, r0):
+    xmin = x0 - r0
+    level = anchor[3]
+    side_length = 2 * r0 / (1 << level)
+
+    side_length = np.float64(side_length)
+    anchor = anchor.astype(np.float64)
+
+    return (anchor[:3] + 0.5) * side_length + xmin
+
+
+@numba.njit(cache=True)
+def find_physical_center_from_key(key, x0, r0):
+    anchor = morton.decode_key(key)
+    return find_physical_center_from_anchor(anchor, x0, r0)
+
+import time
+
+@numba.njit(cache=True, parallel=True)
+def run_p2m(
+        leaves,
+        key_to_index,
         sources,
         source_densities,
         sources_to_keys,
         multipole_expansions,
+        nequivalent_points,
         x0,
         r0,
         alpha_outer,
         check_surface,
         uc2e_inv,
         scale_function,
-        p2p_function,
+        p2p_function
     ):
-    """
-    P2M operator. Form a multipole expansion from source points within a given
-        source node.
 
-    Parameters:
-    -----------
-    key : np.int64
-        Morton key of source node.
-    sources : np.array(shape=(nsources, 3), dtype=np.float32)
-        Source coordinates.
-    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
-        Charge densities at source points.
-    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) source lies.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points, dtype=np.float32)}
-        Dictionary containing multipole expansions, indexed by Morton key of
-        source nodes.
-    x0 : np.array(shape=(1, 3), dtype=np.float32)
-        Physical center of octree root node.
-    r0 : np.float32
-        Half side length of octree root node.
-    alpha_outer : np.float32
-        Relative size of outer surface
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
-        Discretised check surface.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float32)
-    scale_function : function
-        Function handle for kernel scaling.
-    p2p_function : function
-        Function handle for kernel P2P.
-    """
-    # Source indices in a given leaf
-    source_indices = sources_to_keys == key
+    def find_tpb(nblocks, nthreads):
+        tpb = []
 
-    # Find leaf sources, and leaf source densities
-    leaf_sources = sources[source_indices]
-    leaf_source_densities = source_densities[source_indices]
+        max_tpb = nthreads // nblocks
+        while (nthreads-max_tpb) > 0:
+            tpb.append(max_tpb)
+            nthreads -= max_tpb
+        tpb.append(nthreads)
 
-    # Compute center of leaf box in cartesian coordinates
-    leaf_center = morton.find_physical_center_from_key(
-        key=key, x0=x0, r0=r0
-    )
+        return max(tpb), tpb
 
-    leaf_level = morton.find_level(key)
+    nleaves = len(leaves)
+    nblocks = 6
+    # max_tpb, threads_per_block = find_tpb(nblocks, nleaves)
 
-    upward_check_surface = surface.scale_surface(
-        surf=check_surface,
-        radius=r0,
-        level=np.int32(leaf_level),
-        center=leaf_center.astype(np.float32),
-        alpha=alpha_outer,
-    )
+    # for block_idx in numba.prange(nblocks):
+    #     tpb = threads_per_block[block_idx]
+    #     for thread_idx in range(tpb):
+    # tst = 0
+    tst = np.empty_like(multipole_expansions, dtype=np.float32)
 
-    scale = np.float32(scale_function(leaf_level))
+    for thread_idx in numba.prange(nleaves):
+        # idx = (block_idx*max_tpb)+thread_idx
 
-    check_potential = p2p_function(
-        targets=upward_check_surface,
-        sources=leaf_sources,
-        source_densities=leaf_source_densities,
-    )
+        leaf = leaves[thread_idx]
+        # leaf = leaves[idx]
+        leaf_idx = key_to_index[leaf]
+        lidx = leaf_idx*nequivalent_points
+        ridx = (leaf_idx+1)*nequivalent_points
 
-    upward_equivalent_density = (uc2e_inv @ check_potential)
-    multipole_expansions[key] += (scale*upward_equivalent_density)
+        # Source indices in a given leaf
+        source_indices = sources_to_keys == leaf
+
+        # Find leaf sources, and leaf source densities
+        leaf_sources = sources[source_indices]
+        leaf_source_densities = source_densities[source_indices]
+
+        # # Compute center of leaf box in cartesian coordinates
+        leaf_center = find_physical_center_from_key(
+            key=leaf, x0=x0, r0=r0
+        )
+
+        leaf_level = morton.find_level(leaf)
+
+        upward_check_surface = surface.scale_surface(
+            surf=check_surface,
+            radius=r0,
+            level=np.int32(leaf_level),
+            center=leaf_center.astype(np.float32),
+            alpha=alpha_outer,
+        )
+
+        scale = np.float32(scale_function(leaf_level))
+
+        check_potential = p2p_function(
+            targets=upward_check_surface,
+            sources=leaf_sources,
+            source_densities=leaf_source_densities,
+        )
+
+        result = scale*(uc2e_inv @ (check_potential))
+        tst[lidx:ridx] += result
+        # multipole_expansions[lidx:ridx] += scale*(uc2e_inv @ (check_potential))
 
 
+
+@numba.njit(cache=True)
 def _multipole_to_multipole(
         key,
+        key_idx,
         multipole_expansions,
+        nequivalent_points,
         m2m,
+        key_to_index,
     ):
     """
     M2M operator. Add the contribution of the multipole expansions of a given
@@ -125,26 +158,23 @@ def _multipole_to_multipole(
             indexed by order of Morton encoding from
             adaptoctree.morton.find_children.
     """
-    children = morton.find_children(key)
+    parent = morton.find_parent(key)
+    siblings = morton.find_siblings(key)
 
-    for child in children:
+    # Compute operator index
+    operator_idx = np.where(siblings == key)[0]
 
-        if child in multipole_expansions:
+    # Get child equivalent density
+    child_lidx = (key_idx)*nequivalent_points
+    child_ridx = (key_idx+1)*nequivalent_points
 
-            #  Compute operator index
-            operator_idx = np.where(children == child)[0]
-
-            # Get child equivalent density
-            child_equivalent_density = multipole_expansions[child]
-
-            # Compute parent equivalent density
-            parent_equivalent_density = (
-                m2m[operator_idx] @ child_equivalent_density
-            )
-
-            # Add to source data
-            multipole_expansions[key] += np.ravel(parent_equivalent_density)
-
+    # Add to source data
+    parent_idx = key_to_index[parent]
+    parent_lidx = parent_idx*nequivalent_points
+    parent_ridx = (parent_idx+1)*nequivalent_points
+    multipole_expansions[parent_lidx:parent_ridx] += (
+        m2m[operator_idx][0] @ multipole_expansions[child_lidx:child_ridx]
+    )
 
 def _multipole_to_local(
         key,
@@ -211,15 +241,39 @@ def _multipole_to_local(
             m2l_lidxs[i] = m2l_idx*ncheck_points
             m2l_ridxs[i] = (m2l_idx+1)*ncheck_points
 
+        _multipole_expansions = []
+
         for idx in range(len(v_list)):
             # Find source densities for this source
             source = v_list[idx]
 
-            # Pick out compressed right singular vector for this M2L gram matrix
-            u_sub = u[m2l_lidxs[idx]:m2l_ridxs[idx]]
-
             # Compute contribution from source, to the local expansion
-            local_expansions[key] += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[source]))))
+            _multipole_expansions.append(multipole_expansions[source])
+
+        _multipole_expansions = np.array(_multipole_expansions)
+
+        _m2l_matvec(
+            local_expansions[key], scale, dc2e_inv,
+            u, m2l_lidxs, m2l_ridxs, s, vt, _multipole_expansions
+        )
+
+
+@numba.njit(cache=True)
+def _m2l_matvec(
+        local_expansion, scale, dc2e_inv,
+        u, m2l_lidxs, m2l_ridxs, s, vt,
+        multipole_expansions
+    ):
+
+    """
+    Wrapper for JIT'd numba matvec for M2L operator matrices.
+    """
+
+    nv_list = multipole_expansions.shape[0]
+
+    for i in range(nv_list):
+        u_sub = u[m2l_lidxs[i]:m2l_ridxs[i]]
+        local_expansion += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[i]))))
 
 
 def _local_to_local(
@@ -618,13 +672,23 @@ class Fmm:
         #  Containers for results
         self.target_potentials = np.zeros(self.ntargets, dtype=np.float32)
 
-        self.multipole_expansions = {
-            key: np.zeros(self.nequivalent_points, dtype=np.float32) for key in self.complete
-        }
+        # self.multipole_expansions = {
+        #     key: np.zeros(self.nequivalent_points, dtype=np.float32) for key in self.complete
+        # }
+
+        self.multipole_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
 
         self.local_expansions = {
             key: np.zeros(self.nequivalent_points, dtype=np.float32) for key in self.complete
         }
+
+        self.key_to_index = numba.typed.Dict.empty(
+            key_type=numba.types.int64,
+            value_type=numba.types.int64
+        )
+
+        for i, k in enumerate(self.complete):
+            self.key_to_index[k] = i
 
     def upward_pass(self):
         """
@@ -633,15 +697,32 @@ class Fmm:
         """
 
         # Form multipole expansions for all leaf nodes
-        for idx in range(self.nleaves):
-            leaf = self.leaves[idx]
-            self.particle_to_multipole(leaf)
+        run_p2m(
+            self.leaves,
+            self.key_to_index,
+            self.sources,
+            self.source_densities,
+            self.sources_to_keys,
+            self.multipole_expansions,
+            self.nequivalent_points,
+            self.x0,
+            self.r0,
+            self.alpha_outer,
+            self.check_surface,
+            self.uc2e_inv,
+            self.scale,
+            self.p2p
+        )
+
+        # run_p2m.parallel_diagnostics(level=4)
 
         # Post-order traversal
-        for level in range(self.depth-1, -1, -1):
-            idxs = self.complete_levels == level
-            for key in self.complete[idxs]:
-                self.multipole_to_multipole(key)
+        # for level in range(self.depth, 0, -1):
+        #     keys = self.complete[self.complete_levels == level]
+        #     for idx in range(len(keys)):
+        #         key = keys[idx]
+        #         key_idx = self.key_to_index[key]
+        #         self.multipole_to_multipole(key, key_idx)
 
     def downward_pass(self):
         """
@@ -663,6 +744,7 @@ class Fmm:
             # Hashed transfer vectors for a given level, provide index for M2L operators
             hashes = self.m2l[str_level]["hashes"][...]
 
+            # M2L interactions can be a parallel loop for a given level
             for key in self.complete[idxs]:
 
                 idx = np.where(self.complete== key)
@@ -705,35 +787,24 @@ class Fmm:
 
     def run(self):
         """Run full algorithm"""
+        import IPython; IPython.embed()
         self.upward_pass()
+        import sys; sys.exit()
         self.downward_pass()
 
-    def particle_to_multipole(self, key):
-        """Compute multipole expansions from leaf particles."""
-        _particle_to_multipole(
-            key=key,
-            sources=self.sources,
-            source_densities=self.source_densities,
-            sources_to_keys=self.sources_to_keys,
-            multipole_expansions=self.multipole_expansions,
-            x0=self.x0,
-            r0=self.r0,
-            alpha_outer=self.alpha_outer,
-            check_surface=self.check_surface,
-            uc2e_inv=self.uc2e_inv,
-            scale_function=self.scale,
-            p2p_function=self.p2p,
-        )
 
-    def multipole_to_multipole(self, key):
+    def multipole_to_multipole(self, key, idx):
         """
         Combine multipole expansions of a node's children to approximate its
             own multipole expansion.
         """
         _multipole_to_multipole(
             key=key,
+            key_idx=idx,
             multipole_expansions=self.multipole_expansions,
+            nequivalent_points=self.nequivalent_points,
             m2m=self.m2m,
+            key_to_index=self.key_to_index,
         )
 
     def multipole_to_local(self, key, v_list, u, s, vt, hashes):
