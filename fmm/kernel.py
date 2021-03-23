@@ -50,15 +50,10 @@ def laplace_cpu(x, y):
     --------
     np.float32
     """
-    diff = x-y
-    diff2 = diff*diff
-
-    if np.all(diff2 < TOL):
-        return np.float64(0)
-
-    diff2 = np.sqrt(np.sum(diff2))
-
-    return np.float32(np.reciprocal(4*np.pi*diff2))
+    diff = (x[0]-y[0])**2+(x[1]-y[1])**2+(x[2]-y[2])**2
+    tmp = np.reciprocal(4*np.pi*np.sqrt(diff))
+    res = tmp if tmp < np.inf else 0.
+    return res
 
 
 @cuda.jit(device=True)

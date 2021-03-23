@@ -130,7 +130,7 @@ def test_l2l(db):
         center=parent_center, alpha=CONFIG['alpha_outer']
     )
 
-    local_point = np.array([list(child_center)])
+    local_point = child_center
 
     parent_direct = p2p_function(
         targets=local_point,
@@ -235,7 +235,7 @@ def test_m2l(db):
         alpha=CONFIG['alpha_outer']
     )
 
-    local_point = np.array([list(target_center)])
+    local_point = target_center
 
     target_direct = p2p_function(
         targets=local_point,
