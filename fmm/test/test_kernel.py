@@ -26,7 +26,7 @@ def test_laplace_scale(level, expected):
     ]
 )
 def test_laplace_cpu(x, y, expected):
-    assert kernel.laplace_cpu(x, y) == expected
+    assert np.isclose(kernel.laplace_cpu(x, y), expected)
 
 
 @pytest.mark.parametrize(
