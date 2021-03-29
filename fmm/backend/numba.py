@@ -94,6 +94,7 @@ def p2m(
         multipole_expansions[lidx:ridx] += scale*(uc2e_inv @ (check_potential))
 
 
+@numba.njit(cache=True)
 def m2m(
         key,
         multipole_expansions,
@@ -137,6 +138,7 @@ def m2m(
     )
 
 
+@numba.njit(cache=True)
 def m2l(
         key,
         key_to_index,
@@ -227,10 +229,13 @@ def m2l(
             local_expansions[target_lidx:target_ridx] += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[source_lidx:source_ridx]))))
 
 
+@numba.njit(cache=True)
 def l2l(
         key,
         local_expansions,
         l2l,
+        key_to_index,
+        ncheck_points
      ):
     """
     L2L operator. Translate the local expansion of a parent node, to each of
@@ -248,23 +253,29 @@ def l2l(
             indexed by order of Morton encoding from
             adaptoctree.morton.find_children.
     """
-    parent_equivalent_density = local_expansions[key]
+    parent_idx = key_to_index[key]
+    parent_lidx = parent_idx*ncheck_points
+    parent_ridx = (parent_idx+1)*ncheck_points
+    parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
+
     children = morton.find_children(key)
 
     for child in children:
 
-        if child in local_expansions:
+        if child in key_to_index:
 
             # Compute operator index
             operator_idx = child == children
 
             # Compute contribution to local expansion of child from parent
             child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
-            local_expansions[child] += np.ravel(child_equivalent_density)
+            local_expansions[child] += child_equivalent_density
 
 
+@numba.njit(cache=True)
 def s2l(
         key,
+        key_to_index,
         x_list,
         sources,
         source_densities,
@@ -274,6 +285,7 @@ def s2l(
         r0,
         alpha_inner,
         check_surface,
+        ncheck_points,
         dc2e_inv,
         kernel,
     ):
@@ -323,6 +335,18 @@ def s2l(
         scale = np.int32(scale_function(level))
         center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
 
+        key_idx = key_to_index[key]
+        key_lidx = key_idx*ncheck_points
+        key_ridx = (key_idx+1)*ncheck_points
+
+        downward_check_surface = surface.scale_surface(
+            surf=check_surface,
+            radius=r0,
+            level=level,
+            center=center,
+            alpha=alpha_inner
+        )
+
         for source in x_list:
             source_coodinates = []
             densities = []
@@ -334,23 +358,13 @@ def s2l(
                 source_coodinates = np.array(source_coodinates).astype(np.float32)
                 densities = np.array(densities).astype(np.float32)
 
-                downward_check_surface = surface.scale_surface(
-                    surf=check_surface,
-                    radius=r0,
-                    level=level,
-                    center=center,
-                    alpha=alpha_inner
-                )
-
                 downward_check_potential = p2p_function(
                     sources=source_coodinates,
                     targets=downward_check_surface,
                     source_densities=densities
                 )
 
-                downward_equivalent_density = (dc2e_inv @ downward_check_potential)
-
-                local_expansions[key] += (scale*downward_equivalent_density)
+                local_expansions[key_lidx:key_ridx] += (scale*(dc2e_inv @ (downward_check_potential)))
 
 
 def m2t(

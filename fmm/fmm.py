@@ -129,12 +129,10 @@ class Fmm:
             )
 
         # Post-order traversal
-        for level in range(self.depth-1, -1, -1):
+        for level in range(self.depth, 0, -1):
             keys = self.complete[self.complete_levels == level]
             for idx in range(len(keys)):
-
                 key = keys[idx]
-
                 self.backend['m2m'](
                         key=key,
                         multipole_expansions=self.multipole_expansions,
@@ -165,11 +163,12 @@ class Fmm:
 
             for key in self.complete[idxs]:
 
-                idx = np.where(self.complete== key)
+                idx = self.key_to_index(key)
 
                 # V List interactions
                 v_list = self.v_lists[idx]
                 v_list = v_list[v_list != -1]
+
                 if len(v_list) > 0:
                     self.backend['m2l'](
                             key=key,
@@ -191,9 +190,11 @@ class Fmm:
                 # X List interactions
                 x_list = self.x_lists[idx]
                 x_list = x_list[x_list != -1]
+
                 if len(x_list) > 0:
                     self.backend['s2l'](
                             key=key,
+                            key_to_index=self.key_to_index,
                             x_list=x_list,
                             sources=self.sources,
                             source_densities=self.source_densities,
@@ -203,9 +204,9 @@ class Fmm:
                             r0=self.r0,
                             alpha_inner=self.alpha_inner,
                             check_surface=self.check_surface,
+                            ncheck_points=self.ncheck_points,
                             dc2e_inv=self.dc2e_inv,
-                            scale_function=self.scale,
-                            p2p_function=self.p2p
+                            kernel=self.kernel
                         )
 
                 # Translate local expansion to the node's children
@@ -214,12 +215,14 @@ class Fmm:
                         key=key,
                         local_expansions=self.local_expansions,
                         l2l=self.l2l,
+                        key_to_index=self.key_to_index,
+                        ncheck_points=self.ncheck_points
                     )
 
         # Leaf near-field computations
         for key in self.leaves:
 
-            idx = np.where(self.complete == key)
+            idx = self.key_to_index(key)
 
             w_list = self.w_lists[idx]
             w_list = w_list[w_list != -1]
