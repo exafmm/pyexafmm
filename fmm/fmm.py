@@ -13,7 +13,6 @@ import numpy as np
 
 import adaptoctree.morton as morton
 
-from fmm.kernel import KERNELS
 from fmm.backend import BACKENDS
 
 import utils.data as data
@@ -87,13 +86,8 @@ class Fmm:
         self.u_lists = self.db["interaction_lists"]["u"]
         self.w_lists = self.db["interaction_lists"]["w"]
 
-        # Configure a kernel
-        self.kernel = self.config["kernel"]
-        self.eval = KERNELS[self.kernel]["eval"]
-        self.p2p = KERNELS[self.kernel]["p2p"]
-        self.scale = KERNELS[self.kernel]["scale"]
-
         # Configure a compute backend
+        self.kernel = self.config["kernel"]
         self.backend = BACKENDS[self.config["backend"]]
 
         #  Containers for results
@@ -115,14 +109,32 @@ class Fmm:
 
         # Form multipole expansions for all leaf nodes
         for idx in range(self.nleaves):
+
             leaf = self.leaves[idx]
-            self.particle_to_multipole(leaf)
+
+            self.backend['p2m'](
+                key=leaf,
+                sources=self.sources,
+                source_densities=self.source_densities,
+                sources_to_keys=self.sources_to_keys,
+                multipole_expansions=self.multipole_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_outer=self.alpha_outer,
+                check_surface=self.check_surface,
+                uc2e_inv=self.uc2e_inv,
+                kernel=self.kernel
+            )
 
         # Post-order traversal
         for level in range(self.depth-1, -1, -1):
             idxs = self.complete_levels == level
             for key in self.complete[idxs]:
-                self.multipole_to_multipole(key)
+                self.backend['m2m'](
+                    key=key,
+                    multipole_expansions=self.multipole_expansions,
+                    m2m=self.m2m,
+                )
 
     def downward_pass(self):
         """
@@ -152,17 +164,48 @@ class Fmm:
                 v_list = self.v_lists[idx]
                 v_list = v_list[v_list != -1]
                 if len(v_list) > 0:
-                    self.multipole_to_local(key, v_list, u, s, vt, hashes)
+                    self.backend['m2l'](
+                        key=key,
+                        depth=self.depth,
+                        v_list=v_list,
+                        multipole_expansions=self.multipole_expansions,
+                        local_expansions=self.local_expansions,
+                        dc2e_inv=self.dc2e_inv,
+                        ncheck_points=self.ncheck_points,
+                        kernel=self.kernel,
+                        u=u,
+                        s=s,
+                        vt=vt,
+                        hashes=hashes
+                    )
 
                 # X List interactions
                 x_list = self.x_lists[idx]
                 x_list = x_list[x_list != -1]
                 if len(x_list) > 0:
-                    self.source_to_local(key, x_list)
+                    self.backend['s2l'](
+                            key=key,
+                            x_list=x_list,
+                            sources=self.sources,
+                            source_densities=self.source_densities,
+                            sources_to_keys=self.sources_to_keys,
+                            local_expansions=self.local_expansions,
+                            x0=self.x0,
+                            r0=self.r0,
+                            alpha_inner=self.alpha_inner,
+                            check_surface=self.check_surface,
+                            dc2e_inv=self.dc2e_inv,
+                            scale_function=self.scale,
+                            p2p_function=self.p2p
+                    )
 
                 # Translate local expansion to the node's children
                 if level < self.depth:
-                    self.local_to_local(key)
+                    self.backend['l2l'](
+                        key=key,
+                        local_expansions=self.local_expansions,
+                        l2l=self.l2l,
+                    )
 
         # Leaf near-field computations
         for key in self.leaves:
@@ -176,143 +219,48 @@ class Fmm:
             u_list = u_list[u_list != -1]
 
             # Evaluate local expansions at targets
-            self.local_to_target(key)
+            self.backend['l2t'](
+                key=key,
+                targets=self.targets,
+                targets_to_keys=self.targets_to_keys,
+                target_potentials=self.target_potentials,
+                local_expansions=self.local_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_outer=self.alpha_outer,
+                equivalent_surface=self.equivalent_surface,
+                kernel=self.kernel
+            )
 
-            # # W List interactions
-            self.multipole_to_target(key, w_list)
+            # W List interactions
+            self.backend['m2t'](
+                key=key,
+                w_list=w_list,
+                targets=self.targets,
+                targets_to_keys=self.targets_to_keys,
+                target_potentials=self.target_potentials,
+                multipole_expansions=self.multipole_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_inner=self.alpha_inner,
+                equivalent_surface=self.equivalent_surface,
+                kernel=self.kernel
+            )
 
             # U List interactions
-            self.near_field(key, u_list)
+            self.backend['near_field'](
+                key=key,
+                u_list=u_list,
+                targets=self.targets,
+                targets_to_keys=self.targets_to_keys,
+                target_potentials=self.target_potentials,
+                sources=self.sources,
+                source_densities=self.source_densities,
+                sources_to_keys=self.sources_to_keys,
+                kernel=self.kernel
+            )
 
     def run(self):
         """Run full algorithm"""
         self.upward_pass()
         self.downward_pass()
-
-    def particle_to_multipole(self, key):
-        """Compute multipole expansions from leaf particles."""
-        self.backend['p2m'](
-            key=key,
-            sources=self.sources,
-            source_densities=self.source_densities,
-            sources_to_keys=self.sources_to_keys,
-            multipole_expansions=self.multipole_expansions,
-            x0=self.x0,
-            r0=self.r0,
-            alpha_outer=self.alpha_outer,
-            check_surface=self.check_surface,
-            uc2e_inv=self.uc2e_inv,
-            scale_function=self.scale,
-            p2p_function=self.p2p,
-        )
-
-    def multipole_to_multipole(self, key):
-        """
-        Combine multipole expansions of a node's children to approximate its
-            own multipole expansion.
-        """
-        self.backend['m2m'](
-            key=key,
-            multipole_expansions=self.multipole_expansions,
-            m2m=self.m2m,
-        )
-
-    def multipole_to_local(self, key, v_list, u, s, vt, hashes):
-        """
-        V List interactions.
-        """
-        self.backend['m2l'](
-            key=key,
-            depth=self.depth,
-            v_list=v_list,
-            multipole_expansions=self.multipole_expansions,
-            local_expansions=self.local_expansions,
-            dc2e_inv=self.dc2e_inv,
-            ncheck_points=self.ncheck_points,
-            scale_function=self.scale,
-            u=u,
-            s=s,
-            vt=vt,
-            hashes=hashes
-        )
-
-    def local_to_local(self, key):
-        """
-        Translate local expansion of a node to it's children.
-        """
-        self.backend['l2l'](
-            key=key,
-            local_expansions=self.local_expansions,
-            l2l=self.l2l,
-        )
-
-    def source_to_local(self, key, x_list):
-        """
-        X List interactions.
-        """
-        self.backend['s2l'](
-                key=key,
-                x_list=x_list,
-                sources=self.sources,
-                source_densities=self.source_densities,
-                sources_to_keys=self.sources_to_keys,
-                local_expansions=self.local_expansions,
-                x0=self.x0,
-                r0=self.r0,
-                alpha_inner=self.alpha_inner,
-                check_surface=self.check_surface,
-                dc2e_inv=self.dc2e_inv,
-                scale_function=self.scale,
-                p2p_function=self.p2p
-        )
-
-    def multipole_to_target(self, key, w_list):
-        """
-        W List interactions
-        """
-        self.backend['m2t'](
-            key=key,
-            w_list=w_list,
-            targets=self.targets,
-            targets_to_keys=self.targets_to_keys,
-            target_potentials=self.target_potentials,
-            multipole_expansions=self.multipole_expansions,
-            x0=self.x0,
-            r0=self.r0,
-            alpha_inner=self.alpha_inner,
-            equivalent_surface=self.equivalent_surface,
-            p2p_function=self.p2p
-        )
-
-    def local_to_target(self, key):
-        """
-        Evaluate local potentials at target points
-        """
-        self.backend['l2t'](
-            key=key,
-            targets=self.targets,
-            targets_to_keys=self.targets_to_keys,
-            target_potentials=self.target_potentials,
-            local_expansions=self.local_expansions,
-            x0=self.x0,
-            r0=self.r0,
-            alpha_outer=self.alpha_outer,
-            equivalent_surface=self.equivalent_surface,
-            p2p_function=self.p2p,
-        )
-
-    def near_field(self, key, u_list):
-        """
-        U List interactions
-        """
-        self.backend['near_field'](
-            key=key,
-            u_list=u_list,
-            targets=self.targets,
-            targets_to_keys=self.targets_to_keys,
-            target_potentials=self.target_potentials,
-            sources=self.sources,
-            source_densities=self.source_densities,
-            sources_to_keys=self.sources_to_keys,
-            p2p_function=self.p2p
-        )

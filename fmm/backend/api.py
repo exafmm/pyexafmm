@@ -4,7 +4,6 @@ Interface for compute backends
 import fmm.backend.numba as numba_backend
 import fmm.backend.openmp as openmp_backend
 
-
 BACKENDS = {
     "numba": {
         "p2m": numba_backend.p2m,

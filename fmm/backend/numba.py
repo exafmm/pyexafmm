@@ -1,3 +1,7 @@
+"""
+Compute operators, accelerated with Numba.
+"""
+
 import numpy as np
 
 import adaptoctree.morton as morton

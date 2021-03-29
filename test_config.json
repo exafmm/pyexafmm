@@ -5,6 +5,7 @@
     "order_equivalent": 5,
     "order_check": 6,
     "kernel": "laplace",
+    "backend": "numba",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
     "max_level": 10,

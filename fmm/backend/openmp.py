@@ -1,3 +1,7 @@
+"""
+Compute operators accelerated with Numba and OpenMP.
+"""
+
 def p2m():
     pass
 
