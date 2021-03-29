@@ -9,6 +9,7 @@ import os
 import pathlib
 
 import h5py
+import numba
 import numpy as np
 
 import adaptoctree.morton as morton
@@ -92,14 +93,17 @@ class Fmm:
 
         #  Containers for results
         self.target_potentials = np.zeros(self.ntargets, dtype=np.float32)
+        self.multipole_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
+        self.local_expansions = np.zeros(self.ncheck_points*self.ncomplete, dtype=np.float32)
 
-        self.multipole_expansions = {
-            key: np.zeros(self.nequivalent_points, dtype=np.float32) for key in self.complete
-        }
+        # Map a key to it's index in the complete tree, for looking up expansions
+        self.key_to_index = numba.typed.Dict.empty(
+            key_type=numba.types.int64,
+            value_type=numba.types.int64
+        )
 
-        self.local_expansions = {
-            key: np.zeros(self.nequivalent_points, dtype=np.float32) for key in self.complete
-        }
+        for i, k in enumerate(self.complete):
+            self.key_to_index[k] = i
 
     def upward_pass(self):
         """
@@ -108,16 +112,14 @@ class Fmm:
         """
 
         # Form multipole expansions for all leaf nodes
-        for idx in range(self.nleaves):
-
-            leaf = self.leaves[idx]
-
-            self.backend['p2m'](
-                key=leaf,
+        self.backend['p2m'](
+                leaves=self.leaves,
+                key_to_index=self.key_to_index,
                 sources=self.sources,
                 source_densities=self.source_densities,
                 sources_to_keys=self.sources_to_keys,
                 multipole_expansions=self.multipole_expansions,
+                nequivalent_points=self.nequivalent_points,
                 x0=self.x0,
                 r0=self.r0,
                 alpha_outer=self.alpha_outer,
@@ -128,13 +130,18 @@ class Fmm:
 
         # Post-order traversal
         for level in range(self.depth-1, -1, -1):
-            idxs = self.complete_levels == level
-            for key in self.complete[idxs]:
+            keys = self.complete[self.complete_levels == level]
+            for idx in range(len(keys)):
+
+                key = keys[idx]
+
                 self.backend['m2m'](
-                    key=key,
-                    multipole_expansions=self.multipole_expansions,
-                    m2m=self.m2m,
-                )
+                        key=key,
+                        multipole_expansions=self.multipole_expansions,
+                        nequivalent_points=self.nequivalent_points,
+                        m2m=self.m2m,
+                        key_to_index=self.key_to_index,
+                    )
 
     def downward_pass(self):
         """
@@ -165,19 +172,21 @@ class Fmm:
                 v_list = v_list[v_list != -1]
                 if len(v_list) > 0:
                     self.backend['m2l'](
-                        key=key,
-                        depth=self.depth,
-                        v_list=v_list,
-                        multipole_expansions=self.multipole_expansions,
-                        local_expansions=self.local_expansions,
-                        dc2e_inv=self.dc2e_inv,
-                        ncheck_points=self.ncheck_points,
-                        kernel=self.kernel,
-                        u=u,
-                        s=s,
-                        vt=vt,
-                        hashes=hashes
-                    )
+                            key=key,
+                            key_to_index=self.key_to_index,
+                            depth=self.depth,
+                            v_list=v_list,
+                            multipole_expansions=self.multipole_expansions,
+                            local_expansions=self.local_expansions,
+                            dc2e_inv=self.dc2e_inv,
+                            nequivalent_points=self.nequivalent_points,
+                            ncheck_points=self.ncheck_points,
+                            kernel=self.kernel,
+                            u=u,
+                            s=s,
+                            vt=vt,
+                            hashes=hashes
+                        )
 
                 # X List interactions
                 x_list = self.x_lists[idx]
@@ -197,7 +206,7 @@ class Fmm:
                             dc2e_inv=self.dc2e_inv,
                             scale_function=self.scale,
                             p2p_function=self.p2p
-                    )
+                        )
 
                 # Translate local expansion to the node's children
                 if level < self.depth:
