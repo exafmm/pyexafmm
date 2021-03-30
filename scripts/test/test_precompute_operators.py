@@ -36,7 +36,7 @@ def test_m2m(db):
     child_key = morton.find_children(parent_key)[0]
 
     x0 = db["octree"]["x0"][...]
-    r0 = db["octree"]["r0"][...]
+    r0 = db["octree"]["r0"][...][0]
     equivalent_surface = db["surface"]["equivalent"][...]
 
     npoints_equivalent = len(equivalent_surface)
@@ -97,7 +97,7 @@ def test_l2l(db):
     child_key = morton.find_children(parent_key)[-1]
 
     x0 = db["octree"]["x0"][...]
-    r0 = db["octree"]["r0"][...]
+    r0 = db["octree"]["r0"][...][0]
 
     equivalent_surface = db["surface"]['equivalent'][...]
 
@@ -150,7 +150,7 @@ def test_l2l(db):
 def test_m2l(db):
 
     x0 = db["octree"]["x0"][...]
-    r0 = db["octree"]["r0"][...]
+    r0 = db["octree"]["r0"][...][0]
     dc2e_inv = db['dc2e_inv'][...]
     depth = db['octree']['depth'][0]
     equivalent_surface = db["surface"]["equivalent"][...]
