@@ -22,32 +22,36 @@ def test_upward_pass():
         computation for a set of source points, at a target point located
         at a distance.
     """
-    fmm = Fmm('test_config')
-    fmm.upward_pass()
+    experiment = Fmm('test_config')
+    experiment.upward_pass()
 
     upward_equivalent_surface = surface.scale_surface(
-        surf=fmm.equivalent_surface,
-        radius=fmm.r0,
+        surf=experiment.equivalent_surface,
+        radius=experiment.r0,
         level=np.int32(0),
-        center=fmm.x0,
-        alpha=fmm.alpha_inner
+        center=experiment.x0,
+        alpha=experiment.alpha_inner
     )
 
     distant_point = np.array([[1e4, 0, 0]])
 
-    kernel = fmm.config['kernel']
+    kernel = experiment.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
     direct = p2p(
-        sources=fmm.sources,
+        sources=experiment.sources,
         targets=distant_point,
-        source_densities=fmm.source_densities
+        source_densities=experiment.source_densities
     )
+
+    idx = experiment.key_to_index[0]
+    lidx = idx*experiment.nequivalent_points
+    ridx = (idx+1)*experiment.nequivalent_points
 
     equivalent = p2p(
         sources=upward_equivalent_surface,
         targets=distant_point,
-        source_densities=fmm.multipole_expansions[0]
+        source_densities=experiment.multipole_expansions[lidx:ridx]
     )
 
     assert np.allclose(direct, equivalent, rtol=RTOL)
@@ -120,21 +124,21 @@ def test_m2l():
     assert np.allclose(direct, equivalent, rtol=RTOL)
 
 
-def test_fmm():
-    """
-    End To End Fmm Test.
-    """
-    fmm = Fmm('test_config')
+# def test_fmm():
+#     """
+#     End To End Fmm Test.
+#     """
+#     fmm = Fmm('test_config')
 
-    fmm.run()
+#     fmm.run()
 
-    kernel = fmm.config['kernel']
-    p2p = KERNELS[kernel]['p2p']
+#     kernel = fmm.config['kernel']
+#     p2p = KERNELS[kernel]['p2p']
 
-    direct = p2p(
-        targets=fmm.targets,
-        sources=fmm.sources,
-        source_densities=fmm.source_densities
-    )
+#     direct = p2p(
+#         targets=fmm.targets,
+#         sources=fmm.sources,
+#         source_densities=fmm.source_densities
+#     )
 
-    assert np.allclose(direct, fmm.target_potentials, rtol=0.13)
+#     assert np.allclose(direct, fmm.target_potentials, rtol=0.13)

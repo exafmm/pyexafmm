@@ -117,6 +117,7 @@ class Fmm:
         # Form multipole expansions for all leaf nodes
         self.backend['p2m'](
                 leaves=self.leaves,
+                nleaves=self.nleaves,
                 key_to_index=self.key_to_index,
                 sources=self.sources,
                 source_densities=self.source_densities,

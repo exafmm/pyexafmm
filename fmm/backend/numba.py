@@ -33,6 +33,7 @@ def find_physical_center_from_key(key, x0, r0):
 @numba.njit(cache=True, parallel=True)
 def p2m(
         leaves,
+        nleaves,
         key_to_index,
         sources,
         source_densities,
@@ -47,8 +48,6 @@ def p2m(
         p2p_function,
         scale_function
     ):
-
-    nleaves = len(leaves)
 
     for thread_idx in numba.prange(nleaves):
 
