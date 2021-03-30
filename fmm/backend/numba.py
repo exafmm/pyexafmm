@@ -44,12 +44,9 @@ def p2m(
         alpha_outer,
         check_surface,
         uc2e_inv,
-        kernel
+        p2p_function,
+        scale_function
     ):
-
-    # Configure kernel
-    p2p_function = KERNELS[kernel]['p2p']
-    scale_function = KERNELS[kernel]['scale']
 
     nleaves = len(leaves)
 
@@ -149,11 +146,11 @@ def m2l(
         dc2e_inv,
         nequivalent_points,
         ncheck_points,
-        kernel,
         u,
         s,
         vt,
-        hashes
+        hashes,
+        scale_function
     ):
     """
     M2L operator. Translate the multipole expansion of all source nodes in a
@@ -186,7 +183,6 @@ def m2l(
     vt : np.array(np.float32)
         Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
     """
-    scale_function = KERNELS[kernel]['scale']
 
     # Compute indices to lookup target local expansion
     target_idx = key_to_index[key]
@@ -233,7 +229,7 @@ def l2l(
         local_expansions,
         l2l,
         key_to_index,
-        ncheck_points
+        nequivalent_points
      ):
     """
     L2L operator. Translate the local expansion of a parent node, to each of
@@ -252,8 +248,8 @@ def l2l(
             adaptoctree.morton.find_children.
     """
     parent_idx = key_to_index[key]
-    parent_lidx = parent_idx*ncheck_points
-    parent_ridx = (parent_idx+1)*ncheck_points
+    parent_lidx = parent_idx*nequivalent_points
+    parent_ridx = (parent_idx+1)*nequivalent_points
     parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
 
     children = morton.find_children(key)
@@ -262,12 +258,16 @@ def l2l(
 
         if child in key_to_index:
 
+            # Compute expansion index
+            child_idx = key_to_index[child]
+            child_lidx = child_idx*nequivalent_points
+            child_ridx = (child_idx+1)*nequivalent_points
+
             # Compute operator index
             operator_idx = child == children
 
             # Compute contribution to local expansion of child from parent
-            child_equivalent_density = l2l[operator_idx] @ parent_equivalent_density
-            local_expansions[child] += child_equivalent_density
+            local_expansions[child_lidx:child_ridx] += l2l[operator_idx] @ parent_equivalent_density
 
 
 @numba.njit(cache=True)
@@ -285,7 +285,8 @@ def s2l(
         check_surface,
         nequivalent_points,
         dc2e_inv,
-        kernel,
+        scale_function,
+        p2p_function
     ):
     """
     S2L operator. For source nodes in a target node's X list, the multipole
@@ -323,11 +324,6 @@ def s2l(
     p2p_function : function
         Function handle for kernel P2P.
     """
-
-    # Configure a kernel
-    p2p_function = KERNELS[kernel]['p2p']
-    scale_function = KERNELS[kernel]['scale']
-
     level = np.int32(morton.find_level(key))
     scale = np.int32(scale_function(level))
     center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
@@ -377,7 +373,7 @@ def m2t(
         alpha_inner,
         equivalent_surface,
         nequivalent_points,
-        kernel
+        p2p_function
     ):
     """
     M2T operator. M2L translations aren't applicable, as the source nodes in
@@ -410,8 +406,6 @@ def m2t(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    # Configure a kernel
-    p2p_function = KERNELS[kernel]['p2p']
 
     # Find target particles
     target_indices = targets_to_keys == key
@@ -455,7 +449,7 @@ def l2t(
         alpha_outer,
         equivalent_surface,
         nequivalent_points,
-        kernel,
+        p2p_function,
     ):
     """
     L2T operator. Evaluate the local expansion at the target points in a given
@@ -485,9 +479,6 @@ def l2t(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    # Configure a kernel
-    p2p_function = KERNELS[kernel]['p2p']
-
     target_idxs = key == targets_to_keys
 
     if len(target_idxs) > 0:
@@ -525,7 +516,7 @@ def near_field(
         sources,
         source_densities,
         sources_to_keys,
-        kernel
+        p2p_function
     ):
     """
     Evaluate all near field particles for source nodes within a given target
@@ -552,10 +543,6 @@ def near_field(
     p2p_function : function
         Function handle for kernel P2P.
     """
-
-    # Configure a kernel
-    p2p_function = KERNELS[kernel]['p2p']
-
     target_indices = targets_to_keys == key
 
     if len(target_indices) > 0:

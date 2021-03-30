@@ -5,6 +5,7 @@ Matrix-Vector products are computed in single precision, with appropriate
 casting. However, as AdaptOctree's implementation depends on 64 bit Morton
 keys, key-handling is generally left in double precision.
 """
+from fmm.kernel import KERNELS
 import os
 import pathlib
 
@@ -14,7 +15,7 @@ import numpy as np
 
 import adaptoctree.morton as morton
 
-from fmm.backend import BACKENDS
+from fmm.backend import BACKEND
 
 import utils.data as data
 
@@ -87,9 +88,11 @@ class Fmm:
         self.u_lists = self.db["interaction_lists"]["u"]
         self.w_lists = self.db["interaction_lists"]["w"]
 
-        # Configure a compute backend
+        # Configure a compute backend and kernel
         self.kernel = self.config["kernel"]
-        self.backend = BACKENDS[self.config["backend"]]
+        self.p2p_function = KERNELS[self.kernel]["p2p"]
+        self.scale_function = KERNELS[self.kernel]["scale"]
+        self.backend = BACKEND[self.config["backend"]]
 
         #  Containers for results
         self.target_potentials = np.zeros(self.ntargets, dtype=np.float32)
@@ -125,7 +128,8 @@ class Fmm:
                 alpha_outer=self.alpha_outer,
                 check_surface=self.check_surface,
                 uc2e_inv=self.uc2e_inv,
-                kernel=self.kernel
+                p2p_function=self.p2p_function,
+                scale_function=self.scale_function
             )
 
         # Post-order traversal
@@ -180,11 +184,11 @@ class Fmm:
                             dc2e_inv=self.dc2e_inv,
                             nequivalent_points=self.nequivalent_points,
                             ncheck_points=self.ncheck_points,
-                            kernel=self.kernel,
                             u=u,
                             s=s,
                             vt=vt,
-                            hashes=hashes
+                            hashes=hashes,
+                            scale_function=self.scale_function
                         )
 
                 # X List interactions
@@ -206,7 +210,8 @@ class Fmm:
                             check_surface=self.check_surface,
                             ncheck_points=self.ncheck_points,
                             dc2e_inv=self.dc2e_inv,
-                            kernel=self.kernel
+                            scale_function=self.scale_function,
+                            p2p_function=self.p2p_function
                         )
 
                 # Translate local expansion to the node's children
@@ -216,7 +221,7 @@ class Fmm:
                         local_expansions=self.local_expansions,
                         l2l=self.l2l,
                         key_to_index=self.key_to_index,
-                        ncheck_points=self.ncheck_points
+                        nequivalent_points=self.nequivalent_points
                     )
 
         # Leaf near-field computations
@@ -243,7 +248,7 @@ class Fmm:
                 alpha_outer=self.alpha_outer,
                 equivalent_surface=self.equivalent_surface,
                 nequivalent_points=self.nequivalent_points,
-                kernel=self.kernel
+                p2p_function=self.p2p_function
             )
 
             # W List interactions
@@ -261,7 +266,7 @@ class Fmm:
                     alpha_inner=self.alpha_inner,
                     equivalent_surface=self.equivalent_surface,
                     nequivalent_points=self.nequivalent_points,
-                    kernel=self.kernel
+                    p2p_function=self.p2p_function
                 )
 
             # U List interactions
@@ -274,7 +279,7 @@ class Fmm:
                 sources=self.sources,
                 source_densities=self.source_densities,
                 sources_to_keys=self.sources_to_keys,
-                kernel=self.kernel
+                p2p_function=self.p2p_function
             )
 
     def run(self):
