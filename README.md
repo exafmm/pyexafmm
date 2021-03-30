@@ -47,7 +47,7 @@ python setup.py develop
 
 After installation, you must precompute and cache the FMM operators for your dataset. Most of these are calculated using the techniques in [1], notably M2M and L2L matrices can be computed for a single parent node and its children, and scaled in a simple fashion for the kernels implemented by PyExaFMM. For the M2L operators, we introduce a randomised SVD compression [2], to avoid storing and applying potentially very large dense matrices.
 
-This is done via a `config.json` file, PyExaFMM will look for this in your **current working directory**,
+This is done via a `config.json` file, PyExaFMM will look for this in your **current working directory**, which allows you to configure experimental parameters, as well as choose a kernel, and computational backend, which optimise the operator methods of the FMM using different approaches.
 
 ```json
 {
@@ -57,6 +57,7 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
     "order_equivalent": 2,
     "order_check": 12,
     "kernel": "laplace",
+    "backend": "numba",
     "alpha_inner": 1.05,
     "alpha_outer": 2.95,
     "max_level": 10,
@@ -73,7 +74,8 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
 | `data_type`   | Type of test data to generate.                     |
 | `order_equivalent`| Order of multipole expansions, same as discretisation of equivalent surface.  |
 | `order_check`     | Order of local expansions, same as discretisation of check surface.           |
-| `kernel`      | Kernel function to use.                            |
+| `kernel`      | Kernel function to use, currently only supports laplace.          |
+| `backend`      | Compute backend to use, currently only supports numba.           |
 | `alpha_inner`	| Relative size of inner surface's radius.           |
 | `alpha_outer`	| Relative size of outer surface's radius.           |
 | `max_level`   | Depth of octree to use in simulations.             |
