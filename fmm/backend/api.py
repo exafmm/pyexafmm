@@ -1,5 +1,5 @@
 """
-Interface for compute backends
+Interface for compute backends.
 """
 import fmm.backend.numba as numba_backend
 import fmm.backend.openmp as openmp_backend

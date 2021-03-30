@@ -8,26 +8,7 @@ import adaptoctree.morton as morton
 from adaptoctree.utils import deterministic_hash
 
 import fmm.surface as surface
-from fmm.kernel import KERNELS
 from fmm.parameters import DIGEST_SIZE
-
-
-@numba.njit(cache=True)
-def find_physical_center_from_anchor(anchor, x0, r0):
-    xmin = x0 - r0
-    level = anchor[3]
-    side_length = 2 * r0 / (1 << level)
-
-    side_length = np.float64(side_length)
-    anchor = anchor.astype(np.float64)
-
-    return (anchor[:3] + 0.5) * side_length + xmin
-
-
-@numba.njit(cache=True)
-def find_physical_center_from_key(key, x0, r0):
-    anchor = morton.decode_key(key)
-    return find_physical_center_from_anchor(anchor, x0, r0)
 
 
 @numba.njit(cache=True, parallel=True)
@@ -48,6 +29,35 @@ def p2m(
         p2p_function,
         scale_function
     ):
+    """
+    P2M operator. Run over all leaves in a given tree in parallel.
+
+    Parameters:
+    -----------
+    leaves : np.array(dtype=np.int64)
+    nleaves : np.int64
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    sources : np.array(shape=(nsources, 3), dtype=np.float32)
+        Source coordinates.
+    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
+    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
+        (Leaf) Morton key where corresponding (via index) source lies.
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_outer : np.float32
+        Relative size of outer surface
+    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+        Discretised check surface.
+    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float32)
+    scale_function : function
+        Function handle for kernel scaling.
+    p2p_function : function
+        Function handle for kernel P2P.
+    """
 
     for thread_idx in numba.prange(nleaves):
 
@@ -65,7 +75,7 @@ def p2m(
         leaf_source_densities = source_densities[source_indices]
 
         # # Compute center of leaf box in cartesian coordinates
-        leaf_center = find_physical_center_from_key(
+        leaf_center = morton.find_physical_center_from_key(
             key=leaf, x0=x0, r0=r0
         )
 
@@ -92,49 +102,54 @@ def p2m(
 
 @numba.njit(cache=True)
 def m2m(
-        key,
+        keys,
         multipole_expansions,
-        nequivalent_points,
         m2m,
         key_to_index,
+        nequivalent_points,
     ):
     """
     M2M operator. Add the contribution of the multipole expansions of a given
-        source node's children to it's own multipole expansion.
+        source node's children to it's own multipole expansion for all nodes
+        on a given level.
 
     Parameters:
     -----------
     key : np.int64
         Morton key of source node.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points), dtype=np.float32)}
-        Dictionary containing multipole expansions, indexed by Morton key of
-        source nodes.
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
     m2m : np.array(shape=(8, n_equivalent, n_equivalent), dtype=np.float32)
         Unscaled pre-computed M2M operators for all children. Implicitly
             indexed by order of Morton encoding from
             adaptoctree.morton.find_children.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    nequivalent_points : np.int64
     """
-    parent = morton.find_parent(key)
-    siblings = morton.find_siblings(key)
 
-    # Compute operator index
-    operator_idx = np.where(siblings == key)[0]
+    for i in numba.prange(len(keys)):
+        key = keys[i]
 
-    # Get child equivalent density
-    key_idx = key_to_index[key]
-    child_lidx = (key_idx)*nequivalent_points
-    child_ridx = (key_idx+1)*nequivalent_points
+        parent = morton.find_parent(key)
+        siblings = morton.find_siblings(key)
 
-    # Add to source data
-    parent_idx = key_to_index[parent]
-    parent_lidx = parent_idx*nequivalent_points
-    parent_ridx = (parent_idx+1)*nequivalent_points
-    multipole_expansions[parent_lidx:parent_ridx] += (
-        m2m[operator_idx][0] @ multipole_expansions[child_lidx:child_ridx]
-    )
+        # Compute operator index
+        operator_idx = np.where(siblings == key)[0]
+
+        # Get child equivalent density
+        key_idx = key_to_index[key]
+        child_lidx = (key_idx)*nequivalent_points
+        child_ridx = (key_idx+1)*nequivalent_points
+
+        # Add to source data
+        parent_idx = key_to_index[parent]
+        parent_lidx = parent_idx*nequivalent_points
+        parent_ridx = (parent_idx+1)*nequivalent_points
+        multipole_expansions[parent_lidx:parent_ridx] += (
+            m2m[operator_idx][0] @ multipole_expansions[child_lidx:child_ridx]
+        )
 
 
-# @numba.njit(cache=True)
 def m2l(
         key,
         key_to_index,
@@ -160,27 +175,30 @@ def m2l(
     -----------
     key : np.int64
         Morton key of source node.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
     depth : np.int64
         Maximum depth of the octree, used to find transfer vectors.
     v_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
         Morton keys of V list members.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points), dtype=np.float32)}
-        Dictionary containing multipole expansions, indexed by Morton key of
-        source nodes.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
-        Dictionary containing local expansions, indexed by Morton key of
-        target nodes.
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
+    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all local expansions.
     dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    nequivalent_points: np.int32
+        Number of points discretising the equivalent surface.
     ncheck_points : np.int32
         Number of points discretising the check surface.
-    scale_function : function
-        Function handle for kernel scaling.
     u : np.array(np.float32)
         Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
     s : np.array(np.float32)
         Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
     vt : np.array(np.float32)
         Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
+    hashes : np.array(dtype=np.int16)
+        Hashed transfer vectors for this level, for looking up M2L operators.
+    scale_function : function
+        Function handle for kernel scaling.
     """
 
     # Compute indices to lookup target local expansion
@@ -238,13 +256,14 @@ def l2l(
     -----------
     key : np.int64
         Morton key of source node.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
-        Dictionary containing local expansions, indexed by Morton key of
-        target nodes.
+    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all local expansions.
     l2l : np.array(shape=(8, n_check, n_check), dtype=np.float32)
         Unscaled pre-computed L2L operators for all children. Implicitly
             indexed by order of Morton encoding from
             adaptoctree.morton.find_children.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    nequivalent_points : np.int64
     """
     parent_idx = key_to_index[key]
     parent_lidx = parent_idx*nequivalent_points
@@ -298,6 +317,7 @@ def s2l(
     -----------
     key : np.int64
         Morton key of source node.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
     x_list : np.array(shape=(n_x_list, 1), dtype=np.int64)
         Morton keys of X list members.
     sources : np.array(shape=(nsources, 3), dtype=np.float32)
@@ -306,9 +326,8 @@ def s2l(
         Charge densities at source points.
     sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
         (Leaf) Morton key where corresponding (via index) source lies.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
-        Dictionary containing local expansions, indexed by Morton key of
-        target nodes.
+    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all local expansions.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
         Physical center of octree root node.
     r0 : np.float32
@@ -317,6 +336,7 @@ def s2l(
         Relative size of inner surface
     check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
         Discretised check surface.
+    nequivalent_points : np.int64
     dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float32)
     scale_function : function
         Function handle for kernel scaling.
@@ -380,6 +400,7 @@ def m2t(
     -----------
     key : np.int64
         Morton key of source node.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
     w_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
         Morton keys of W list members.
     targets : np.array(shape=(ntargets, 3), dtype=np.float32)
@@ -388,9 +409,8 @@ def m2t(
         (Leaf) Morton key where corresponding (via index) target lies.
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
-    multipole_expansions : {np.int64: np.array(shape=(nequivalent_points), dtype=np.float32)}
-        Dictionary containing multipole expansions, indexed by Morton key of
-        source nodes.
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
         Physical center of octree root node.
     r0 : np.float32
@@ -456,15 +476,15 @@ def l2t(
     -----------
     key : np.int64
         Morton key of source node.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
     targets : np.array(shape=(ntargets, 3), dtype=np.float32)
         Target coordinates.
     targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
         (Leaf) Morton key where corresponding (via index) target lies.
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
-    local_expansions : {np.int64: np.array(shape=(ncheck_points), dtype=np.float32)}
-        Dictionary containing local expansions, indexed by Morton key of
-        target nodes.
+    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all local expansions.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
         Physical center of octree root node.
     r0 : np.float32

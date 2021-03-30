@@ -1,11 +1,8 @@
 """
-Implementation of the main FMM loop.
-
-Matrix-Vector products are computed in single precision, with appropriate
-casting. However, as AdaptOctree's implementation depends on 64 bit Morton
-keys, key-handling is generally left in double precision.
+The Fmm object is responsible for data handling, calling optimised operator
+functions implemented in distinct backend submodules, as well as implementing
+the logic of the FMM loop.
 """
-from fmm.kernel import KERNELS
 import os
 import pathlib
 
@@ -16,6 +13,7 @@ import numpy as np
 import adaptoctree.morton as morton
 
 from fmm.backend import BACKEND
+from fmm.kernel import KERNELS
 
 import utils.data as data
 
@@ -27,6 +25,13 @@ WORKING_DIR = pathlib.Path(os.getcwd())
 class Fmm:
     """
     FMM class. Configure with pre-computed operators and octree.
+
+    Example Usage:
+    --------------
+    >>> exp = Fmm('test_config')
+    >>> exp.upward_pass()
+    >>> exp.downward_pass()
+    >>> # exp.run() # Run upward & downward passes together
 
     Parameters:
     -----------
@@ -88,18 +93,18 @@ class Fmm:
         self.u_lists = self.db["interaction_lists"]["u"]
         self.w_lists = self.db["interaction_lists"]["w"]
 
-        # Configure a compute backend and kernel
+        # Configure a compute backend and kernel functions
         self.kernel = self.config["kernel"]
         self.p2p_function = KERNELS[self.kernel]["p2p"]
         self.scale_function = KERNELS[self.kernel]["scale"]
         self.backend = BACKEND[self.config["backend"]]
 
-        #  Containers for results
+        # Containers for results
         self.target_potentials = np.zeros(self.ntargets, dtype=np.float32)
         self.multipole_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
         self.local_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
 
-        # Map a key to it's index in the complete tree, for looking up expansions
+        # Map keys to their index in the complete tree, for looking up expansions
         self.key_to_index = numba.typed.Dict.empty(
             key_type=numba.types.int64,
             value_type=numba.types.int64
@@ -136,15 +141,15 @@ class Fmm:
         # Post-order traversal
         for level in range(self.depth, 0, -1):
             keys = self.complete[self.complete_levels == level]
-            for idx in range(len(keys)):
-                key = keys[idx]
-                self.backend['m2m'](
-                        key=key,
-                        multipole_expansions=self.multipole_expansions,
-                        nequivalent_points=self.nequivalent_points,
-                        m2m=self.m2m,
-                        key_to_index=self.key_to_index,
-                    )
+
+            self.backend['m2m'](
+                keys=keys,
+                multipole_expansions=self.multipole_expansions,
+                nequivalent_points=self.nequivalent_points,
+                m2m=self.m2m,
+                key_to_index=self.key_to_index
+            )
+
 
     def downward_pass(self):
         """
@@ -152,12 +157,13 @@ class Fmm:
             and evaluate these at target points.
         """
 
-        # Pre-order traversal of octree
+        # Pre-order traversal
         for level in range(2, self.depth + 1):
 
-            idxs = self.complete_levels == level
+            # Keys at this level
+            keys = self.complete[self.complete_levels == level]
 
-            #  M2L operator stored in terms of its SVD components for each level
+            # M2L operator stored in terms of its SVD components for each level
             str_level = str(level)
             u = self.m2l[str_level]["u"][...]
             s = np.diag(self.m2l[str_level]["s"][...])
@@ -166,7 +172,7 @@ class Fmm:
             # Hashed transfer vectors for a given level, provide index for M2L operators
             hashes = self.m2l[str_level]["hashes"][...]
 
-            for key in self.complete[idxs]:
+            for key in keys:
 
                 idx = self.key_to_index[key]
 
