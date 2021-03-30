@@ -94,7 +94,7 @@ class Fmm:
         #  Containers for results
         self.target_potentials = np.zeros(self.ntargets, dtype=np.float32)
         self.multipole_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
-        self.local_expansions = np.zeros(self.ncheck_points*self.ncomplete, dtype=np.float32)
+        self.local_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
 
         # Map a key to it's index in the complete tree, for looking up expansions
         self.key_to_index = numba.typed.Dict.empty(
@@ -233,6 +233,7 @@ class Fmm:
             # Evaluate local expansions at targets
             self.backend['l2t'](
                 key=key,
+                key_to_index=self.key_to_index,
                 targets=self.targets,
                 targets_to_keys=self.targets_to_keys,
                 target_potentials=self.target_potentials,
@@ -241,23 +242,27 @@ class Fmm:
                 r0=self.r0,
                 alpha_outer=self.alpha_outer,
                 equivalent_surface=self.equivalent_surface,
+                nequivalent_points=self.nequivalent_points,
                 kernel=self.kernel
             )
 
             # W List interactions
-            self.backend['m2t'](
-                key=key,
-                w_list=w_list,
-                targets=self.targets,
-                targets_to_keys=self.targets_to_keys,
-                target_potentials=self.target_potentials,
-                multipole_expansions=self.multipole_expansions,
-                x0=self.x0,
-                r0=self.r0,
-                alpha_inner=self.alpha_inner,
-                equivalent_surface=self.equivalent_surface,
-                kernel=self.kernel
-            )
+            if len(w_list) > 0:
+                self.backend['m2t'](
+                    key=key,
+                    key_to_index=self.key_to_index,
+                    w_list=w_list,
+                    targets=self.targets,
+                    targets_to_keys=self.targets_to_keys,
+                    target_potentials=self.target_potentials,
+                    multipole_expansions=self.multipole_expansions,
+                    x0=self.x0,
+                    r0=self.r0,
+                    alpha_inner=self.alpha_inner,
+                    equivalent_surface=self.equivalent_surface,
+                    nequivalent_points=self.nequivalent_points,
+                    kernel=self.kernel
+                )
 
             # U List interactions
             self.backend['near_field'](
