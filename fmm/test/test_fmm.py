@@ -22,32 +22,36 @@ def test_upward_pass():
         computation for a set of source points, at a target point located
         at a distance.
     """
-    fmm = Fmm('test_config')
-    fmm.upward_pass()
+    experiment = Fmm('test_config')
+    experiment.upward_pass()
 
     upward_equivalent_surface = surface.scale_surface(
-        surf=fmm.equivalent_surface,
-        radius=fmm.r0,
+        surf=experiment.equivalent_surface,
+        radius=experiment.r0,
         level=np.int32(0),
-        center=fmm.x0,
-        alpha=fmm.alpha_inner
+        center=experiment.x0,
+        alpha=experiment.alpha_inner
     )
 
     distant_point = np.array([[1e4, 0, 0]])
 
-    kernel = fmm.config['kernel']
+    kernel = experiment.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
     direct = p2p(
-        sources=fmm.sources,
+        sources=experiment.sources,
         targets=distant_point,
-        source_densities=fmm.source_densities
+        source_densities=experiment.source_densities
     )
+
+    idx = experiment.key_to_index[0]
+    lidx = idx*experiment.nequivalent_points
+    ridx = (idx+1)*experiment.nequivalent_points
 
     equivalent = p2p(
         sources=upward_equivalent_surface,
         targets=distant_point,
-        source_densities=fmm.multipole_expansions[0]
+        source_densities=experiment.multipole_expansions[lidx:ridx]
     )
 
     assert np.allclose(direct, equivalent, rtol=RTOL)
@@ -59,33 +63,35 @@ def test_m2l():
         multipole expansions of source nodes in its V list at a local point
         within the target node.
     """
-    fmm = Fmm('test_config')
+    experiment = Fmm('test_config')
 
-    fmm.run()
+    experiment.run()
 
-    kernel = fmm.config['kernel']
+    kernel = experiment.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
-    level_2_idxs = fmm.complete_levels == 2
-    key = fmm.complete[level_2_idxs][0]
-    idx = np.where(fmm.complete == key)
-    v_list = fmm.v_lists[idx]
+    level_2_idxs = experiment.complete_levels == 2
+    key = experiment.complete[level_2_idxs][0]
+    idx = experiment.key_to_index[key]
+    target_lidx = idx*experiment.nequivalent_points
+    target_ridx = idx*experiment.nequivalent_points
+    v_list = experiment.v_lists[idx]
     v_list = v_list[v_list != -1]
 
-    target_idxs = key == fmm.targets_to_keys
-    target_coordinates = fmm.targets[target_idxs]
+    target_idxs = key == experiment.targets_to_keys
+    target_coordinates = experiment.targets[target_idxs]
 
     level = np.int32(morton.find_level(key))
-    center = morton.find_physical_center_from_key(key, fmm.x0, fmm.r0).astype(np.float32)
+    center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0).astype(np.float32)
 
-    local_expansion = fmm.local_expansions[key]
+    local_expansion = experiment.local_expansions[target_lidx:target_ridx]
 
     downward_equivalent_surface = surface.scale_surface(
-        surf=fmm.equivalent_surface,
-        radius=fmm.r0,
+        surf=experiment.equivalent_surface,
+        radius=experiment.r0,
         level=level,
         center=center,
-        alpha=fmm.alpha_outer
+        alpha=experiment.alpha_outer
     )
 
     equivalent = p2p(
@@ -99,20 +105,23 @@ def test_m2l():
     for source in v_list:
 
         source_level = np.int32(morton.find_level(source))
-        source_center = morton.find_physical_center_from_key(source, fmm.x0, fmm.r0).astype(np.float32)
+        source_center = morton.find_physical_center_from_key(source, experiment.x0, experiment.r0).astype(np.float32)
 
         upward_equivalent_surface = surface.scale_surface(
-            surf=fmm.equivalent_surface,
-            radius=fmm.r0,
+            surf=experiment.equivalent_surface,
+            radius=experiment.r0,
             level=source_level,
             center=source_center,
-            alpha=fmm.alpha_inner
+            alpha=experiment.alpha_inner
         )
 
+        source_idx = experiment.key_to_index[source]
+        source_lidx = source_idx*experiment.nequivalent_points
+        source_ridx = (source_idx+1)*experiment.nequivalent_points
         tmp = p2p(
             sources=upward_equivalent_surface,
             targets=target_coordinates,
-            source_densities=fmm.multipole_expansions[source]
+            source_densities=experiment.multipole_expansions[source_lidx:source_ridx]
         )
 
         direct += tmp
@@ -124,17 +133,17 @@ def test_fmm():
     """
     End To End Fmm Test.
     """
-    fmm = Fmm('test_config')
+    experiment = Fmm('test_config')
 
-    fmm.run()
+    experiment.run()
 
-    kernel = fmm.config['kernel']
+    kernel = experiment.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
     direct = p2p(
-        targets=fmm.targets,
-        sources=fmm.sources,
-        source_densities=fmm.source_densities
+        targets=experiment.targets,
+        sources=experiment.sources,
+        source_densities=experiment.source_densities
     )
 
-    assert np.allclose(direct, fmm.target_potentials, rtol=0.13)
+    assert np.allclose(direct, experiment.target_potentials, rtol=0.13)
