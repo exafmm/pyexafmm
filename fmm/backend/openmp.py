@@ -14,6 +14,9 @@ def l2l():
 def m2l():
     pass
 
+def s2l():
+    pass
+
 def l2t():
     pass
 

@@ -134,7 +134,7 @@ def m2m(
     )
 
 
-@numba.njit(cache=True)
+# @numba.njit(cache=True)
 def m2l(
         key,
         key_to_index,
@@ -266,7 +266,7 @@ def l2l(
             operator_idx = child == children
 
             # Compute contribution to local expansion of child from parent
-            local_expansions[child_lidx:child_ridx] += l2l[operator_idx] @ parent_equivalent_density
+            local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
 
 
 @numba.njit(cache=True)
@@ -340,16 +340,12 @@ def s2l(
     )
 
     for source in x_list:
-        source_coodinates = []
-        densities = []
+
         source_indices = sources_to_keys == source
+
         if np.any(source_indices == True):
-            source_coodinates.extend(sources[source_indices])
-            densities.extend(source_densities[source_indices])
-
-            source_coodinates = np.array(source_coodinates).astype(np.float32)
-            densities = np.array(densities).astype(np.float32)
-
+            source_coodinates = sources[source_indices]
+            densities = source_densities[source_indices]
             downward_check_potential = p2p_function(
                 sources=source_coodinates,
                 targets=downward_check_surface,
@@ -359,6 +355,7 @@ def s2l(
             local_expansions[key_lidx:key_ridx] += (scale*(dc2e_inv @ (downward_check_potential)))
 
 
+@numba.njit(cache=True)
 def m2t(
         key,
         key_to_index,
@@ -436,6 +433,7 @@ def m2t(
             )
 
 
+@numba.njit(cache=True)
 def l2t(
         key,
         key_to_index,
@@ -506,6 +504,7 @@ def l2t(
         )
 
 
+@numba.njit(cache=True)
 def near_field(
         key,
         u_list,

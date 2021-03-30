@@ -168,7 +168,7 @@ class Fmm:
 
             for key in self.complete[idxs]:
 
-                idx = self.key_to_index(key)
+                idx = self.key_to_index[key]
 
                 # V List interactions
                 v_list = self.v_lists[idx]
@@ -209,7 +209,7 @@ class Fmm:
                             r0=self.r0,
                             alpha_inner=self.alpha_inner,
                             check_surface=self.check_surface,
-                            ncheck_points=self.ncheck_points,
+                            nequivalent_points=self.nequivalent_points,
                             dc2e_inv=self.dc2e_inv,
                             scale_function=self.scale_function,
                             p2p_function=self.p2p_function
@@ -228,7 +228,7 @@ class Fmm:
         # Leaf near-field computations
         for key in self.leaves:
 
-            idx = self.key_to_index(key)
+            idx = self.key_to_index[key]
 
             w_list = self.w_lists[idx]
             w_list = w_list[w_list != -1]
