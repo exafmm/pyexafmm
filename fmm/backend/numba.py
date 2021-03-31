@@ -12,60 +12,27 @@ from fmm.parameters import DIGEST_SIZE
 
 
 @numba.njit(cache=True, parallel=True)
-def p2m(
+def prepare_p2m_data(
         leaves,
         nleaves,
-        key_to_index,
         sources,
         source_densities,
         sources_to_keys,
-        multipole_expansions,
-        nequivalent_points,
         x0,
         r0,
         alpha_outer,
         check_surface,
-        uc2e_inv,
+        ncheck_points,
         p2p_function,
         scale_function
     ):
-    """
-    P2M operator. Run over all leaves in a given tree in parallel.
 
-    Parameters:
-    -----------
-    leaves : np.array(dtype=np.int64)
-    nleaves : np.int64
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    sources : np.array(shape=(nsources, 3), dtype=np.float32)
-        Source coordinates.
-    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
-    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) source lies.
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
-        Array of all multipole expansions.
-    x0 : np.array(shape=(1, 3), dtype=np.float32)
-        Physical center of octree root node.
-    r0 : np.float32
-        Half side length of octree root node.
-    alpha_outer : np.float32
-        Relative size of outer surface
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
-        Discretised check surface.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float32)
-    scale_function : function
-        Function handle for kernel scaling.
-    p2p_function : function
-        Function handle for kernel P2P.
-    """
+    scales = np.zeros(nleaves, dtype=np.float32)
+    check_potentials = np.zeros(nleaves*ncheck_points, np.float32)
 
     for thread_idx in numba.prange(nleaves):
 
         leaf = leaves[thread_idx]
-        leaf_idx = key_to_index[leaf]
-
-        lidx = leaf_idx*nequivalent_points
-        ridx = (leaf_idx+1)*nequivalent_points
 
         # Source indices in a given leaf
         source_indices = sources_to_keys == leaf
@@ -89,15 +56,93 @@ def p2m(
             alpha=alpha_outer,
         )
 
-        scale = np.float32(scale_function(leaf_level))
-
         check_potential = p2p_function(
             targets=upward_check_surface,
             sources=leaf_sources,
             source_densities=leaf_source_densities,
         )
 
+        idx = thread_idx*ncheck_points
+        check_potentials[idx:idx+ncheck_points] += check_potential
+        scales[thread_idx] += scale_function(leaf_level)
+
+    return scales, check_potentials
+
+
+@numba.njit(cache=True, parallel=True)
+def _p2m(
+        leaves,
+        nleaves,
+        key_to_index,
+        multipole_expansions,
+        nequivalent_points,
+        ncheck_points,
+        uc2e_inv,
+        scales,
+        check_potentials
+    ):
+
+
+    for thread_idx in numba.prange(nleaves):
+
+        leaf = leaves[thread_idx]
+        leaf_idx = key_to_index[leaf]
+
+        lidx = leaf_idx*nequivalent_points
+        ridx = (leaf_idx+1)*nequivalent_points
+
+        scale = scales[thread_idx]
+        idx = thread_idx*ncheck_points
+        check_potential = check_potentials[idx:idx+ncheck_points]
         multipole_expansions[lidx:ridx] += scale*(uc2e_inv @ (check_potential))
+
+
+
+def p2m(
+        leaves,
+        key_to_index,
+        nleaves,
+        sources,
+        source_densities,
+        sources_to_keys,
+        x0,
+        r0,
+        multipole_expansions,
+        alpha_outer,
+        check_surface,
+        ncheck_points,
+        nequivalent_points,
+        uc2e_inv,
+        p2p_function,
+        scale_function
+    ):
+
+    scales, check_potentials = prepare_p2m_data(
+        leaves=leaves,
+        nleaves=nleaves,
+        sources=sources,
+        source_densities=source_densities,
+        sources_to_keys=sources_to_keys,
+        x0=x0,
+        r0=r0,
+        alpha_outer=alpha_outer,
+        check_surface=check_surface,
+        ncheck_points=ncheck_points,
+        p2p_function=p2p_function,
+        scale_function=scale_function
+    )
+
+    _p2m(
+        leaves=leaves,
+        nleaves=nleaves,
+        key_to_index=key_to_index,
+        multipole_expansions=multipole_expansions,
+        nequivalent_points=nequivalent_points,
+        ncheck_points=ncheck_points,
+        uc2e_inv=uc2e_inv,
+        scales=scales,
+        check_potentials=check_potentials
+    )
 
 
 @numba.njit(cache=True)
