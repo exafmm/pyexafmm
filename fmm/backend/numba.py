@@ -41,7 +41,7 @@ def prepare_p2m_data(
         leaf_sources = sources[source_indices]
         leaf_source_densities = source_densities[source_indices]
 
-        # # Compute center of leaf box in cartesian coordinates
+        # Compute center of leaf box in cartesian coordinates
         leaf_center = morton.find_physical_center_from_key(
             key=leaf, x0=x0, r0=r0
         )
@@ -81,7 +81,6 @@ def p2m_subroutine(
         multipole_expansions,
         check_potentials
     ):
-
 
     for thread_idx in numba.prange(nleaves):
 
@@ -171,7 +170,7 @@ def m2m(
     nequivalent_points : np.int64
     """
 
-    for i in numba.prange(len(keys)):
+    for i in range(len(keys)):
         key = keys[i]
 
         parent = morton.find_parent(key)
