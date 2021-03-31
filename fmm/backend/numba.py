@@ -70,15 +70,15 @@ def prepare_p2m_data(
 
 
 @numba.njit(cache=True, parallel=True)
-def _p2m(
+def p2m_subroutine(
         leaves,
         nleaves,
         key_to_index,
-        multipole_expansions,
         nequivalent_points,
         ncheck_points,
         uc2e_inv,
         scales,
+        multipole_expansions,
         check_potentials
     ):
 
@@ -87,15 +87,14 @@ def _p2m(
 
         leaf = leaves[thread_idx]
         leaf_idx = key_to_index[leaf]
-
         lidx = leaf_idx*nequivalent_points
-        ridx = (leaf_idx+1)*nequivalent_points
+        ridx = lidx+nequivalent_points
 
         scale = scales[thread_idx]
+
         idx = thread_idx*ncheck_points
         check_potential = check_potentials[idx:idx+ncheck_points]
         multipole_expansions[lidx:ridx] += scale*(uc2e_inv @ (check_potential))
-
 
 
 def p2m(
@@ -132,15 +131,15 @@ def p2m(
         scale_function=scale_function
     )
 
-    _p2m(
+    p2m_subroutine(
         leaves=leaves,
         nleaves=nleaves,
         key_to_index=key_to_index,
-        multipole_expansions=multipole_expansions,
         nequivalent_points=nequivalent_points,
         ncheck_points=ncheck_points,
         uc2e_inv=uc2e_inv,
         scales=scales,
+        multipole_expansions=multipole_expansions,
         check_potentials=check_potentials
     )
 
