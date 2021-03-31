@@ -99,18 +99,18 @@ def p2m_subroutine(
 
 def p2m(
         leaves,
-        key_to_index,
         nleaves,
+        key_to_index,
         sources,
         source_densities,
         sources_to_keys,
+        multipole_expansions,
+        nequivalent_points,
         x0,
         r0,
-        multipole_expansions,
         alpha_outer,
         check_surface,
         ncheck_points,
-        nequivalent_points,
         uc2e_inv,
         p2p_function,
         scale_function

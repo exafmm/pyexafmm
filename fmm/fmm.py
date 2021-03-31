@@ -133,6 +133,7 @@ class Fmm:
                 r0=self.r0,
                 alpha_outer=self.alpha_outer,
                 check_surface=self.check_surface,
+                ncheck_points=self.ncheck_points,
                 uc2e_inv=self.uc2e_inv,
                 p2p_function=self.p2p_function,
                 scale_function=self.scale_function
