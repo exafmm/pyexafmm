@@ -194,58 +194,71 @@ def m2m(
         )
 
 
-@numba.njit(cache=True, parallel=False)
+@numba.njit(cache=True, parallel=True)
 def m2l(
-        key,
+        keys,
         key_to_index,
-        v_list,
+        v_lists,
         multipole_expansions,
         local_expansions,
         dc2e_inv,
         nequivalent_points,
+        ncheck_points,
         u,
         s,
         vt,
+        hashes,
         scale_function,
         depth,
-        hashes,
-        ncheck_points
     ):
-    # Compute indices to lookup target local expansion
-    target_idx = key_to_index[key]
-    target_lidx = target_idx*nequivalent_points
-    target_ridx = (target_idx+1)*nequivalent_points
 
-    level = morton.find_level(key)
-    scale = np.float32(scale_function(level))
+    for i in numba.prange(len(keys)):
 
-    # Compute the hasehes of transfer vectors in the target's V List.
-    transfer_vectors = morton.find_transfer_vectors(key, v_list, depth)
+        # Pick out key
+        key = keys[i]
 
-    # Use the hashes to compute the index of the M2L Gram matrix at this level
-    m2l_lidxs = np.zeros(len(v_list), np.int32)
-    m2l_ridxs = np.zeros(len(v_list), np.int32)
+        # Compute indices to lookup target local expansion
+        target_idx = key_to_index[key]
 
-    for i in range(len(transfer_vectors)):
-        hash_vector = deterministic_checksum(transfer_vectors[i])
-        m2l_idx = np.where(hash_vector == hashes)[0][0]
-        m2l_lidxs[i] += m2l_idx*ncheck_points
-        m2l_ridxs[i] += (m2l_idx+1)*ncheck_points
+        # Pick out V list
+        v_list = v_lists[target_idx]
+        v_list = v_list[v_list != -1]
 
-    for idx in numba.prange(len(v_list)):
-        # Find source densities for this source
-        source = v_list[idx]
+        if len(v_list) > 0:
+            target_lidx = target_idx*nequivalent_points
+            target_ridx = (target_idx+1)*nequivalent_points
 
-        # Pick out compressed right singular vector for this M2L gram matrix
-        u_sub = u[m2l_lidxs[idx]:m2l_ridxs[idx]]
 
-        # Compute indices to lookup source multipole expansions
-        source_idx = key_to_index[source]
-        source_lidx = source_idx*nequivalent_points
-        source_ridx = (source_idx+1)*nequivalent_points
+            level = morton.find_level(key)
+            scale = np.float32(scale_function(level))
 
-        # Compute contribution from source, to the local expansion
-        local_expansions[target_lidx:target_ridx] += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[source_lidx:source_ridx]))))
+            # Compute the hasehes of transfer vectors in the target's V List.
+            transfer_vectors = morton.find_transfer_vectors(key, v_list, depth)
+
+            # Use the hashes to compute the index of the M2L Gram matrix at this level
+            m2l_lidxs = np.zeros(len(v_list), np.int32)
+            m2l_ridxs = np.zeros(len(v_list), np.int32)
+
+            for j in range(len(transfer_vectors)):
+                hash_vector = deterministic_checksum(transfer_vectors[j])
+                m2l_idx = np.where(hash_vector == hashes)[0][0]
+                m2l_lidxs[j] += m2l_idx*ncheck_points
+                m2l_ridxs[j] += (m2l_idx+1)*ncheck_points
+
+            for idx in range(len(v_list)):
+                # Find source densities for this source
+                source = v_list[idx]
+
+                # Pick out compressed right singular vector for this M2L gram matrix
+                u_sub = u[m2l_lidxs[idx]:m2l_ridxs[idx]]
+
+                # Compute indices to lookup source multipole expansions
+                source_idx = key_to_index[source]
+                source_lidx = source_idx*nequivalent_points
+                source_ridx = (source_idx+1)*nequivalent_points
+
+                # Compute contribution from source, to the local expansion
+                local_expansions[target_lidx:target_ridx] += scale*(dc2e_inv @ (u_sub @ (s @ (vt @ multipole_expansions[source_lidx:source_ridx]))))
 
 
 @numba.njit(cache=True)

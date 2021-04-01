@@ -88,7 +88,7 @@ class Fmm:
         self.l2l = self.db["l2l"][...]
 
         # Load interaction lists
-        self.v_lists = self.db["interaction_lists"]["v"]
+        self.v_lists = self.db["interaction_lists"]["v"][...]
         self.x_lists = self.db["interaction_lists"]["x"]
         self.u_lists = self.db["interaction_lists"]["u"]
         self.w_lists = self.db["interaction_lists"]["w"]
@@ -173,31 +173,27 @@ class Fmm:
             # Hashed transfer vectors for a given level, provide index for M2L operators
             hashes = self.m2l[str_level]["hashes"][...]
 
+            # V List interactions
+            self.backend['m2l'](
+                    keys=keys,
+                    key_to_index=self.key_to_index,
+                    v_lists=self.v_lists,
+                    multipole_expansions=self.multipole_expansions,
+                    local_expansions=self.local_expansions,
+                    dc2e_inv=self.dc2e_inv,
+                    nequivalent_points=self.nequivalent_points,
+                    ncheck_points=self.ncheck_points,
+                    u=u,
+                    s=s,
+                    vt=vt,
+                    hashes=hashes,
+                    scale_function=self.scale_function,
+                    depth=self.depth,
+                )
+
             for key in keys:
 
                 idx = self.key_to_index[key]
-
-                # V List interactions
-                v_list = self.v_lists[idx]
-                v_list = v_list[v_list != -1]
-
-                if len(v_list) > 0:
-                    self.backend['m2l'](
-                            key=key,
-                            key_to_index=self.key_to_index,
-                            depth=self.depth,
-                            v_list=v_list,
-                            multipole_expansions=self.multipole_expansions,
-                            local_expansions=self.local_expansions,
-                            dc2e_inv=self.dc2e_inv,
-                            nequivalent_points=self.nequivalent_points,
-                            ncheck_points=self.ncheck_points,
-                            u=u,
-                            s=s,
-                            vt=vt,
-                            hashes=hashes,
-                            scale_function=self.scale_function
-                        )
 
                 # X List interactions
                 x_list = self.x_lists[idx]
