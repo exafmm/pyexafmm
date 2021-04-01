@@ -16,7 +16,6 @@ import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
 import fmm.surface as surface
-from fmm.parameters import DIGEST_SIZE
 
 import utils.data as data
 import utils.time
@@ -31,7 +30,7 @@ TPB = BLOCK_HEIGHT
 
 def compress_m2l_gram_matrix(
         level, x0, r0, depth, alpha_inner, check_surface,
-        equivalent_surface, k, implicit_gram_matrix, digest_size=DIGEST_SIZE
+        equivalent_surface, k, implicit_gram_matrix
     ):
     """
     Compute compressed representation of unique Gram matrices for targets and
@@ -75,7 +74,7 @@ def compress_m2l_gram_matrix(
         transfer vectors.
     """
     sources, targets, hashes = tree.find_unique_v_list_interactions(
-        level, x0, r0, depth, digest_size=digest_size
+        level=level, x0=x0, r0=r0, depth=depth
     )
 
     n_targets_per_node = len(check_surface)

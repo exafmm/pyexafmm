@@ -5,7 +5,7 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
-from adaptoctree.utils import deterministic_hash
+from adaptoctree.utils import deterministic_checksum
 
 import fmm.surface as surface
 from fmm.parameters import DIGEST_SIZE
@@ -96,6 +96,7 @@ def p2m_subroutine(
         multipole_expansions[lidx:ridx] += scale*(uc2e_inv @ (check_potential))
 
 
+@numba.njit(cache=True)
 def p2m(
         leaves,
         nleaves,
@@ -193,57 +194,23 @@ def m2m(
         )
 
 
+@numba.njit(cache=True, parallel=False)
 def m2l(
         key,
         key_to_index,
-        depth,
         v_list,
         multipole_expansions,
         local_expansions,
         dc2e_inv,
         nequivalent_points,
-        ncheck_points,
         u,
         s,
         vt,
+        scale_function,
+        depth,
         hashes,
-        scale_function
+        ncheck_points
     ):
-    """
-    M2L operator. Translate the multipole expansion of all source nodes in a
-        given target node's V list, into a local expansion centered on the
-        target node.
-
-    Parameters:
-    -----------
-    key : np.int64
-        Morton key of source node.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    depth : np.int64
-        Maximum depth of the octree, used to find transfer vectors.
-    v_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
-        Morton keys of V list members.
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
-        Array of all multipole expansions.
-    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
-        Array of all local expansions.
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
-    nequivalent_points: np.int32
-        Number of points discretising the equivalent surface.
-    ncheck_points : np.int32
-        Number of points discretising the check surface.
-    u : np.array(np.float32)
-        Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    s : np.array(np.float32)
-        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
-    vt : np.array(np.float32)
-        Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    hashes : np.array(dtype=np.int16)
-        Hashed transfer vectors for this level, for looking up M2L operators.
-    scale_function : function
-        Function handle for kernel scaling.
-    """
-
     # Compute indices to lookup target local expansion
     target_idx = key_to_index[key]
     target_lidx = target_idx*nequivalent_points
@@ -254,20 +221,18 @@ def m2l(
 
     # Compute the hasehes of transfer vectors in the target's V List.
     transfer_vectors = morton.find_transfer_vectors(key, v_list, depth)
-    hash_vectors = np.zeros(len(transfer_vectors), dtype=np.int64)
 
-    # Use the hashes to compute the index of the M2L Gram matrix at this
-    # level
+    # Use the hashes to compute the index of the M2L Gram matrix at this level
     m2l_lidxs = np.zeros(len(v_list), np.int32)
     m2l_ridxs = np.zeros(len(v_list), np.int32)
 
     for i in range(len(transfer_vectors)):
-        hash_vectors[i] = deterministic_hash(transfer_vectors[i], digest_size=DIGEST_SIZE)
-        m2l_idx = np.where(hash_vectors[i] == hashes)[0][0]
-        m2l_lidxs[i] = m2l_idx*ncheck_points
-        m2l_ridxs[i] = (m2l_idx+1)*ncheck_points
+        hash_vector = deterministic_checksum(transfer_vectors[i])
+        m2l_idx = np.where(hash_vector == hashes)[0][0]
+        m2l_lidxs[i] += m2l_idx*ncheck_points
+        m2l_ridxs[i] += (m2l_idx+1)*ncheck_points
 
-    for idx in range(len(v_list)):
+    for idx in numba.prange(len(v_list)):
         # Find source densities for this source
         source = v_list[idx]
 
