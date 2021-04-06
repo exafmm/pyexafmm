@@ -69,6 +69,7 @@ class Fmm:
         self.r0 = np.float32(self.db["octree"]["r0"][...][0])
         self.depth = self.db["octree"]["depth"][...][0]
         self.leaves = self.db["octree"]["keys"][...]
+        self.leaf_indices = np.zeros_like(self.leaves)
         self.nleaves = len(self.leaves)
         self.complete = self.db["octree"]["complete"][...]
         self.ncomplete = len(self.complete)
@@ -97,6 +98,7 @@ class Fmm:
         # Configure a compute backend and kernel functions
         self.kernel = self.config["kernel"]
         self.p2p_function = KERNELS[self.kernel]["p2p"]
+        self.p2p_parallel_function = KERNELS[self.kernel]["p2p_parallel"]
         self.scale_function = KERNELS[self.kernel]["scale"]
         self.backend = BACKEND[self.config["backend"]]
 
@@ -113,6 +115,10 @@ class Fmm:
 
         for i, k in enumerate(self.complete):
             self.key_to_index[k] = i
+
+        # Map leaves to index
+        # for i, leaf in self.leaves:
+        #     self.leaf_indices[i] = self.key_to_index[leaf]
 
     def upward_pass(self):
         """

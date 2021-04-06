@@ -160,7 +160,6 @@ def test_m2l(db):
     kernel = CONFIG["kernel"]
     p2p_function = KERNELS[kernel]["p2p"]
 
-
     # Pick a target key with a non-empty interaction list
     complete = db['octree']['complete']
     v_lists = db['interaction_lists']['v']
@@ -215,7 +214,7 @@ def test_m2l(db):
 
         source_key = v_list[i]
         transfer_vec = morton.find_transfer_vector(target_key, source_key, depth)
-        hash_vec = utils.deterministic_hash(transfer_vec, 5)
+        hash_vec = utils.deterministic_checksum(transfer_vec)
         m2l_idx = np.where(hash_vec == hashes)[0][0]
         m2l_lidx = (m2l_idx)*npoints_check
         m2l_ridx = (m2l_idx+1)*npoints_check

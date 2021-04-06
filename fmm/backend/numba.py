@@ -214,7 +214,7 @@ def m2l(
 
     for i in range(len(keys)):
 
-        # Pick out key
+        # Pick out target key
         key = keys[i]
 
         # Compute indices to lookup target local expansion
@@ -547,6 +547,24 @@ def l2t(
         )
 
 
+
+@numba.njit(cache=True)
+def prepare_u_list_data(sources, source_densities, sources_to_keys, u_list):
+
+    source_indices = u_list[0] == sources_to_keys
+
+    filtered_sources = sources[source_indices]
+    filtered_densities = source_densities[source_indices]
+
+    for source in u_list[1:]:
+        source_indices = sources_to_keys == source
+
+        filtered_sources = np.vstack((filtered_sources, sources[source_indices]))
+        filtered_densities = np.hstack((filtered_densities, source_densities[source_indices]))
+
+    return filtered_sources, filtered_densities
+
+
 @numba.njit(cache=True)
 def near_field(
         key,
@@ -590,18 +608,26 @@ def near_field(
 
         target_coordinates = targets[target_indices]
 
-        # Sources in U list
-        for source in u_list:
+        # print('Number of targets, ', len(target_coordinates))
 
-            source_indices = sources_to_keys == source
-            source_coordinates = sources[source_indices]
-            densities = source_densities[source_indices]
+        filtered_coordinates, filtered_densities = prepare_u_list_data(
+            sources, source_densities, sources_to_keys, u_list
+        )
+        # print('number of sources', len(filtered_densities))
+        # print()
 
-            target_potentials[target_indices] += p2p_function(
-                sources=source_coordinates,
-                targets=target_coordinates,
-                source_densities=densities
-            )
+        # # Sources in U list
+        # for source in u_list:
+
+        #     source_indices = sources_to_keys == source
+        #     source_coordinates = sources[source_indices]
+        #     densities = source_densities[source_indices]
+
+        target_potentials[target_indices] += p2p_function(
+            sources=filtered_coordinates,
+            targets=target_coordinates,
+            source_densities=filtered_densities
+        )
 
         # Sources in target node
         local_source_indices = sources_to_keys == key

@@ -10,6 +10,7 @@ import numpy as np
 # GPU Kernel parameters
 BLOCK_WIDTH = 32
 BLOCK_HEIGHT = 1024
+M_INV_4PI = 1.0 / (4*np.pi)
 
 TOL = 1e-6
 
@@ -51,7 +52,7 @@ def laplace_cpu(x, y):
     np.float32
     """
     diff = (x[0]-y[0])**2+(x[1]-y[1])**2+(x[2]-y[2])**2
-    tmp = np.reciprocal(4*np.pi*np.sqrt(diff))
+    tmp = np.reciprocal(np.sqrt(diff))*M_INV_4PI
     res = tmp if tmp < np.inf else 0.
     return res
 
@@ -292,8 +293,8 @@ def laplace_implicit_gram_matrix_blocked(
     cuda.atomic.add(result, (threadyInd, idx), row_sum)
 
 
-@numba.jit(cache=True)
-def laplace_p2p(sources, targets, source_densities):
+@numba.njit(cache=True, parallel=False, fastmath=True, error_model="numpy")
+def laplace_p2p_serial(sources, targets, source_densities):
     """
     Numba P2P operator for Laplace kernel.
 
@@ -329,8 +330,45 @@ def laplace_p2p(sources, targets, source_densities):
     return target_densities
 
 
-@numba.njit(cache=True)
-def laplace_gram_matrix(sources, targets):
+@numba.njit(cache=True, parallel=True, fastmath=True, error_model="numpy")
+def laplace_p2p_parallel(sources, targets, source_densities):
+    """
+    Numba P2P operator for Laplace kernel.
+
+    Parameters:
+    -----------
+    sources : np.array(shape=(n, 3), dtype=np.float32)
+        The n source locations on a surface.
+    targets : np.array(shape=(m, 3), dtype=np.float32)
+        The m target locations on a surface.
+    source_densities : np.array(shape=(m,), dtype=np.float32)
+        Charge densities at source coordinates.
+
+    Returns:
+    --------
+    np.array(shape=(ntargets), dtype=np.float32)
+        Target potential densities.
+    """
+    ntargets = len(targets)
+    nsources = len(sources)
+
+    target_densities = np.zeros(shape=(ntargets), dtype=np.float32)
+
+    for i in numba.prange(ntargets):
+        target = targets[i]
+        potential = 0
+        for j in range(nsources):
+            source = sources[j]
+            source_density = source_densities[j]
+            potential += laplace_cpu(target, source)*source_density
+
+        target_densities[i] = potential
+
+    return target_densities
+
+
+@numba.njit(cache=True, parallel=False, fastmath=True, error_model="numpy")
+def laplace_gram_matrix_serial(sources, targets):
     """
     Dense Numba P2P operator for Laplace kernel.
 
@@ -355,7 +393,38 @@ def laplace_gram_matrix(sources, targets):
         target = targets[row_idx]
         for col_idx in range(n_sources):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] = laplace_cpu(target, source)
+            matrix[row_idx][col_idx] += laplace_cpu(target, source)
+
+    return matrix
+
+
+@numba.njit(cache=True, parallel=True, fastmath=True, error_model="numpy")
+def laplace_gram_matrix_parallel(sources, targets):
+    """
+    Dense Numba P2P operator for Laplace kernel.
+
+    Parameters:
+    -----------
+    sources : np.array(shape=(n, 3), dtype=np.float32)
+        The n source locations on a surface.
+    targets : np.array(shape=(m, 3), dtype=np.float32)
+        The m target locations on a surface.
+
+    Returns:
+    --------
+    np.array(shape=(m, n), dtype=np.float32)
+        The Gram matrix.
+    """
+    n_sources = len(sources)
+    n_targets = len(targets)
+
+    matrix = np.zeros(shape=(n_targets, n_sources), dtype=np.float32)
+
+    for row_idx in numba.prange(n_targets):
+        target = targets[row_idx]
+        for col_idx in range(n_sources):
+            source = sources[col_idx]
+            matrix[row_idx][col_idx] += laplace_cpu(target, source)
 
     return matrix
 
@@ -365,9 +434,11 @@ KERNELS = {
         'eval': laplace_cpu,
         'scale': laplace_scale,
         'cuda': laplace_cuda,
-        'dense_gram': laplace_gram_matrix,
+        'dense_gram': laplace_gram_matrix_serial,
+        'dense_gram_parallel': laplace_gram_matrix_parallel,
         'implicit_gram': laplace_implicit_gram_matrix,
         'implicit_gram_blocked': laplace_implicit_gram_matrix_blocked,
-        'p2p': laplace_p2p
+        'p2p': laplace_p2p_serial,
+        'p2p_parallel': laplace_p2p_parallel
     },
 }

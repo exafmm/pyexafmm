@@ -40,9 +40,9 @@ def test_laplace_cpu(x, y, expected):
         )
     ]
 )
-def test_laplace_p2p(sources, targets, source_densities):
+def test_laplace_p2p_serial(sources, targets, source_densities):
 
-    result = kernel.laplace_p2p(
+    result = kernel.laplace_p2p_serial(
         sources,
         targets,
         source_densities
@@ -69,9 +69,9 @@ def test_laplace_p2p(sources, targets, source_densities):
         )
     ]
 )
-def test_laplace_gram_matrix(sources, targets):
+def test_laplace_gram_matrix_serial(sources, targets):
 
-    K = kernel.laplace_gram_matrix(sources, targets)
+    K = kernel.laplace_gram_matrix_serial(sources, targets)
 
     # Check that it's the correct shape
     assert len(K[0]) == 12
