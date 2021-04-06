@@ -3,6 +3,7 @@ The Fmm object is responsible for data handling, calling optimised operator
 functions implemented in distinct backend submodules, as well as implementing
 the logic of the FMM loop.
 """
+import time
 import os
 import pathlib
 
@@ -119,6 +120,7 @@ class Fmm:
             nodes.
         """
 
+        start = time.time()
         # Form multipole expansions for all leaf nodes
         self.backend['p2m'](
                 leaves=self.leaves,
@@ -139,6 +141,9 @@ class Fmm:
                 scale_function=self.scale_function
             )
 
+        print('p2m time: ', time.time()-start)
+
+        start = time.time()
         # Post-order traversal
         for level in range(self.depth, 0, -1):
             keys = self.complete[self.complete_levels == level]
@@ -151,12 +156,16 @@ class Fmm:
                 key_to_index=self.key_to_index
             )
 
+        print('m2m time ', time.time()-start)
+
 
     def downward_pass(self):
         """
         Pre-order traversal of tree. Compute local expansions for all nodes,
             and evaluate these at target points.
         """
+
+        local_start = time.time()
 
         # Pre-order traversal
         for level in range(2, self.depth + 1):
@@ -173,7 +182,10 @@ class Fmm:
             # Hashed transfer vectors for a given level, provide index for M2L operators
             hashes = self.m2l[str_level]["hashes"][...]
 
+            print('level', level)
             # V List interactions
+            start = time.time()
+
             self.backend['m2l'](
                     keys=keys,
                     key_to_index=self.key_to_index,
@@ -190,6 +202,9 @@ class Fmm:
                     scale_function=self.scale_function,
                     depth=self.depth,
                 )
+            print('m2l time', time.time()-start)
+
+            start = time.time()
 
             for key in keys:
 
@@ -228,6 +243,11 @@ class Fmm:
                         nequivalent_points=self.nequivalent_points
                     )
 
+            print('l2l and s2l time', time.time()-start)
+
+        print('total local transfer time ', time.time()-local_start)
+
+        start = time.time()
         # Leaf near-field computations
         for key in self.leaves:
 
@@ -286,7 +306,12 @@ class Fmm:
                 p2p_function=self.p2p_function
             )
 
+        print('near field time ', time.time()-start)
+
     def run(self):
         """Run full algorithm"""
+        start = time.time()
         self.upward_pass()
         self.downward_pass()
+        print()
+        print('total time', time.time()-start)
