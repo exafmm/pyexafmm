@@ -400,11 +400,10 @@ def s2l(
 
 @numba.njit(cache=True)
 def m2t(
-        key,
         key_to_index,
         w_list,
-        targets,
-        targets_to_keys,
+        target_coordinates,
+        target_indices,
         target_potentials,
         multipole_expansions,
         x0,
@@ -446,42 +445,36 @@ def m2t(
         Function handle for kernel P2P.
     """
 
-    # Find target particles
-    target_indices = targets_to_keys == key
+    for source in w_list:
 
-    if (len(target_indices) > 0):
-        target_coordinates = targets[target_indices]
+        source_idx = key_to_index[source]
+        source_lidx = source_idx*nequivalent_points
+        source_ridx = (source_idx+1)*nequivalent_points
 
-        for source in w_list:
+        source_level = np.int32(morton.find_level(source))
+        source_center = morton.find_physical_center_from_key(source, x0, r0).astype(np.float32)
 
-            source_idx = key_to_index[source]
-            source_lidx = source_idx*nequivalent_points
-            source_ridx = (source_idx+1)*nequivalent_points
+        upward_equivalent_surface = surface.scale_surface(
+            surf=equivalent_surface,
+            radius=r0,
+            level=source_level,
+            center=source_center,
+            alpha=alpha_inner
+        )
 
-            source_level = np.int32(morton.find_level(source))
-            source_center = morton.find_physical_center_from_key(source, x0, r0).astype(np.float32)
-
-            upward_equivalent_surface = surface.scale_surface(
-                surf=equivalent_surface,
-                radius=r0,
-                level=source_level,
-                center=source_center,
-                alpha=alpha_inner
-            )
-
-            target_potentials[target_indices] += p2p_function(
-                sources=upward_equivalent_surface,
-                targets=target_coordinates,
-                source_densities=multipole_expansions[source_lidx:source_ridx]
-            )
+        target_potentials[target_indices] += p2p_function(
+            sources=upward_equivalent_surface,
+            targets=target_coordinates,
+            source_densities=multipole_expansions[source_lidx:source_ridx]
+        )
 
 
 @numba.njit(cache=True)
 def l2t(
         key,
         key_to_index,
-        targets,
-        targets_to_keys,
+        target_coordinates,
+        target_indices,
         target_potentials,
         local_expansions,
         x0,
@@ -519,48 +512,39 @@ def l2t(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    target_idxs = key == targets_to_keys
 
-    if len(target_idxs) > 0:
+    source_idx = key_to_index[key]
+    source_lidx = (source_idx)*nequivalent_points
+    source_ridx = (source_idx+1)*nequivalent_points
 
-        source_idx = key_to_index[key]
-        source_lidx = (source_idx)*nequivalent_points
-        source_ridx = (source_idx+1)*nequivalent_points
+    level = np.int32(morton.find_level(key))
+    center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
 
-        level = np.int32(morton.find_level(key))
-        center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
+    downward_equivalent_surface = surface.scale_surface(
+        equivalent_surface,
+        r0,
+        level,
+        center,
+        alpha_outer
+    )
 
-        downward_equivalent_surface = surface.scale_surface(
-            equivalent_surface,
-            r0,
-            level,
-            center,
-            alpha_outer
-        )
-
-        target_coordinates = targets[target_idxs]
-
-        target_potentials[target_idxs] += p2p_function(
-            sources=downward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=local_expansions[source_lidx:source_ridx]
-        )
-
+    target_potentials[target_indices] += p2p_function(
+        sources=downward_equivalent_surface,
+        targets=target_coordinates,
+        source_densities=local_expansions[source_lidx:source_ridx]
+    )
 
 
 @numba.njit(cache=True)
 def prepare_u_list_data(sources, source_densities, sources_to_keys, u_list):
 
-    source_indices = u_list[0] == sources_to_keys
+    source_indices = np.zeros_like(sources_to_keys, np.int64)
 
-    filtered_sources = sources[source_indices]
-    filtered_densities = source_densities[source_indices]
+    for source in u_list:
+        source_indices |= (source == sources_to_keys)
 
-    for source in u_list[1:]:
-        source_indices = sources_to_keys == source
-
-        filtered_sources = np.vstack((filtered_sources, sources[source_indices]))
-        filtered_densities = np.hstack((filtered_densities, source_densities[source_indices]))
+    filtered_sources = sources[source_indices == 1]
+    filtered_densities = source_densities[source_indices == 1]
 
     return filtered_sources, filtered_densities
 
@@ -569,9 +553,9 @@ def prepare_u_list_data(sources, source_densities, sources_to_keys, u_list):
 def near_field(
         key,
         u_list,
-        targets,
-        targets_to_keys,
+        target_coordinates,
         target_potentials,
+        target_indices,
         sources,
         source_densities,
         sources_to_keys,
@@ -602,40 +586,27 @@ def near_field(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    target_indices = targets_to_keys == key
 
-    if len(target_indices) > 0:
+    # print('Number of targets, ', len(target_coordinates))
 
-        target_coordinates = targets[target_indices]
+    filtered_coordinates, filtered_densities = prepare_u_list_data(
+        sources, source_densities, sources_to_keys, u_list
+    )
+    # print('number of sources', len(filtered_densities))
 
-        # print('Number of targets, ', len(target_coordinates))
+    target_potentials[target_indices] += p2p_function(
+        sources=filtered_coordinates,
+        targets=target_coordinates,
+        source_densities=filtered_densities
+    )
 
-        filtered_coordinates, filtered_densities = prepare_u_list_data(
-            sources, source_densities, sources_to_keys, u_list
-        )
-        # print('number of sources', len(filtered_densities))
-        # print()
+    # Sources in target node
+    local_source_indices = sources_to_keys == key
+    local_source_coordinates = sources[local_source_indices]
+    local_densities = source_densities[local_source_indices]
 
-        # # Sources in U list
-        # for source in u_list:
-
-        #     source_indices = sources_to_keys == source
-        #     source_coordinates = sources[source_indices]
-        #     densities = source_densities[source_indices]
-
-        target_potentials[target_indices] += p2p_function(
-            sources=filtered_coordinates,
-            targets=target_coordinates,
-            source_densities=filtered_densities
-        )
-
-        # Sources in target node
-        local_source_indices = sources_to_keys == key
-        local_source_coordinates = sources[local_source_indices]
-        local_densities = source_densities[local_source_indices]
-
-        target_potentials[target_indices] += p2p_function(
-            sources=local_source_coordinates,
-            targets=target_coordinates,
-            source_densities=local_densities
-        )
+    target_potentials[target_indices] += p2p_function(
+        sources=local_source_coordinates,
+        targets=target_coordinates,
+        source_densities=local_densities
+    )

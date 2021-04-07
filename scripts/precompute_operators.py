@@ -261,6 +261,7 @@ def compute_octree(config, db):
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
 
+
     if 'octree' in db.keys():
         del db['octree']['keys']
         del db['octree']['depth']
@@ -278,10 +279,17 @@ def compute_octree(config, db):
             node = str(complete[i])
             del db['key_to_index'][node]
 
+        for i in range(len(octree)):
+            node = str(octree[i])
+            del db['key_to_sources'][node]
+            del db['key_to_targets'][node]
+
     else:
         db.create_group('octree')
         db.create_group('interaction_lists')
         db.create_group('key_to_index')
+        db.create_group('key_to_sources')
+        db.create_group('key_to_targets')
 
     db['octree']['keys'] = octree
     db['octree']['depth'] = np.array([depth], np.int32)
@@ -295,6 +303,11 @@ def compute_octree(config, db):
     for i in range(len(complete)):
         node = str(complete[i])
         db['key_to_index'][node] = np.array([i])
+
+    for i in range(len(octree)):
+        node = str(octree[i])
+        db['key_to_sources'][node] = sources[sources_to_keys == octree[i]]
+        db['key_to_targets'][node] = targets[targets_to_keys == octree[i]]
 
     db['interaction_lists']['u'] = u
     db['interaction_lists']['x'] = x

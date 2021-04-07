@@ -92,7 +92,7 @@ class Fmm:
         # Load interaction lists
         self.v_lists = self.db["interaction_lists"]["v"][...]
         self.x_lists = self.db["interaction_lists"]["x"]
-        self.u_lists = self.db["interaction_lists"]["u"]
+        self.u_lists = self.db["interaction_lists"]["u"][...]
         self.w_lists = self.db["interaction_lists"]["w"]
 
         # Configure a compute backend and kernel functions
@@ -116,9 +116,20 @@ class Fmm:
         for i, k in enumerate(self.complete):
             self.key_to_index[k] = i
 
-        # Map leaves to index
-        # for i, leaf in self.leaves:
-        #     self.leaf_indices[i] = self.key_to_index[leaf]
+        # Create dictionaries for O(1) access to points in a given node
+        self.key_to_sources = numba.typed.Dict.empty(
+            key_type=numba.types.int64,
+            value_type=numba.types.float64[:,:]
+        )
+
+        self.key_to_targets = numba.typed.Dict.empty(
+            key_type=numba.types.int64,
+            value_type=numba.types.float64[:,:]
+        )
+
+        for i, k in enumerate(self.leaves):
+            self.key_to_targets[k] = self.db['key_to_targets'][str(k)][...]
+            self.key_to_sources[k] = self.db['key_to_sources'][str(k)][...]
 
     def upward_pass(self):
         """
@@ -255,62 +266,66 @@ class Fmm:
 
         start = time.time()
         # Leaf near-field computations
+        print('starting near field computations')
         for key in self.leaves:
 
             idx = self.key_to_index[key]
 
-            w_list = self.w_lists[idx]
-            w_list = w_list[w_list != -1]
+            target_indices = self.targets_to_keys == key
 
-            u_list = self.u_lists[idx]
-            u_list = u_list[u_list != -1]
+            if len(target_indices) > 0:
+                target_coordinates = self.key_to_targets[key]
 
-            # Evaluate local expansions at targets
-            self.backend['l2t'](
-                key=key,
-                key_to_index=self.key_to_index,
-                targets=self.targets,
-                targets_to_keys=self.targets_to_keys,
-                target_potentials=self.target_potentials,
-                local_expansions=self.local_expansions,
-                x0=self.x0,
-                r0=self.r0,
-                alpha_outer=self.alpha_outer,
-                equivalent_surface=self.equivalent_surface,
-                nequivalent_points=self.nequivalent_points,
-                p2p_function=self.p2p_function
-            )
+                u_list = self.u_lists[idx]
+                u_list = u_list[u_list != -1]
 
-            # W List interactions
-            if len(w_list) > 0:
-                self.backend['m2t'](
+                w_list = self.w_lists[idx]
+                w_list = w_list[w_list != -1]
+
+                # W List interactions
+                # self.backend['m2t'](
+                #     key_to_index=self.key_to_index,
+                #     w_list=w_list,
+                #     target_coordinates=target_coordinates,
+                #     target_indices=target_indices,
+                #     target_potentials=self.target_potentials,
+                #     multipole_expansions=self.multipole_expansions,
+                #     x0=self.x0,
+                #     r0=self.r0,
+                #     alpha_inner=self.alpha_inner,
+                #     equivalent_surface=self.equivalent_surface,
+                #     nequivalent_points=self.nequivalent_points,
+                #     p2p_function=self.p2p_function
+                # )
+
+                # # Evaluate local expansions at targets
+                # self.backend['l2t'](
+                #     key=key,
+                #     key_to_index=self.key_to_index,
+                #     target_coordinates=target_coordinates,
+                #     target_indices=target_indices,
+                #     target_potentials=self.target_potentials,
+                #     local_expansions=self.local_expansions,
+                #     x0=self.x0,
+                #     r0=self.r0,
+                #     alpha_outer=self.alpha_outer,
+                #     equivalent_surface=self.equivalent_surface,
+                #     nequivalent_points=self.nequivalent_points,
+                #     p2p_function=self.p2p_parallel_function
+                # )
+
+                # U List interactions
+                self.backend['near_field'](
                     key=key,
-                    key_to_index=self.key_to_index,
-                    w_list=w_list,
-                    targets=self.targets,
-                    targets_to_keys=self.targets_to_keys,
+                    u_list=u_list,
+                    target_coordinates=target_coordinates,
+                    target_indices=target_indices,
                     target_potentials=self.target_potentials,
-                    multipole_expansions=self.multipole_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_inner=self.alpha_inner,
-                    equivalent_surface=self.equivalent_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    p2p_function=self.p2p_function
+                    sources=self.sources,
+                    source_densities=self.source_densities,
+                    sources_to_keys=self.sources_to_keys,
+                    p2p_function=self.p2p_parallel_function
                 )
-
-            # U List interactions
-            self.backend['near_field'](
-                key=key,
-                u_list=u_list,
-                targets=self.targets,
-                targets_to_keys=self.targets_to_keys,
-                target_potentials=self.target_potentials,
-                sources=self.sources,
-                source_densities=self.source_densities,
-                sources_to_keys=self.sources_to_keys,
-                p2p_function=self.p2p_function
-            )
 
         print('near field time ', time.time()-start)
 
