@@ -15,9 +15,8 @@ from fmm.parameters import DIGEST_SIZE
 def prepare_p2m_data(
         leaves,
         nleaves,
-        sources,
-        source_densities,
-        sources_to_keys,
+        key_to_sources,
+        key_to_source_densities,
         x0,
         r0,
         alpha_outer,
@@ -34,12 +33,9 @@ def prepare_p2m_data(
 
         leaf = leaves[thread_idx]
 
-        # Source indices in a given leaf
-        source_indices = sources_to_keys == leaf
-
-        # Find leaf sources, and leaf source densities
-        leaf_sources = sources[source_indices]
-        leaf_source_densities = source_densities[source_indices]
+        # Lookup leaf sources, and leaf source densities
+        leaf_sources = key_to_sources[leaf]
+        leaf_source_densities = key_to_source_densities[leaf]
 
         # Compute center of leaf box in cartesian coordinates
         leaf_center = morton.find_physical_center_from_key(
@@ -101,9 +97,8 @@ def p2m(
         leaves,
         nleaves,
         key_to_index,
-        sources,
-        source_densities,
-        sources_to_keys,
+        key_to_sources,
+        key_to_source_densities,
         multipole_expansions,
         nequivalent_points,
         x0,
@@ -119,9 +114,8 @@ def p2m(
     scales, check_potentials = prepare_p2m_data(
         leaves=leaves,
         nleaves=nleaves,
-        sources=sources,
-        source_densities=source_densities,
-        sources_to_keys=sources_to_keys,
+        key_to_sources=key_to_sources,
+        key_to_source_densities=key_to_source_densities,
         x0=x0,
         r0=r0,
         alpha_outer=alpha_outer,
@@ -316,9 +310,8 @@ def s2l(
         key,
         key_to_index,
         x_list,
-        sources,
-        source_densities,
-        sources_to_keys,
+        key_to_sources,
+        key_to_source_densities,
         local_expansions,
         x0,
         r0,
@@ -384,26 +377,24 @@ def s2l(
 
     for source in x_list:
 
-        source_indices = sources_to_keys == source
+        source_coordinates = key_to_sources[source]
+        source_densities = key_to_source_densities[source]
 
-        if np.any(source_indices == True):
-            source_coodinates = sources[source_indices]
-            densities = source_densities[source_indices]
-            downward_check_potential = p2p_function(
-                sources=source_coodinates,
-                targets=downward_check_surface,
-                source_densities=densities
-            )
+        downward_check_potential = p2p_function(
+            sources=source_coordinates,
+            targets=downward_check_surface,
+            source_densities=source_densities
+        )
 
-            local_expansions[key_lidx:key_ridx] += (scale*(dc2e_inv @ (downward_check_potential)))
+        local_expansions[key_lidx:key_ridx] += (scale*(dc2e_inv @ (downward_check_potential)))
 
 
 @numba.njit(cache=True)
 def m2t(
+        target_key,
         key_to_index,
         w_list,
         target_coordinates,
-        target_indices,
         target_potentials,
         multipole_expansions,
         x0,
@@ -462,7 +453,7 @@ def m2t(
             alpha=alpha_inner
         )
 
-        target_potentials[target_indices] += p2p_function(
+        target_potentials[target_key] += p2p_function(
             sources=upward_equivalent_surface,
             targets=target_coordinates,
             source_densities=multipole_expansions[source_lidx:source_ridx]
@@ -474,7 +465,6 @@ def l2t(
         key,
         key_to_index,
         target_coordinates,
-        target_indices,
         target_potentials,
         local_expansions,
         x0,
@@ -512,7 +502,6 @@ def l2t(
     p2p_function : function
         Function handle for kernel P2P.
     """
-
     source_idx = key_to_index[key]
     source_lidx = (source_idx)*nequivalent_points
     source_ridx = (source_idx+1)*nequivalent_points
@@ -528,7 +517,7 @@ def l2t(
         alpha_outer
     )
 
-    target_potentials[target_indices] += p2p_function(
+    target_potentials[key] += p2p_function(
         sources=downward_equivalent_surface,
         targets=target_coordinates,
         source_densities=local_expansions[source_lidx:source_ridx]
@@ -536,30 +525,74 @@ def l2t(
 
 
 @numba.njit(cache=True)
-def prepare_u_list_data(sources, source_densities, sources_to_keys, u_list):
+def prepare_u_list_data(
+        leaves,
+        key_to_targets,
+        key_to_sources,
+        key_to_source_densities,
+        key_to_index,
+        u_lists,
+        max_points,
+    ):
 
-    source_indices = np.zeros_like(sources_to_keys, np.int64)
+    sources = np.zeros((max_points*26*len(leaves), 3), np.float32)
+    source_densities = np.zeros((max_points*26*len(leaves)), np.float32)
+    targets = np.zeros((max_points*len(leaves), 3), np.float32)
+    source_index_pointer = np.zeros(len(leaves)+1, np.int64)
+    target_index_pointer = np.zeros(len(leaves)+1, np.int64)
 
-    for source in u_list:
-        source_indices |= (source == sources_to_keys)
+    source_ptr = 0
+    target_ptr = 0
+    source_index_pointer[0] = source_ptr
+    target_index_pointer[0] = target_ptr
 
-    filtered_sources = sources[source_indices == 1]
-    filtered_densities = source_densities[source_indices == 1]
+    for i in range(len(leaves)):
+        leaf = leaves[i]
 
-    return filtered_sources, filtered_densities
+        targets_at_node = key_to_targets[leaf]
+        ntargets_at_node = len(targets_at_node)
+        new_target_ptr = target_ptr+ntargets_at_node
+
+        targets[target_ptr:new_target_ptr] = targets_at_node
+        target_ptr = new_target_ptr
+
+        target_index_pointer[i+1] = target_ptr
+
+        u_list = u_lists[key_to_index[leaf]]
+        u_list = u_list[u_list != -1]
+
+        for j in range(len(u_list)):
+
+            source = u_list[j]
+            sources_at_node = key_to_sources[source]
+            nsources_at_node = len(sources_at_node)
+            source_densities_at_node = key_to_source_densities[source]
+            new_source_ptr = source_ptr+nsources_at_node
+
+            sources[source_ptr:new_source_ptr] = sources_at_node
+            source_densities[source_ptr:new_source_ptr] = source_densities_at_node
+
+            source_ptr = new_source_ptr
+
+        source_index_pointer[i+1] = source_ptr
+
+    sources = sources[source_index_pointer[0]:source_index_pointer[-1]]
+    source_densities = source_densities[source_index_pointer[0]:source_index_pointer[-1]]
+    targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
+
+    return sources, targets, source_densities, source_index_pointer, target_index_pointer
 
 
 @numba.njit(cache=True)
-def near_field(
-        key,
-        u_list,
-        target_coordinates,
-        target_potentials,
-        target_indices,
-        sources,
-        source_densities,
-        sources_to_keys,
-        p2p_function
+def near_field_u_list(
+        u_lists,
+        leaves,
+        key_to_sources,
+        key_to_targets,
+        key_to_source_densities,
+        key_to_index,
+        max_points,
+        p2p_parallel_function
     ):
     """
     Evaluate all near field particles for source nodes within a given target
@@ -589,21 +622,28 @@ def near_field(
 
     # print('Number of targets, ', len(target_coordinates))
 
-    filtered_coordinates, filtered_densities = prepare_u_list_data(
-        sources, source_densities, sources_to_keys, u_list
+    sources, targets, source_densities, source_index_pointer, target_index_pointer = prepare_u_list_data(
+        leaves=leaves,
+        key_to_targets=key_to_targets,
+        key_to_sources=key_to_sources,
+        key_to_source_densities=key_to_source_densities,
+        key_to_index=key_to_index,
+        u_lists=u_lists,
+        max_points=max_points,
     )
-    # print('number of sources', len(filtered_densities))
 
-    target_potentials[target_indices] += p2p_function(
-        sources=filtered_coordinates,
-        targets=target_coordinates,
-        source_densities=filtered_densities
+    p2p_parallel_function(
+        sources=sources,
+        targets=targets,
+        source_densities=source_densities,
+        source_index_pointer=source_index_pointer,
+        target_index_pointer=target_index_pointer
     )
 
+def near_field_node():
     # Sources in target node
-    local_source_indices = sources_to_keys == key
-    local_source_coordinates = sources[local_source_indices]
-    local_densities = source_densities[local_source_indices]
+    local_source_coordinates = key_to_sources[key]
+    local_densities = key_to_source_densities[key]
 
     target_potentials[target_indices] += p2p_function(
         sources=local_source_coordinates,

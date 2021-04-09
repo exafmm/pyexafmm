@@ -331,38 +331,27 @@ def laplace_p2p_serial(sources, targets, source_densities):
 
 
 @numba.njit(cache=True, parallel=True, fastmath=True, error_model="numpy")
-def laplace_p2p_parallel(sources, targets, source_densities):
-    """
-    Numba P2P operator for Laplace kernel.
+def laplace_p2p_parallel(
+        sources,
+        targets,
+        source_densities,
+        source_index_pointer,
+        target_index_pointer,
+    ):
 
-    Parameters:
-    -----------
-    sources : np.array(shape=(n, 3), dtype=np.float32)
-        The n source locations on a surface.
-    targets : np.array(shape=(m, 3), dtype=np.float32)
-        The m target locations on a surface.
-    source_densities : np.array(shape=(m,), dtype=np.float32)
-        Charge densities at source coordinates.
-
-    Returns:
-    --------
-    np.array(shape=(ntargets), dtype=np.float32)
-        Target potential densities.
-    """
-    ntargets = len(targets)
-    nsources = len(sources)
-
+    non_empty_targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
+    ntargets = len(non_empty_targets)
     target_densities = np.zeros(shape=(ntargets), dtype=np.float32)
 
-    for i in numba.prange(ntargets):
-        target = targets[i]
-        potential = 0
-        for j in range(nsources):
-            source = sources[j]
-            source_density = source_densities[j]
-            potential += laplace_cpu(target, source)*source_density
+    nleaves = len(target_index_pointer)-1
 
-        target_densities[i] = potential
+    for i in numba.prange(nleaves):
+        local_targets = targets[target_index_pointer[i]:target_index_pointer[i+1]]
+        local_sources = sources[source_index_pointer[i]:source_index_pointer[i+1]]
+        local_source_densities = source_densities[source_index_pointer[i]:source_index_pointer[i+1]]
+
+        local_target_densities = laplace_p2p_serial(local_sources, local_targets, local_source_densities)
+        target_densities[target_index_pointer[i]:target_index_pointer[i+1]] += local_target_densities
 
     return target_densities
 
