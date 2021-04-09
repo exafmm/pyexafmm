@@ -127,9 +127,16 @@ class Fmm:
             value_type=numba.types.float64[:,:]
         )
 
+        # O(1) lookup for source densities in a given node
+        self.key_to_source_densities = numba.typed.Dict.empty(
+            key_type=numba.types.int64,
+            value_type=numba.types.float64[:]
+        )
+
         for i, k in enumerate(self.leaves):
             self.key_to_targets[k] = self.db['key_to_targets'][str(k)][...]
             self.key_to_sources[k] = self.db['key_to_sources'][str(k)][...]
+            self.key_to_source_densities[k] = self.db['key_to_source_densities'][str(k)][...]
 
     def upward_pass(self):
         """

@@ -243,6 +243,7 @@ def compute_octree(config, db):
     start_level = 1
 
     sources = db['particle_data']['sources'][...]
+    source_densities = db['particle_data']['source_densities'][...]
     targets = db['particle_data']['targets'][...]
     points = np.vstack((sources, targets))
 
@@ -282,6 +283,7 @@ def compute_octree(config, db):
         for i in range(len(octree)):
             node = str(octree[i])
             del db['key_to_sources'][node]
+            del db['key_to_source_densities'][node]
             del db['key_to_targets'][node]
 
     else:
@@ -289,6 +291,7 @@ def compute_octree(config, db):
         db.create_group('interaction_lists')
         db.create_group('key_to_index')
         db.create_group('key_to_sources')
+        db.create_group('key_to_source_densities')
         db.create_group('key_to_targets')
 
     db['octree']['keys'] = octree
@@ -307,6 +310,7 @@ def compute_octree(config, db):
     for i in range(len(octree)):
         node = str(octree[i])
         db['key_to_sources'][node] = sources[sources_to_keys == octree[i]]
+        db['key_to_source_densities'][node] = source_densities[sources_to_keys == octree[i]]
         db['key_to_targets'][node] = targets[targets_to_keys == octree[i]]
 
     db['interaction_lists']['u'] = u
