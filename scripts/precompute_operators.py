@@ -255,13 +255,15 @@ def compute_octree(config, db):
     unbalanced = tree.build(targets, max_level, max_points, start_level)
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
+    # Impose order on octree
+    octree = np.sort(octree)
     depth = tree.find_depth(octree)
     complete = tree.complete_tree(octree)
+    complete = np.sort(complete)
     u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
 
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
-
 
     if 'octree' in db.keys():
         del db['octree']['keys']

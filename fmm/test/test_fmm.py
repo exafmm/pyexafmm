@@ -129,21 +129,29 @@ def test_m2l():
     assert np.allclose(direct, equivalent, rtol=RTOL)
 
 
-# def test_fmm():
-#     """
-#     End To End Fmm Test.
-#     """
-#     experiment = Fmm('test_config')
+def test_fmm():
+    """
+    End To End Fmm Test.
+    """
+    experiment = Fmm('test_config')
 
-#     experiment.run()
+    experiment.run()
 
-#     kernel = experiment.config['kernel']
-#     p2p = KERNELS[kernel]['p2p']
+    kernel = experiment.config['kernel']
+    p2p = KERNELS[kernel]['p2p']
 
-#     direct = p2p(
-#         targets=experiment.targets,
-#         sources=experiment.sources,
-#         source_densities=experiment.source_densities
-#     )
+    for leaf in experiment.leaves:
+        direct = p2p(
+            targets=experiment.key_to_targets[leaf].astype(np.float32),
+            sources=experiment.sources,
+            source_densities=experiment.source_densities
+        )
 
-#     assert np.allclose(direct, experiment.target_potentials, rtol=0.13)
+        res = experiment.target_potentials[leaf]
+
+        diff = res-direct
+
+        err = 100*abs(diff)/direct
+        mean_err = np.mean(err)
+
+        assert mean_err < 5

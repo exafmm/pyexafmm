@@ -592,6 +592,7 @@ def near_field_u_list(
         key_to_source_densities,
         key_to_index,
         max_points,
+        target_potentials,
         p2p_parallel_function
     ):
     """
@@ -632,7 +633,7 @@ def near_field_u_list(
         max_points=max_points,
     )
 
-    p2p_parallel_function(
+    target_potentials_vec = p2p_parallel_function(
         sources=sources,
         targets=targets,
         source_densities=source_densities,
@@ -640,12 +641,26 @@ def near_field_u_list(
         target_index_pointer=target_index_pointer
     )
 
-def near_field_node():
+    nleaves = len(target_index_pointer) - 1
+
+    for i in range(nleaves):
+        leaf = leaves[i]
+        target_potentials[leaf] += target_potentials_vec[target_index_pointer[i]:target_index_pointer[i+1]]
+
+
+def near_field_node(
+    key,
+    key_to_sources,
+    key_to_source_densities,
+    target_potentials,
+    target_coordinates,
+    p2p_function
+):
     # Sources in target node
     local_source_coordinates = key_to_sources[key]
     local_densities = key_to_source_densities[key]
 
-    target_potentials[target_indices] += p2p_function(
+    target_potentials[key] += p2p_function(
         sources=local_source_coordinates,
         targets=target_coordinates,
         source_densities=local_densities

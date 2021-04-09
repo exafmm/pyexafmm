@@ -13,7 +13,8 @@ BACKEND = {
         "s2l": numba_backend.s2l,
         "l2t": numba_backend.l2t,
         "m2t": numba_backend.m2t,
-        "near_field_u_list": numba_backend.near_field_u_list
+        "near_field_u_list": numba_backend.near_field_u_list,
+        "near_field_node": numba_backend.near_field_node,
     },
     "openmp": {
         "p2m": openmp_backend.p2m,
@@ -24,6 +25,6 @@ BACKEND = {
         "l2t": openmp_backend.l2t,
         "m2t": openmp_backend.m2t,
         "near_field_u_list": openmp_backend.near_field,
-        "near_field_u_list": openmp_backend.near_field
+        "near_field_node": openmp_backend.near_field,
     }
 }

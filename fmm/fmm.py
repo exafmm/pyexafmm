@@ -310,7 +310,7 @@ class Fmm:
                     p2p_function=self.p2p_function
                 )
 
-                # # Evaluate local expansions at targets
+                # Evaluate local expansions at targets
                 self.backend['l2t'](
                     key=key,
                     key_to_index=self.key_to_index,
@@ -325,7 +325,17 @@ class Fmm:
                     p2p_function=self.p2p_function
                 )
 
-        # U List interactions
+                # P2P interactions within node
+                self.backend['near_field_node'](
+                    key=key,
+                    key_to_sources=self.key_to_sources,
+                    key_to_source_densities=self.key_to_source_densities,
+                    target_potentials=self.target_potentials,
+                    target_coordinates=target_coordinates,
+                    p2p_function=self.p2p_function
+                )
+
+        # P2P interactions within U List
         self.backend['near_field_u_list'](
             u_lists=self.u_lists,
             leaves=self.leaves,
@@ -334,6 +344,7 @@ class Fmm:
             key_to_source_densities=self.key_to_source_densities,
             key_to_index=self.key_to_index,
             max_points=self.config['max_points'],
+            target_potentials=self.target_potentials,
             p2p_parallel_function=self.p2p_parallel_function
         )
 
