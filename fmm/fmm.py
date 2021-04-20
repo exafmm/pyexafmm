@@ -192,6 +192,7 @@ class Fmm:
 
             # Keys at this level
             keys = self.complete[self.complete_levels == level]
+            scale = self.scale_function(level)
 
             # M2L operator stored in terms of its SVD components for each level
             str_level = str(level)
@@ -203,143 +204,160 @@ class Fmm:
             hashes = self.m2l[str_level]["hashes"][...]
 
             print('level', level)
+
             # V List interactions
             start = time.time()
 
+            # M2L operator stored in terms of its SVD components for each level
+            str_level = str(level)
+            u = self.m2l[str_level]["u"][...]
+            s = np.diag(self.m2l[str_level]["s"][...])
+            vt = self.m2l[str_level]["vt"][...]
+
+            # Hashed transfer vectors for a given level, provide index for M2L operators
+            hashes =self.m2l[str_level]["hashes"][...]
+
+            hash_to_index = numba.typed.Dict.empty(
+                key_type=numba.types.int64,
+                value_type=numba.types.int64
+            )
+
+            for i, hash in enumerate(hashes):
+                hash_to_index[hash] = i
+
             self.backend['m2l'](
-                    keys=keys,
-                    key_to_index=self.key_to_index,
+                    targets=keys,
                     v_lists=self.v_lists,
-                    multipole_expansions=self.multipole_expansions,
-                    local_expansions=self.local_expansions,
-                    dc2e_inv=self.dc2e_inv,
-                    nequivalent_points=self.nequivalent_points,
-                    ncheck_points=self.ncheck_points,
+                    key_to_index=self.key_to_index,
                     u=u,
                     s=s,
                     vt=vt,
-                    hashes=hashes,
-                    scale_function=self.scale_function,
-                    depth=self.depth,
+                    dc2e_inv=self.dc2e_inv,
+                    local_expansions=self.local_expansions,
+                    multipole_expansions=self.multipole_expansions,
+                    nequivalent_points=self.nequivalent_points,
+                    ncheck_points=self.ncheck_points,
+                    hash_to_index=hash_to_index,
+                    scale=scale
                 )
             print('m2l time', time.time()-start)
 
             start = time.time()
 
-            for key in keys:
+        #     for key in keys:
 
-                idx = self.key_to_index[key]
+        #         idx = self.key_to_index[key]
 
-                # X List interactions
-                x_list = self.x_lists[idx]
-                x_list = x_list[x_list != -1]
+        #         # X List interactions
+        #         x_list = self.x_lists[idx]
+        #         x_list = x_list[x_list != -1]
 
-                if len(x_list) > 0:
-                    self.backend['s2l'](
-                            key=key,
-                            key_to_index=self.key_to_index,
-                            x_list=x_list,
-                            key_to_sources=self.key_to_sources,
-                            key_to_source_densities=self.key_to_source_densities,
-                            local_expansions=self.local_expansions,
-                            x0=self.x0,
-                            r0=self.r0,
-                            alpha_inner=self.alpha_inner,
-                            check_surface=self.check_surface,
-                            nequivalent_points=self.nequivalent_points,
-                            dc2e_inv=self.dc2e_inv,
-                            scale_function=self.scale_function,
-                            p2p_function=self.p2p_function
-                        )
+        #         if len(x_list) > 0:
+        #             self.backend['s2l'](
+        #                     key=key,
+        #                     key_to_index=self.key_to_index,
+        #                     x_list=x_list,
+        #                     key_to_sources=self.key_to_sources,
+        #                     key_to_source_densities=self.key_to_source_densities,
+        #                     local_expansions=self.local_expansions,
+        #                     x0=self.x0,
+        #                     r0=self.r0,
+        #                     alpha_inner=self.alpha_inner,
+        #                     check_surface=self.check_surface,
+        #                     nequivalent_points=self.nequivalent_points,
+        #                     dc2e_inv=self.dc2e_inv,
+        #                     scale_function=self.scale_function,
+        #                     p2p_function=self.p2p_function
+        #                 )
 
-                # Translate local expansion to the node's children
-                if level < self.depth:
-                    self.backend['l2l'](
-                        key=key,
-                        local_expansions=self.local_expansions,
-                        l2l=self.l2l,
-                        key_to_index=self.key_to_index,
-                        nequivalent_points=self.nequivalent_points
-                    )
+        #         # Translate local expansion to the node's children
+        #         if level < self.depth:
+        #             self.backend['l2l'](
+        #                 key=key,
+        #                 local_expansions=self.local_expansions,
+        #                 l2l=self.l2l,
+        #                 key_to_index=self.key_to_index,
+        #                 nequivalent_points=self.nequivalent_points
+        #             )
 
-            print('l2l and s2l time', time.time()-start)
+        #     print('l2l and s2l time', time.time()-start)
 
-        print('total local transfer time ', time.time()-local_start)
+        # print('total local transfer time ', time.time()-local_start)
 
-        start = time.time()
-        # Leaf near-field computations
-        print('starting near field computations')
-        for key in self.leaves:
+        # start = time.time()
+        # # Leaf near-field computations
+        # print('starting near field computations')
+        # for key in self.leaves:
 
-            idx = self.key_to_index[key]
+        #     idx = self.key_to_index[key]
 
-            target_coordinates = self.key_to_targets[key]
+        #     target_coordinates = self.key_to_targets[key]
 
-            ntargets = len(target_coordinates)
+        #     ntargets = len(target_coordinates)
 
-            u_list = self.u_lists[idx]
-            u_list = u_list[u_list != -1]
+        #     u_list = self.u_lists[idx]
+        #     u_list = u_list[u_list != -1]
 
-            w_list = self.w_lists[idx]
-            w_list = w_list[w_list != -1]
+        #     w_list = self.w_lists[idx]
+        #     w_list = w_list[w_list != -1]
 
-            if ntargets > 0:
+        #     if ntargets > 0:
 
-                # W List interactions
-                self.backend['m2t'](
-                    target_key=key,
-                    key_to_index=self.key_to_index,
-                    w_list=w_list,
-                    target_coordinates=target_coordinates,
-                    target_potentials=self.target_potentials,
-                    multipole_expansions=self.multipole_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_inner=self.alpha_inner,
-                    equivalent_surface=self.equivalent_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    p2p_function=self.p2p_function
-                )
+        #         # W List interactions
+        #         self.backend['m2t'](
+        #             target_key=key,
+        #             key_to_index=self.key_to_index,
+        #             w_list=w_list,
+        #             target_coordinates=target_coordinates,
+        #             target_potentials=self.target_potentials,
+        #             multipole_expansions=self.multipole_expansions,
+        #             x0=self.x0,
+        #             r0=self.r0,
+        #             alpha_inner=self.alpha_inner,
+        #             equivalent_surface=self.equivalent_surface,
+        #             nequivalent_points=self.nequivalent_points,
+        #             p2p_function=self.p2p_function
+        #         )
 
-                # Evaluate local expansions at targets
-                self.backend['l2t'](
-                    key=key,
-                    key_to_index=self.key_to_index,
-                    target_coordinates=target_coordinates,
-                    target_potentials=self.target_potentials,
-                    local_expansions=self.local_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_outer=self.alpha_outer,
-                    equivalent_surface=self.equivalent_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    p2p_function=self.p2p_function
-                )
+        #         # Evaluate local expansions at targets
+        #         self.backend['l2t'](
+        #             key=key,
+        #             key_to_index=self.key_to_index,
+        #             target_coordinates=target_coordinates,
+        #             target_potentials=self.target_potentials,
+        #             local_expansions=self.local_expansions,
+        #             x0=self.x0,
+        #             r0=self.r0,
+        #             alpha_outer=self.alpha_outer,
+        #             equivalent_surface=self.equivalent_surface,
+        #             nequivalent_points=self.nequivalent_points,
+        #             p2p_function=self.p2p_function
+        #         )
 
-                # P2P interactions within node
-                self.backend['near_field_node'](
-                    key=key,
-                    key_to_sources=self.key_to_sources,
-                    key_to_source_densities=self.key_to_source_densities,
-                    target_potentials=self.target_potentials,
-                    target_coordinates=target_coordinates,
-                    p2p_function=self.p2p_function
-                )
+        #         # P2P interactions within node
+        #         self.backend['near_field_node'](
+        #             key=key,
+        #             key_to_sources=self.key_to_sources,
+        #             key_to_source_densities=self.key_to_source_densities,
+        #             target_potentials=self.target_potentials,
+        #             target_coordinates=target_coordinates,
+        #             p2p_function=self.p2p_function
+        #         )
 
-        # P2P interactions within U List
-        self.backend['near_field_u_list'](
-            u_lists=self.u_lists,
-            leaves=self.leaves,
-            key_to_sources=self.key_to_sources,
-            key_to_targets=self.key_to_targets,
-            key_to_source_densities=self.key_to_source_densities,
-            key_to_index=self.key_to_index,
-            max_points=self.config['max_points'],
-            target_potentials=self.target_potentials,
-            p2p_parallel_function=self.p2p_parallel_function
-        )
+        # # P2P interactions within U List
+        # self.backend['near_field_u_list'](
+        #     u_lists=self.u_lists,
+        #     leaves=self.leaves,
+        #     key_to_sources=self.key_to_sources,
+        #     key_to_targets=self.key_to_targets,
+        #     key_to_source_densities=self.key_to_source_densities,
+        #     key_to_index=self.key_to_index,
+        #     max_points=self.config['max_points'],
+        #     target_potentials=self.target_potentials,
+        #     p2p_parallel_function=self.p2p_parallel_function
+        # )
 
-        print('near field time ', time.time()-start)
+        # print('near field time ', time.time()-start)
 
     def run(self):
         """Run full algorithm"""
