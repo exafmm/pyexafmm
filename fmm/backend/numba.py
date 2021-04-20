@@ -8,15 +8,16 @@ import adaptoctree.morton as morton
 from adaptoctree.utils import deterministic_checksum
 
 import fmm.surface as surface
-from fmm.parameters import DIGEST_SIZE
 
 
 @numba.njit(cache=True, parallel=True)
 def prepare_p2m_data(
         leaves,
         nleaves,
-        key_to_sources,
-        key_to_source_densities,
+        sources,
+        source_densities,
+        source_index_pointer,
+        key_to_leaf_index,
         x0,
         r0,
         alpha_outer,
@@ -34,8 +35,9 @@ def prepare_p2m_data(
         leaf = leaves[thread_idx]
 
         # Lookup leaf sources, and leaf source densities
-        leaf_sources = key_to_sources[leaf]
-        leaf_source_densities = key_to_source_densities[leaf]
+        idx = key_to_leaf_index[leaf]
+        leaf_sources = sources[source_index_pointer[idx]:source_index_pointer[idx+1]]
+        leaf_source_densities = source_densities[source_index_pointer[idx]:source_index_pointer[idx+1]]
 
         # Compute center of leaf box in cartesian coordinates
         leaf_center = morton.find_physical_center_from_key(
@@ -97,8 +99,10 @@ def p2m(
         leaves,
         nleaves,
         key_to_index,
-        key_to_sources,
-        key_to_source_densities,
+        key_to_leaf_index,
+        sources,
+        source_densities,
+        source_index_pointer,
         multipole_expansions,
         nequivalent_points,
         x0,
@@ -110,12 +114,13 @@ def p2m(
         p2p_function,
         scale_function
     ):
-
     scales, check_potentials = prepare_p2m_data(
         leaves=leaves,
         nleaves=nleaves,
-        key_to_sources=key_to_sources,
-        key_to_source_densities=key_to_source_densities,
+        sources=sources,
+        source_densities=source_densities,
+        source_index_pointer=source_index_pointer,
+        key_to_leaf_index=key_to_leaf_index,
         x0=x0,
         r0=r0,
         alpha_outer=alpha_outer,
@@ -601,27 +606,7 @@ def near_field_u_list(
 
     Parameters:
     -----------
-    key : np.int64
-        Morton key of source node.
-    u_list : np.array(shape=(n_u_list, 1), dtype=np.int64)
-        Morton keys of U list members.
-    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
-        Target coordinates.
-    targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) target lies.
-    targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
-        Potentials at all target points, due to all source points.
-    sources : np.array(shape=(nsources, 3), dtype=np.float32)
-        Source coordinates.
-    source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
-        Charge densities at source points.
-    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) source lies.
-    p2p_function : function
-        Function handle for kernel P2P.
     """
-
-    # print('Number of targets, ', len(target_coordinates))
 
     sources, targets, source_densities, source_index_pointer, target_index_pointer = prepare_u_list_data(
         leaves=leaves,

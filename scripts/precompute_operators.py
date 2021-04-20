@@ -8,6 +8,7 @@ import time
 
 import cupy as cp
 import h5py
+import numba
 import numpy as np
 import scipy.linalg as linalg
 
@@ -217,6 +218,29 @@ def compute_surfaces(config, db):
     return equivalent_surface, check_surface
 
 
+@numba.njit
+def compute_index_pointer(keys, points_indices):
+
+    sorted_keys = keys[points_indices]
+
+    curr_idx = 0
+    curr_key = sorted_keys[0]
+
+    nkeys = len(sorted_keys)
+
+    index_pointer = [curr_idx]
+
+    for idx in range(nkeys-1):
+        next_key = sorted_keys[idx]
+        if next_key != curr_key:
+            index_pointer.append(idx)
+        curr_key = next_key
+
+    index_pointer.append(nkeys)
+
+    return np.array(index_pointer)
+
+
 def compute_octree(config, db):
     """
     Compute balanced as well as completed octree and all interaction  lists,
@@ -247,6 +271,8 @@ def compute_octree(config, db):
     targets = db['particle_data']['targets'][...]
     points = np.vstack((sources, targets))
 
+    print("Computing octree")
+
     # Compute Octree
     max_bound, min_bound = morton.find_bounds(points)
     x0 = morton.find_center(max_bound, min_bound)
@@ -255,7 +281,7 @@ def compute_octree(config, db):
     unbalanced = tree.build(targets, max_level, max_points, start_level)
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
-    # Impose order on octree
+
     octree = np.sort(octree)
     depth = tree.find_depth(octree)
     complete = tree.complete_tree(octree)
@@ -265,6 +291,12 @@ def compute_octree(config, db):
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
 
+    # Impose order
+    source_indices = np.argsort(sources_to_keys)
+    source_index_pointer = compute_index_pointer(sources_to_keys, source_indices)
+    target_indices = np.argsort(targets_to_keys)
+    target_index_pointer = compute_index_pointer(targets_to_keys, target_indices)
+
     if 'octree' in db.keys():
         del db['octree']['keys']
         del db['octree']['depth']
@@ -272,49 +304,44 @@ def compute_octree(config, db):
         del db['octree']['r0']
         del db['octree']['complete']
         del db['particle_data']['sources_to_keys']
+        del db['particle_data']['source_indices']
+        del db['particle_data']['source_index_pointer']
         del db['particle_data']['targets_to_keys']
+        del db['particle_data']['target_indices']
+        del db['particle_data']['target_index_pointer']
         del db['interaction_lists']['u']
         del db['interaction_lists']['x']
         del db['interaction_lists']['v']
         del db['interaction_lists']['w']
 
-        for i in range(len(complete)):
-            node = str(complete[i])
-            del db['key_to_index'][node]
-
-        for i in range(len(octree)):
-            node = str(octree[i])
-            del db['key_to_sources'][node]
-            del db['key_to_source_densities'][node]
-            del db['key_to_targets'][node]
-
     else:
         db.create_group('octree')
         db.create_group('interaction_lists')
-        db.create_group('key_to_index')
-        db.create_group('key_to_sources')
-        db.create_group('key_to_source_densities')
-        db.create_group('key_to_targets')
 
-    db['octree']['keys'] = octree
+    db['octree']['keys'] = np.sort(octree)
     db['octree']['depth'] = np.array([depth], np.int32)
     db['octree']['x0'] = np.array([x0], np.float32)
     db['octree']['r0'] = np.array([r0], np.float32)
-    db['octree']['complete'] = complete
+    db['octree']['complete'] = np.sort(complete)
 
+    # Save source to index mappings
     db['particle_data']['sources_to_keys'] = sources_to_keys
+    db['particle_data']['source_indices'] = source_indices
+    db['particle_data']['source_index_pointer'] = source_index_pointer
     db['particle_data']['targets_to_keys'] = targets_to_keys
+    db['particle_data']['target_indices'] = target_indices
+    db['particle_data']['target_index_pointer'] = target_index_pointer
 
-    for i in range(len(complete)):
-        node = str(complete[i])
-        db['key_to_index'][node] = np.array([i])
+    # # Save sorted particle data
+    # del db[f'particle_data']['sources']
+    # del db[f'particle_data']['targets']
+    # del db[f'particle_data']['source_densities']
 
-    for i in range(len(octree)):
-        node = str(octree[i])
-        db['key_to_sources'][node] = sources[sources_to_keys == octree[i]]
-        db['key_to_source_densities'][node] = source_densities[sources_to_keys == octree[i]]
-        db['key_to_targets'][node] = targets[targets_to_keys == octree[i]]
+    # db[f'particle_data']['sources'] = sources[source_indices]
+    # db[f'particle_data']['targets'] = targets[target_indices]
+    # db[f'particle_data']['source_densities'] = source_densities[source_indices]
 
+    # Save interaction lists
     db['interaction_lists']['u'] = u
     db['interaction_lists']['x'] = x
     db['interaction_lists']['v'] = v

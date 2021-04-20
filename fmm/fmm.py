@@ -76,13 +76,18 @@ class Fmm:
         self.complete_levels = morton.find_level(self.complete)
 
         ## Load source and target data
-        self.sources = self.db["particle_data"]["sources"][...].astype(np.float32)
-        self.nsources = len(self.sources)
-        self.source_densities = self.db["particle_data"]["source_densities"][...].astype(np.float32)
         self.sources_to_keys = self.db["particle_data"]["sources_to_keys"][...]
-        self.targets = self.db["particle_data"]["targets"][...].astype(np.float32)
-        self.ntargets = len(self.targets)
+        self.source_indices= self.db["particle_data"]["source_indices"][...]
+        self.source_index_pointer = self.db["particle_data"]["source_index_pointer"][...]
+        self.sources = self.db["particle_data"]["sources"][...][self.source_indices].astype(np.float32)
+        self.source_densities = self.db["particle_data"]["source_densities"][...][self.source_indices].astype(np.float32)
+        self.nsources = len(self.sources)
+
         self.targets_to_keys = self.db["particle_data"]["targets_to_keys"][...]
+        self.target_indices = self.db["particle_data"]["target_indices"][...]
+        self.target_index_pointer = self.db["particle_data"]["target_index_pointer"][...]
+        self.targets = self.db["particle_data"]["targets"][...][self.target_indices].astype(np.float32)
+        self.ntargets = len(self.targets)
 
         ## Load pre-computed operators
         self.m2m = self.db["m2m"][...]
@@ -103,47 +108,30 @@ class Fmm:
         self.backend = BACKEND[self.config["backend"]]
 
         # Containers for results
-        # self.target_potentials = np.zeros(self.ntargets, dtype=np.float32)
-        self.multipole_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
-        self.local_expansions = np.zeros(self.nequivalent_points*self.ncomplete, dtype=np.float32)
+        self.multipole_expansions = np.zeros(
+                self.nequivalent_points*self.ncomplete,
+                dtype=np.float32
+            )
 
-        # Map keys to their index in the complete tree, for looking up expansions
-        self.key_to_index = numba.typed.Dict.empty(
-            key_type=numba.types.int64,
-            value_type=numba.types.int64
+        self.local_expansions = np.zeros(
+               self.nequivalent_points*self.ncomplete,
+               dtype=np.float32
+            )
+
+        self.target_potentials = np.zeros(
+            self.ntargets,
+            dtype=np.float32
         )
 
-        for i, k in enumerate(self.complete):
-            self.key_to_index[k] = i
 
-        # Create dictionaries for O(1) access to points in a given node
-        self.key_to_sources = numba.typed.Dict.empty(
-            key_type=numba.types.int64,
-            value_type=numba.types.float64[:,:]
-        )
+        self.key_to_leaf_index = numba.typed.Dict.empty(key_type=numba.int64, value_type=numba.int64)
+        self.key_to_index = numba.typed.Dict.empty(key_type=numba.int64, value_type=numba.int64)
 
-        self.key_to_targets = numba.typed.Dict.empty(
-            key_type=numba.types.int64,
-            value_type=numba.types.float64[:,:]
-        )
+        for k in self.leaves:
+            self.key_to_leaf_index[k] = np.argwhere(self.leaves == k)[0][0]
 
-        # O(1) lookup for source densities in a given node
-        self.key_to_source_densities = numba.typed.Dict.empty(
-            key_type=numba.types.int64,
-            value_type=numba.types.float64[:]
-        )
-
-        self.target_potentials = numba.typed.Dict.empty(
-            key_type=numba.types.int64,
-            value_type=numba.types.float64[:]
-        )
-
-        for i, k in enumerate(self.leaves):
-            self.key_to_targets[k] = self.db['key_to_targets'][str(k)][...]
-            self.key_to_sources[k] = self.db['key_to_sources'][str(k)][...]
-            self.key_to_source_densities[k] = self.db['key_to_source_densities'][str(k)][...]
-            ntargets = len(self.key_to_targets[k])
-            self.target_potentials[k] = np.zeros(ntargets)
+        for k in self.complete:
+            self.key_to_index[k] = np.argwhere(self.complete == k)[0][0]
 
     def upward_pass(self):
         """
@@ -157,8 +145,10 @@ class Fmm:
                 leaves=self.leaves,
                 nleaves=self.nleaves,
                 key_to_index=self.key_to_index,
-                key_to_sources=self.key_to_sources,
-                key_to_source_densities=self.key_to_source_densities,
+                key_to_leaf_index=self.key_to_leaf_index,
+                sources=self.sources,
+                source_densities=self.source_densities,
+                source_index_pointer=self.source_index_pointer,
                 multipole_expansions=self.multipole_expansions,
                 nequivalent_points=self.nequivalent_points,
                 x0=self.x0,
@@ -284,6 +274,7 @@ class Fmm:
             idx = self.key_to_index[key]
 
             target_coordinates = self.key_to_targets[key]
+
             ntargets = len(target_coordinates)
 
             u_list = self.u_lists[idx]
