@@ -265,7 +265,7 @@ class Fmm:
             w_list = self.w_lists[global_idx]
             w_list = w_list[w_list != -1]
 
-            x_list = self.x_lists[idx]
+            x_list = self.x_lists[global_idx]
             x_list = x_list[x_list != -1]
 
             # X List interactions

@@ -8,6 +8,13 @@ PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in
 
 The goal of PyExaFMM is to develop a highly performant implementation of the adaptive particle FMM written in Python, as the utility of FMM algorithms are hindered by their relatively complex implementation, especially for achieving high-performance.
 
+## Performance
+
+PyExaFMM compares favourably on realsitic problem sizes with naive (direct) evaluation. The figure below provides a benchmark for the Laplace kernel evaluated on uniformly distributed points.
+
+<img src="static/performance.png" alt="Laplace" width="800">
+
+
 ## System Requirements
 
 An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
