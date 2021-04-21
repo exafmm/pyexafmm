@@ -68,7 +68,7 @@ def prepare_p2m_data(
 
 
 @numba.njit(cache=True, parallel=True)
-def p2m_subroutine(
+def p2m_core(
         leaves,
         nleaves,
         key_to_index,
@@ -83,15 +83,13 @@ def p2m_subroutine(
     for thread_idx in numba.prange(nleaves):
 
         leaf = leaves[thread_idx]
-        leaf_idx = key_to_index[leaf]
-        lidx = leaf_idx*nequivalent_points
-        ridx = lidx+nequivalent_points
+        leaf_lidx = key_to_index[leaf]*nequivalent_points
 
         scale = scales[thread_idx]
 
-        idx = thread_idx*ncheck_points
-        check_potential = check_potentials[idx:idx+ncheck_points]
-        multipole_expansions[lidx:ridx] += scale*(uc2e_inv @ (check_potential))
+        check_lidx = thread_idx*ncheck_points
+        check_potential = check_potentials[check_lidx:check_lidx+ncheck_points]
+        multipole_expansions[leaf_lidx:leaf_lidx+nequivalent_points] += scale*(uc2e_inv @ (check_potential))
 
 
 @numba.njit(cache=True)
@@ -130,7 +128,7 @@ def p2m(
         scale_function=scale_function
     )
 
-    p2m_subroutine(
+    p2m_core(
         leaves=leaves,
         nleaves=nleaves,
         key_to_index=key_to_index,
@@ -222,23 +220,23 @@ def m2l_core(
     # Index of local expansion
     lidx = key_to_index[target]*nequivalent_points
 
-    m1, n1 = vt.shape
-    n1, p1 = nequivalent_points, 1
-    t1 = np.zeros((m1, p1), np.float32)
-
-    m2, n2 = s.shape
-    n2, p2 = t1.shape
-    t2 = np.zeros((m2, p2), np.float32)
-
-    m3, n3 = ncheck_points, n2
-    n3, p3 = t2.shape
-    t3 = np.zeros((m3, p3), np.float32)
-
-    m4, n4 = dc2e_inv.shape
-    n4, p4 = t3.shape
-    t4 = np.zeros((m4, p4), np.float32)
-
     for i in range(nv_list):
+
+        m1, n1 = vt.shape
+        n1, p1 = nequivalent_points, 1
+        t1 = np.zeros((m1, p1), np.float32)
+
+        m2, n2 = s.shape
+        n2, p2 = t1.shape
+        t2 = np.zeros((m2, p2), np.float32)
+
+        m3, n3 = ncheck_points, n2
+        n3, p3 = t2.shape
+        t3 = np.zeros((m3, p3), np.float32)
+
+        m4, n4 = dc2e_inv.shape
+        n4, p4 = t3.shape
+        t4 = np.zeros((m4, p4), np.float32)
 
         source = v_list[i]
         midx = key_to_index[source]*nequivalent_points
@@ -336,31 +334,22 @@ def l2l(
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
     nequivalent_points : np.int64
     """
-    parent_idx = key_to_index[key]
+    parent = morton.find_parent(key)
+    parent_idx = key_to_index[parent]
     parent_lidx = parent_idx*nequivalent_points
     parent_ridx = (parent_idx+1)*nequivalent_points
     parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
 
-    children = morton.find_children(key)
+    # Compute expansion index
+    child_idx = key_to_index[key]
+    child_lidx = child_idx*nequivalent_points
+    child_ridx = (child_idx+1)*nequivalent_points
 
-    # Shouldn't loop this way around, should loop over children, and transfer
-    # their parent's local expansions!!
-    # The if statement is slow.
+    # Compute operator index
+    operator_idx = key == morton.find_siblings(key)
 
-    for child in children:
-
-        if child in key_to_index:
-
-            # Compute expansion index
-            child_idx = key_to_index[child]
-            child_lidx = child_idx*nequivalent_points
-            child_ridx = (child_idx+1)*nequivalent_points
-
-            # Compute operator index
-            operator_idx = child == children
-
-            # Compute contribution to local expansion of child from parent
-            local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
+    # Compute contribution to local expansion of child from parent
+    local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
 
 
 @numba.njit(cache=True)

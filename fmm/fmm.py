@@ -244,7 +244,7 @@ class Fmm:
 
             start = time.time()
 
-        #     for key in keys:
+            for key in keys:
 
         #         idx = self.key_to_index[key]
 
@@ -270,15 +270,14 @@ class Fmm:
         #                     p2p_function=self.p2p_function
         #                 )
 
-        #         # Translate local expansion to the node's children
-        #         if level < self.depth:
-        #             self.backend['l2l'](
-        #                 key=key,
-        #                 local_expansions=self.local_expansions,
-        #                 l2l=self.l2l,
-        #                 key_to_index=self.key_to_index,
-        #                 nequivalent_points=self.nequivalent_points
-        #             )
+                # Translate local expansion from the node's parent
+                self.backend['l2l'](
+                    key=key,
+                    local_expansions=self.local_expansions,
+                    l2l=self.l2l,
+                    key_to_index=self.key_to_index,
+                    nequivalent_points=self.nequivalent_points
+                )
 
         #     print('l2l and s2l time', time.time()-start)
 
