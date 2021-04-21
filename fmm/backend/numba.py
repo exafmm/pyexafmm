@@ -696,7 +696,7 @@ def near_field_u_list(
     for i in range(nleaves):
         res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
         leaf = leaves[i]
-        leaf_idx = key_to_index[leaf]
+        leaf_idx = key_to_leaf_index[leaf]
         target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1]] += res
 
 
