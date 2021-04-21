@@ -282,19 +282,19 @@ def compute_octree(config, db):
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
 
-    octree = np.sort(octree)
+    octree = np.sort(octree, kind='stable')
     depth = tree.find_depth(octree)
     complete = tree.complete_tree(octree)
-    complete = np.sort(complete)
+    complete = np.sort(complete, kind='stable')
     u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
 
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
 
     # Impose order
-    source_indices = np.argsort(sources_to_keys)
+    source_indices = np.argsort(sources_to_keys, kind='stable')
     source_index_pointer = compute_index_pointer(sources_to_keys, source_indices)
-    target_indices = np.argsort(targets_to_keys)
+    target_indices = np.argsort(targets_to_keys, kind='stable')
     target_index_pointer = compute_index_pointer(targets_to_keys, target_indices)
 
     if 'octree' in db.keys():

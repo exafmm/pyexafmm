@@ -213,9 +213,8 @@ def test_m2l(db):
     for i in range(len(v_list)):
 
         source_key = v_list[i]
-        transfer_vec = morton.find_transfer_vector(target_key, source_key, depth)
-        hash_vec = utils.deterministic_checksum(transfer_vec)
-        m2l_idx = np.where(hash_vec == hashes)[0][0]
+        transfer_vec = morton.find_transfer_vector(target_key, source_key)
+        m2l_idx = np.where(transfer_vec == hashes)[0][0]
         m2l_lidx = (m2l_idx)*npoints_check
         m2l_ridx = (m2l_idx+1)*npoints_check
         u_sub = u[m2l_lidx:m2l_ridx]
