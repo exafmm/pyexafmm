@@ -161,7 +161,7 @@ def p2m(
         scale_function
     ):
     """
-    P2M Operator. Compute the multipole expansion from the sources at each
+    P2M operator. Compute the multipole expansion from the sources at each
     leaf node. Composed of two numba-fied operators.
 
     Parameters:
@@ -357,7 +357,7 @@ def m2l(
         scale
     ):
     """
-    M2L Operator. Parallelised over all targets in a given level.
+    M2L operator. Parallelised over all targets in a given level.
 
     Parameters:
     -----------
@@ -570,15 +570,17 @@ def m2t(
 
     Parameters:
     -----------
-    key : np.int64
+    target_key : np.int64
         Morton key of source node.
+    target_index_pointer : np.array(np.int32)
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to complete index.
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
     w_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
         Morton keys of W list members.
-    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
-        Target coordinates.
-    targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) target lies.
+    target_coordinates : np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target coordinates of particles in target node.
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
     multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
@@ -646,12 +648,14 @@ def l2t(
     key : np.int64
         Morton key of source node.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
-        Target coordinates.
-    targets_to_keys: np.array(shape=(ntargets, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) target lies.
+        Map from key to complete index.
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    target_coordinates : np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target coordinates of particles in target node.
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
+    target_index_pointer : np.array(np.int32)
     local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
         Array of all local expansions.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
@@ -702,6 +706,34 @@ def prepare_u_list_data(
         u_lists,
         max_points,
     ):
+    """
+    Create batched (in terms of index pointer) sources and targets in order to
+        run the P2P computation in parallel over all targets at the leaf level,
+        and all sources in their U lists.
+
+    Parameters:
+    -----------
+    leaves : np.array(nleaves, np.int64)
+    targets : np.array((ntargets, 3), np.int32)
+        All target coordinates.
+    target_index_pointer : np.array(np.int32)
+    sources : np.array((nsources, 3), np.int32)
+        All source coordinates.
+    source_densities : np.array(nsources, np.int32)
+    source_index_pointer : np.array(np.int32)
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to complete index.
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    u_lists : np.array(shape=(n_u_list, ncomplete), dtype=np.int64)
+    max_points : np.int64
+        Max points per node.
+
+    Returns:
+    --------
+    5-tuple containing the re-batched sources, targets, source densities, source index pointers
+    and target index pointers respectively.
+    """
 
     local_sources = np.zeros((max_points*26*len(leaves), 3), np.float32)
     local_source_densities = np.zeros((max_points*26*len(leaves)), np.float32)
@@ -785,6 +817,24 @@ def near_field_u_list(
 
     Parameters:
     -----------
+    u_lists : np.array(shape=(n_u_list, ncomplete), dtype=np.int64)
+    leaves : np.array(nleaves, np.int64)
+    targets : np.array((ntargets, 3), np.int32)
+        All target coordinates.
+    target_index_pointer : np.array(np.int32)
+    sources : np.array((nsources, 3), np.int32)
+        All source coordinates.
+    source_densities : np.array(nsources, np.int32)
+    source_index_pointer : np.array(np.int32)
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to complete index.
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    max_points : np.int64
+        Max points per node.
+    targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
+        Potentials at all target points, due to all source points.
+    p2p_parallel_function : function
     """
 
     local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_u_list_data(
@@ -818,15 +868,33 @@ def near_field_u_list(
 
 
 def near_field_node(
-    key,
-    key_to_leaf_index,
-    source_coordinates,
-    source_densities,
-    target_coordinates,
-    target_index_pointer,
-    target_potentials,
-    p2p_function
-):
+        key,
+        key_to_leaf_index,
+        source_coordinates,
+        source_densities,
+        target_coordinates,
+        target_index_pointer,
+        target_potentials,
+        p2p_function
+    ):
+    """
+
+    Parameters:
+    -----------
+    key : np.int64
+        Target key.
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    source_coordinates: np.array(shape=(nsources, 3), dtype=np.float32)
+        Source coordinates of particles in the target node.
+    source_densities : np.array(nsources, np.int32)
+    target_coordinates : np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target coordinates of particles in target node.
+    target_index_pointer : np.array(np.int32)
+    targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
+        Potentials at all target points, due to all source points.
+    p2p_function : function
+    """
     idx = key_to_leaf_index[key]
 
     target_potentials[
