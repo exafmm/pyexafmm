@@ -60,8 +60,6 @@ def compress_m2l_gram_matrix(
         Target compression rank.
     implicit_gram_matrix : CUDA JIT function handle.
         Function to apply gram matrix implicitly to a given RHS.
-    digest_size : np.int64
-        Size of the hash computed for each transfer vector.
 
     Returns:
     --------
@@ -218,9 +216,23 @@ def compute_surfaces(config, db):
     return equivalent_surface, check_surface
 
 
-@numba.njit
+@numba.njit(cache=True)
 def compute_index_pointer(keys, points_indices):
+    """
+    Compute index pointers for argsorted list of keys.
 
+    Parameters:
+    -----------
+    keys : np.int64
+        Keys, not necessarily sorted.
+    points_indices : np.array(np.int64)
+        Indices that will sort the keys.
+
+    Returns:
+    --------
+    np.array(np.int64)
+        Index pointer for sorted keys.
+    """
     sorted_keys = keys[points_indices]
 
     curr_idx = 0
@@ -331,15 +343,6 @@ def compute_octree(config, db):
     db['particle_data']['targets_to_keys'] = targets_to_keys
     db['particle_data']['target_indices'] = target_indices
     db['particle_data']['target_index_pointer'] = target_index_pointer
-
-    # # Save sorted particle data
-    # del db[f'particle_data']['sources']
-    # del db[f'particle_data']['targets']
-    # del db[f'particle_data']['source_densities']
-
-    # db[f'particle_data']['sources'] = sources[source_indices]
-    # db[f'particle_data']['targets'] = targets[target_indices]
-    # db[f'particle_data']['source_densities'] = source_densities[source_indices]
 
     # Save interaction lists
     db['interaction_lists']['u'] = u
