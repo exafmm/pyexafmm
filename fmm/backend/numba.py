@@ -5,8 +5,6 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
-from adaptoctree.utils import deterministic_checksum
-from numpy.lib.utils import source
 
 import fmm.surface as surface
 
@@ -209,35 +207,12 @@ def m2l_core(
         scale
 ):
 
-    def matmul(a, b, c, m, n, p):
-        """Single threaded"""
-        for i in range(m):
-            for j in range(p):
-                for k in range(n):
-                    c[i, j] += a[i, k]*b[k, j]
-
     nv_list = len(v_list)
 
     # Index of local expansion
     lidx = key_to_index[target]*nequivalent_points
 
     for i in range(nv_list):
-
-        m1, n1 = vt.shape
-        n1, p1 = nequivalent_points, 1
-        t1 = np.zeros((m1, p1), np.float32)
-
-        m2, n2 = s.shape
-        n2, p2 = t1.shape
-        t2 = np.zeros((m2, p2), np.float32)
-
-        m3, n3 = ncheck_points, n2
-        n3, p3 = t2.shape
-        t3 = np.zeros((m3, p3), np.float32)
-
-        m4, n4 = dc2e_inv.shape
-        n4, p4 = t3.shape
-        t4 = np.zeros((m4, p4), np.float32)
 
         source = v_list[i]
         midx = key_to_index[source]*nequivalent_points
@@ -249,15 +224,7 @@ def m2l_core(
         u_sub = u[u_lidx:u_lidx+ncheck_points]
 
         multipole_expansion = multipole_expansions[midx:midx+nequivalent_points]
-        multipole_expansion = multipole_expansion.reshape((len(multipole_expansion), 1))
-
-        matmul(vt, multipole_expansion, t1, m1, n1, p1)
-        matmul(s, t1, t2, m2, n2, p2)
-        matmul(u_sub, t2, t3, m3, n3, p3)
-        matmul(dc2e_inv, t3, t4, m4, n4, p4)
-
-        t5 = scale*np.ravel(t4)
-        local_expansions[lidx:lidx+nequivalent_points] += t5
+        local_expansions[lidx:lidx+nequivalent_points] += scale*(dc2e_inv @ (u_sub @ (s @ ( vt @ multipole_expansion))))
 
 
 @numba.njit(cache=True, parallel=True)
