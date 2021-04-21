@@ -6,6 +6,7 @@ import numpy as np
 
 import adaptoctree.morton as morton
 from adaptoctree.utils import deterministic_checksum
+from numpy.lib.utils import source
 
 import fmm.surface as surface
 
@@ -574,70 +575,89 @@ def l2t(
 @numba.njit(cache=True)
 def prepare_u_list_data(
         leaves,
-        key_to_targets,
-        key_to_sources,
-        key_to_source_densities,
+        targets,
+        target_index_pointer,
+        sources,
+        source_densities,
+        source_index_pointer,
         key_to_index,
+        key_to_leaf_index,
         u_lists,
         max_points,
     ):
 
-    sources = np.zeros((max_points*26*len(leaves), 3), np.float32)
-    source_densities = np.zeros((max_points*26*len(leaves)), np.float32)
-    targets = np.zeros((max_points*len(leaves), 3), np.float32)
-    source_index_pointer = np.zeros(len(leaves)+1, np.int64)
-    target_index_pointer = np.zeros(len(leaves)+1, np.int64)
+    local_sources = np.zeros((max_points*26*len(leaves), 3), np.float32)
+    local_source_densities = np.zeros((max_points*26*len(leaves)), np.float32)
+    local_targets = np.zeros((max_points*len(leaves), 3), np.float32)
+    local_source_index_pointer = np.zeros(len(leaves)+1, np.int64)
+    local_target_index_pointer = np.zeros(len(leaves)+1, np.int64)
 
     source_ptr = 0
     target_ptr = 0
-    source_index_pointer[0] = source_ptr
-    target_index_pointer[0] = target_ptr
+    local_source_index_pointer[0] = source_ptr
+    local_target_index_pointer[0] = target_ptr
 
     for i in range(len(leaves)):
-        leaf = leaves[i]
+        target = leaves[i]
+        target_leaf_index = key_to_leaf_index[target]
+        target_index = key_to_index[target]
 
-        targets_at_node = key_to_targets[leaf]
+        targets_at_node = targets[
+            target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1]
+        ]
+
         ntargets_at_node = len(targets_at_node)
         new_target_ptr = target_ptr+ntargets_at_node
 
-        targets[target_ptr:new_target_ptr] = targets_at_node
+        local_targets[target_ptr:new_target_ptr] = targets_at_node
         target_ptr = new_target_ptr
 
-        target_index_pointer[i+1] = target_ptr
+        local_target_index_pointer[i+1] = target_ptr
 
-        u_list = u_lists[key_to_index[leaf]]
+        u_list = u_lists[target_index]
         u_list = u_list[u_list != -1]
+
 
         for j in range(len(u_list)):
 
             source = u_list[j]
-            sources_at_node = key_to_sources[source]
+            source_leaf_index = key_to_leaf_index[source]
+            sources_at_node = sources[
+                source_index_pointer[source_leaf_index]:source_index_pointer[source_leaf_index+1]
+            ]
             nsources_at_node = len(sources_at_node)
-            source_densities_at_node = key_to_source_densities[source]
+
+            source_densities_at_node = source_densities[
+                source_index_pointer[source_leaf_index]:source_index_pointer[source_leaf_index+1]
+                ]
+
             new_source_ptr = source_ptr+nsources_at_node
 
-            sources[source_ptr:new_source_ptr] = sources_at_node
-            source_densities[source_ptr:new_source_ptr] = source_densities_at_node
+            local_sources[source_ptr:new_source_ptr] = sources_at_node
+            local_source_densities[source_ptr:new_source_ptr] = source_densities_at_node
 
             source_ptr = new_source_ptr
 
-        source_index_pointer[i+1] = source_ptr
+        local_source_index_pointer[i+1] = source_ptr
 
-    sources = sources[source_index_pointer[0]:source_index_pointer[-1]]
-    source_densities = source_densities[source_index_pointer[0]:source_index_pointer[-1]]
-    targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
+    local_sources = local_sources[local_source_index_pointer[0]:local_source_index_pointer[-1]]
+    local_source_densities = local_source_densities[local_source_index_pointer[0]:local_source_index_pointer[-1]]
+    local_targets = local_targets[local_target_index_pointer[0]:local_target_index_pointer[-1]]
 
-    return sources, targets, source_densities, source_index_pointer, target_index_pointer
+    return local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer
 
 
 @numba.njit(cache=True)
 def near_field_u_list(
         u_lists,
         leaves,
-        key_to_sources,
-        key_to_targets,
-        key_to_source_densities,
+        targets,
+        target_index_pointer,
+        sources,
+        source_densities,
+        source_index_pointer,
         key_to_index,
+        key_to_leaf_index,
         max_points,
         target_potentials,
         p2p_parallel_function
@@ -650,45 +670,52 @@ def near_field_u_list(
     -----------
     """
 
-    sources, targets, source_densities, source_index_pointer, target_index_pointer = prepare_u_list_data(
-        leaves=leaves,
-        key_to_targets=key_to_targets,
-        key_to_sources=key_to_sources,
-        key_to_source_densities=key_to_source_densities,
-        key_to_index=key_to_index,
-        u_lists=u_lists,
-        max_points=max_points,
-    )
+    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_u_list_data(
+            leaves=leaves,
+            targets=targets,
+            target_index_pointer=target_index_pointer,
+            sources=sources,
+            source_densities=source_densities,
+            source_index_pointer=source_index_pointer,
+            key_to_index=key_to_index,
+            key_to_leaf_index=key_to_leaf_index,
+            u_lists=u_lists,
+            max_points=max_points,
+        )
 
     target_potentials_vec = p2p_parallel_function(
-        sources=sources,
-        targets=targets,
-        source_densities=source_densities,
-        source_index_pointer=source_index_pointer,
-        target_index_pointer=target_index_pointer
+        sources=local_sources,
+        targets=local_targets,
+        source_densities=local_source_densities,
+        source_index_pointer=local_source_index_pointer,
+        target_index_pointer=local_target_index_pointer
     )
 
-    nleaves = len(target_index_pointer) - 1
+    nleaves = len(local_target_index_pointer) - 1
 
     for i in range(nleaves):
+        res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
         leaf = leaves[i]
-        target_potentials[leaf] += target_potentials_vec[target_index_pointer[i]:target_index_pointer[i+1]]
+        leaf_idx = key_to_index[leaf]
+        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1]] += res
 
 
 def near_field_node(
     key,
-    key_to_sources,
-    key_to_source_densities,
-    target_potentials,
+    key_to_leaf_index,
+    source_coordinates,
+    source_densities,
     target_coordinates,
+    target_index_pointer,
+    target_potentials,
     p2p_function
 ):
-    # Sources in target node
-    local_source_coordinates = key_to_sources[key]
-    local_densities = key_to_source_densities[key]
+    idx = key_to_leaf_index[key]
 
-    target_potentials[key] += p2p_function(
-        sources=local_source_coordinates,
-        targets=target_coordinates,
-        source_densities=local_densities
-    )
+    target_potentials[
+        target_index_pointer[idx]:target_index_pointer[idx+1]
+        ] += p2p_function(
+                    sources=source_coordinates,
+                    targets=target_coordinates,
+                    source_densities=source_densities
+                   )

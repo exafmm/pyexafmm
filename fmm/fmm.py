@@ -283,24 +283,36 @@ class Fmm:
 
         # print('total local transfer time ', time.time()-local_start)
 
-        # start = time.time()
-        # # Leaf near-field computations
-        # print('starting near field computations')
-        # for key in self.leaves:
+        start = time.time()
+        # Leaf near-field computations
+        print('starting near field computations')
+        for key in self.leaves:
 
-        #     idx = self.key_to_index[key]
+            global_idx = self.key_to_index[key]
+            leaf_idx = self.key_to_leaf_index[key]
 
-        #     target_coordinates = self.key_to_targets[key]
+            # Coordinates of targets/sources within leaf node
+            target_coordinates = self.targets[
+                self.target_index_pointer[leaf_idx]:self.target_index_pointer[leaf_idx+1]
+            ]
 
-        #     ntargets = len(target_coordinates)
+            source_coordinates = self.sources[
+                self.source_index_pointer[leaf_idx]:self.source_index_pointer[leaf_idx+1]
+            ]
 
-        #     u_list = self.u_lists[idx]
-        #     u_list = u_list[u_list != -1]
+            source_densities = self.source_densities[
+                self.source_index_pointer[leaf_idx]:self.source_index_pointer[leaf_idx+1]
+            ]
 
-        #     w_list = self.w_lists[idx]
-        #     w_list = w_list[w_list != -1]
+            ntargets = len(target_coordinates)
 
-        #     if ntargets > 0:
+            u_list = self.u_lists[global_idx]
+            u_list = u_list[u_list != -1]
+
+            w_list = self.w_lists[global_idx]
+            w_list = w_list[w_list != -1]
+
+            if ntargets > 0:
 
         #         # W List interactions
         #         self.backend['m2t'](
@@ -333,30 +345,35 @@ class Fmm:
         #             p2p_function=self.p2p_function
         #         )
 
-        #         # P2P interactions within node
-        #         self.backend['near_field_node'](
-        #             key=key,
-        #             key_to_sources=self.key_to_sources,
-        #             key_to_source_densities=self.key_to_source_densities,
-        #             target_potentials=self.target_potentials,
-        #             target_coordinates=target_coordinates,
-        #             p2p_function=self.p2p_function
-        #         )
+                # P2P interactions within node
+                self.backend['near_field_node'](
+                    key=key,
+                    key_to_leaf_index=self.key_to_leaf_index,
+                    source_coordinates=source_coordinates,
+                    source_densities=source_densities,
+                    target_coordinates=target_coordinates,
+                    target_index_pointer=self.target_index_pointer,
+                    target_potentials=self.target_potentials,
+                    p2p_function=self.p2p_function
+                )
 
-        # # P2P interactions within U List
-        # self.backend['near_field_u_list'](
-        #     u_lists=self.u_lists,
-        #     leaves=self.leaves,
-        #     key_to_sources=self.key_to_sources,
-        #     key_to_targets=self.key_to_targets,
-        #     key_to_source_densities=self.key_to_source_densities,
-        #     key_to_index=self.key_to_index,
-        #     max_points=self.config['max_points'],
-        #     target_potentials=self.target_potentials,
-        #     p2p_parallel_function=self.p2p_parallel_function
-        # )
+        # P2P interactions within U List
+        self.backend['near_field_u_list'](
+            u_lists=self.u_lists,
+            leaves=self.leaves,
+            targets=self.targets,
+            target_index_pointer=self.target_index_pointer,
+            sources=self.sources,
+            source_densities=self.source_densities,
+            source_index_pointer=self.source_index_pointer,
+            key_to_index=self.key_to_index,
+            key_to_leaf_index=self.key_to_leaf_index,
+            max_points=self.config['max_points'],
+            target_potentials=self.target_potentials,
+            p2p_parallel_function=self.p2p_parallel_function
+        )
 
-        # print('near field time ', time.time()-start)
+        print('near field time ', time.time()-start)
 
     def run(self):
         """Run full algorithm"""
