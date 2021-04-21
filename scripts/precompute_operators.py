@@ -8,6 +8,7 @@ import time
 
 import cupy as cp
 import h5py
+import numba
 import numpy as np
 import scipy.linalg as linalg
 
@@ -16,7 +17,6 @@ import adaptoctree.tree as tree
 
 from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
 import fmm.surface as surface
-from fmm.parameters import DIGEST_SIZE
 
 import utils.data as data
 import utils.time
@@ -31,7 +31,7 @@ TPB = BLOCK_HEIGHT
 
 def compress_m2l_gram_matrix(
         level, x0, r0, depth, alpha_inner, check_surface,
-        equivalent_surface, k, implicit_gram_matrix, digest_size=DIGEST_SIZE
+        equivalent_surface, k, implicit_gram_matrix
     ):
     """
     Compute compressed representation of unique Gram matrices for targets and
@@ -60,8 +60,6 @@ def compress_m2l_gram_matrix(
         Target compression rank.
     implicit_gram_matrix : CUDA JIT function handle.
         Function to apply gram matrix implicitly to a given RHS.
-    digest_size : np.int64
-        Size of the hash computed for each transfer vector.
 
     Returns:
     --------
@@ -75,7 +73,7 @@ def compress_m2l_gram_matrix(
         transfer vectors.
     """
     sources, targets, hashes = tree.find_unique_v_list_interactions(
-        level, x0, r0, depth, digest_size=digest_size
+        level=level, x0=x0, r0=r0, depth=depth
     )
 
     n_targets_per_node = len(check_surface)
@@ -218,6 +216,43 @@ def compute_surfaces(config, db):
     return equivalent_surface, check_surface
 
 
+@numba.njit(cache=True)
+def compute_index_pointer(keys, points_indices):
+    """
+    Compute index pointers for argsorted list of keys.
+
+    Parameters:
+    -----------
+    keys : np.int64
+        Keys, not necessarily sorted.
+    points_indices : np.array(np.int64)
+        Indices that will sort the keys.
+
+    Returns:
+    --------
+    np.array(np.int64)
+        Index pointer for sorted keys.
+    """
+    sorted_keys = keys[points_indices]
+
+    curr_idx = 0
+    curr_key = sorted_keys[0]
+
+    nkeys = len(sorted_keys)
+
+    index_pointer = [curr_idx]
+
+    for idx in range(nkeys-1):
+        next_key = sorted_keys[idx]
+        if next_key != curr_key:
+            index_pointer.append(idx)
+        curr_key = next_key
+
+    index_pointer.append(nkeys)
+
+    return np.array(index_pointer)
+
+
 def compute_octree(config, db):
     """
     Compute balanced as well as completed octree and all interaction  lists,
@@ -244,8 +279,11 @@ def compute_octree(config, db):
     start_level = 1
 
     sources = db['particle_data']['sources'][...]
+    source_densities = db['particle_data']['source_densities'][...]
     targets = db['particle_data']['targets'][...]
     points = np.vstack((sources, targets))
+
+    print("Computing octree")
 
     # Compute Octree
     max_bound, min_bound = morton.find_bounds(points)
@@ -255,12 +293,21 @@ def compute_octree(config, db):
     unbalanced = tree.build(targets, max_level, max_points, start_level)
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
+
+    octree = np.sort(octree, kind='stable')
     depth = tree.find_depth(octree)
     complete = tree.complete_tree(octree)
+    complete = np.sort(complete, kind='stable')
     u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
 
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
+
+    # Impose order
+    source_indices = np.argsort(sources_to_keys, kind='stable')
+    source_index_pointer = compute_index_pointer(sources_to_keys, source_indices)
+    target_indices = np.argsort(targets_to_keys, kind='stable')
+    target_index_pointer = compute_index_pointer(targets_to_keys, target_indices)
 
     if 'octree' in db.keys():
         del db['octree']['keys']
@@ -269,34 +316,35 @@ def compute_octree(config, db):
         del db['octree']['r0']
         del db['octree']['complete']
         del db['particle_data']['sources_to_keys']
+        del db['particle_data']['source_indices']
+        del db['particle_data']['source_index_pointer']
         del db['particle_data']['targets_to_keys']
+        del db['particle_data']['target_indices']
+        del db['particle_data']['target_index_pointer']
         del db['interaction_lists']['u']
         del db['interaction_lists']['x']
         del db['interaction_lists']['v']
         del db['interaction_lists']['w']
 
-        for i in range(len(complete)):
-            node = str(complete[i])
-            del db['key_to_index'][node]
-
     else:
         db.create_group('octree')
         db.create_group('interaction_lists')
-        db.create_group('key_to_index')
 
-    db['octree']['keys'] = octree
+    db['octree']['keys'] = np.sort(octree)
     db['octree']['depth'] = np.array([depth], np.int32)
     db['octree']['x0'] = np.array([x0], np.float32)
     db['octree']['r0'] = np.array([r0], np.float32)
-    db['octree']['complete'] = complete
+    db['octree']['complete'] = np.sort(complete)
 
+    # Save source to index mappings
     db['particle_data']['sources_to_keys'] = sources_to_keys
+    db['particle_data']['source_indices'] = source_indices
+    db['particle_data']['source_index_pointer'] = source_index_pointer
     db['particle_data']['targets_to_keys'] = targets_to_keys
+    db['particle_data']['target_indices'] = target_indices
+    db['particle_data']['target_index_pointer'] = target_index_pointer
 
-    for i in range(len(complete)):
-        node = str(complete[i])
-        db['key_to_index'][node] = np.array([i])
-
+    # Save interaction lists
     db['interaction_lists']['u'] = u
     db['interaction_lists']['x'] = x
     db['interaction_lists']['v'] = v

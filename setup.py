@@ -11,7 +11,7 @@ with open(PATH_VERSION, mode='r', encoding='utf-8') as f:
     exec(f.read(), ABOUT)
 
 requirements = [
-    "adaptoctree==1.0.2",
+    "adaptoctree==1.2.0",
     "scipy==1.6.1",
     "h5py==2.10.0",
     "cupy==8.3.0",

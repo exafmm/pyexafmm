@@ -1,6 +1,14 @@
 """
 Compute operators accelerated with Numba and OpenMP.
 """
+import numpy as np
+import numba
+
+from adaptoctree import morton
+
+import fmm.surface as surface
+
+
 
 def p2m():
     pass

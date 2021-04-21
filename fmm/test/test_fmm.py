@@ -67,19 +67,17 @@ def test_m2l():
 
     experiment.run()
 
-    kernel = experiment.config['kernel']
-    p2p = KERNELS[kernel]['p2p']
+    p2p = experiment.p2p_function
 
     level_2_idxs = experiment.complete_levels == 2
     key = experiment.complete[level_2_idxs][0]
     idx = experiment.key_to_index[key]
     target_lidx = idx*experiment.nequivalent_points
-    target_ridx = idx*experiment.nequivalent_points
+    target_ridx = target_lidx+experiment.nequivalent_points
     v_list = experiment.v_lists[idx]
     v_list = v_list[v_list != -1]
 
-    target_idxs = key == experiment.targets_to_keys
-    target_coordinates = experiment.targets[target_idxs]
+    target_coordinates = experiment.targets[experiment.target_index_pointer[idx]:experiment.target_index_pointer[idx+1]]
 
     level = np.int32(morton.find_level(key))
     center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0).astype(np.float32)
@@ -117,7 +115,8 @@ def test_m2l():
 
         source_idx = experiment.key_to_index[source]
         source_lidx = source_idx*experiment.nequivalent_points
-        source_ridx = (source_idx+1)*experiment.nequivalent_points
+        source_ridx = source_lidx+experiment.nequivalent_points
+
         tmp = p2p(
             sources=upward_equivalent_surface,
             targets=target_coordinates,
@@ -140,10 +139,28 @@ def test_fmm():
     kernel = experiment.config['kernel']
     p2p = KERNELS[kernel]['p2p']
 
-    direct = p2p(
-        targets=experiment.targets,
-        sources=experiment.sources,
-        source_densities=experiment.source_densities
-    )
+    for leaf in experiment.leaves:
 
-    assert np.allclose(direct, experiment.target_potentials, rtol=0.13)
+
+        leaf_idx = experiment.key_to_leaf_index[leaf]
+
+        res = experiment.target_potentials[
+                experiment.target_index_pointer[leaf_idx]:experiment.target_index_pointer[leaf_idx+1]
+            ]
+
+        targets = experiment.targets[
+            experiment.target_index_pointer[leaf_idx]:experiment.target_index_pointer[leaf_idx+1]
+        ]
+
+        direct = p2p(
+            targets=targets,
+            sources=experiment.sources,
+            source_densities=experiment.source_densities
+        )
+
+        diff = res-direct
+
+        err = 100*abs(diff)/direct
+        mean_err = np.mean(err)
+
+        assert mean_err < 4
