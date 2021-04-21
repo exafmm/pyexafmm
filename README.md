@@ -10,10 +10,12 @@ The goal of PyExaFMM is to develop a highly performant implementation of the ada
 
 ## Performance
 
-PyExaFMM compares favourably on realsitic problem sizes with naive direct evaluation with a numba-fied kernel. The figure below provides a benchmark for the Laplace kernel evaluated on uniformly distributed points.
+PyExaFMM compares favourably on realistic problem sizes with naive direct evaluation with a numba-fied kernel. The figure below provides a benchmark for the Laplace kernel evaluated on uniformly distributed points.
 
 <img src="static/performance.png" alt="Laplace" width="800">
 
+
+Here we use an order 5 multipole expansion, an order 6 local expansion, and constrain leaf nodes to contain a maximum of 100 particles. The target rank in our M2L operator compression is kept at 1.
 
 ## System Requirements
 
