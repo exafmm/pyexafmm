@@ -104,7 +104,22 @@ fmm generate-test-data
 fmm compute-operators
 ```
 
-Once this is done, you'll be left with a `.hdf5` database of precomputed parametrisations, with the same name as your specified `experiment` parameter from your `config.json`. If you've used your own data, then the operator precomputations will be written into the same HDF5 file. Now you are ready to start programming with PyExaFMM.
+Once this is done, you'll be left with a `.hdf5` database of precomputed parametrisations, with the same name as your specified `experiment` parameter from your `config.json`. If you've used your own data, then the operator precomputations will be written into the same HDF5 file.
+
+Finally, ensure that the following MKL environment variables are set,
+
+```bash
+export MKL_THREADING_LAYER=tbb
+export MKL_NUM_THREADS=1
+```
+
+This is to ensure that there is no over-subscription of threads from calling BLAS routines on top of Numba. See [this discussion](https://github.com/numba/numba/issues/6637#issuecomment-760460620) for more information. TBB should be installed alongside Numba, however if this isn't the case, it can be installed separately,
+
+```bash
+conda install -c conda-forge tbb
+```
+
+ Now you are ready to start programming with PyExaFMM.
 
 
 ## Usage
