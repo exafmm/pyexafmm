@@ -240,8 +240,8 @@ def m2m(
 
     Parameters:
     -----------
-    key : np.int64
-        Morton key of source node.
+    keys : np.int64
+        Morton keys of source nodes at this level.
     multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
         Array of all multipole expansions.
     m2m : np.array(shape=(8, n_equivalent, n_equivalent), dtype=np.float32)
@@ -291,6 +291,34 @@ def m2l_core(
         hash_to_index,
         scale
 ):
+    """
+    Core loop of M2L operator.
+
+    Parameters:
+    -----------
+    target : np.int64
+    v_list : np.array(np.int64)
+    u : np.array(np.float32)
+        Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
+    s : np.array(np.float32)
+        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
+    vt : np.array(np.float32)
+        Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
+    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all local expansions.
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
+    nequivalent_points: np.int32
+        Number of points discretising the equivalent surface.
+    ncheck_points : np.int32
+        Number of points discretising the check surface.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    hash_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map between hashes and indices of transfer vectors.
+    scale : np.float32
+        Precomputed kernel scale for this level.
+    """
 
     nv_list = len(v_list)
 
@@ -328,7 +356,33 @@ def m2l(
         hash_to_index,
         scale
     ):
+    """
+    M2L Operator. Parallelised over all targets in a given level.
 
+    Parameters:
+    -----------
+    targets : np.array(np.int64)
+    v_lists : np.array(shape=(n_v_list, ncomplete), dtype=np.int64)
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    u : np.array(np.float32)
+        Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
+    s : np.array(np.float32)
+        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
+    vt : np.array(np.float32)
+        Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
+    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all local expansions.
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
+    nequivalent_points: np.int32
+        Number of points discretising the equivalent surface.
+    ncheck_points : np.int32
+        Number of points discretising the check surface.
+    hash_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    scale : np.float32
+        Precomputed kernel scale for this level.
+    """
     # range over targets on a given level
     ntargets = len(targets)
 
@@ -371,8 +425,7 @@ def l2l(
         nequivalent_points
      ):
     """
-    L2L operator. Translate the local expansion of a parent node, to each of
-        it's children.
+    L2L operator. Translate the local expansion of a given node's parent to itself.
 
     Parameters:
     -----------
@@ -435,15 +488,16 @@ def s2l(
     -----------
     key : np.int64
         Morton key of source node.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    x_list : np.array(shape=(n_x_list, 1), dtype=np.int64)
-        Morton keys of X list members.
     sources : np.array(shape=(nsources, 3), dtype=np.float32)
         Source coordinates.
     source_densities : np.array(shape=(nsources, 1), dtype=np.float32)
         Charge densities at source points.
-    sources_to_keys : np.array(shape=(nsources, 1), dtype=np.int64)
-        (Leaf) Morton key where corresponding (via index) source lies.
+    source_index_pointer : np.array(np.int64)
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    x_list : np.array(shape=(n_x_list, 1), dtype=np.int64)
+        Morton keys of X list members.
     local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
         Array of all local expansions.
     x0 : np.array(shape=(1, 3), dtype=np.float32)
