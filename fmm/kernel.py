@@ -338,6 +338,23 @@ def laplace_p2p_parallel(
         source_index_pointer,
         target_index_pointer,
     ):
+    """
+    Parallelised P2P function, which relies on source/target data being described
+        by index pointers such that they are arranged by interaction. i.e. targets
+        and all sources required for P2P evaluation have the same pointer. This
+        is needed to maximise cache re-use, and reduce accesses to memory during
+        the parallel evaluation.
+
+    Parameters:
+    -----------
+    sources: np.array((nsources, 3), dtype=np.float32)
+    targets : np.array((ntargets, 3), dtype=np.float32)
+    source_densities : np.array((nsources, 3), dtype=np.float32)
+    source_index_pointer: np.array(nnodes+1, dtype=np.int32)
+        Created using the backend.prepare_u_list_data function.
+    target_index_pointer: np.array(nnodes+1, dtype=np.int32)
+        Created using the backend.prepare_u_list_data function.
+    """
 
     non_empty_targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
     ntargets = len(non_empty_targets)
