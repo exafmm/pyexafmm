@@ -182,15 +182,6 @@ class Fmm:
             keys = self.complete[self.complete_levels == level]
             scale = self.scale_function(level)
 
-            # M2L operator stored in terms of its SVD components for each level
-            str_level = str(level)
-            u = self.m2l[str_level]["u"][...]
-            s = np.diag(self.m2l[str_level]["s"][...])
-            vt = self.m2l[str_level]["vt"][...]
-
-            # Hashed transfer vectors for a given level, provide index for M2L operators
-            hashes = self.m2l[str_level]["hashes"][...]
-
             # V List interactions
             # M2L operator stored in terms of its SVD components for each level
             str_level = str(level)
