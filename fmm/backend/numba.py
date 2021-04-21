@@ -356,10 +356,12 @@ def l2l(
 @numba.njit(cache=True)
 def s2l(
         key,
+        sources,
+        source_densities,
+        source_index_pointer,
         key_to_index,
+        key_to_leaf_index,
         x_list,
-        key_to_sources,
-        key_to_source_densities,
         local_expansions,
         x0,
         r0,
@@ -413,7 +415,7 @@ def s2l(
 
     key_idx = key_to_index[key]
     key_lidx = key_idx*nequivalent_points
-    key_ridx = (key_idx+1)*nequivalent_points
+    key_ridx = key_lidx+nequivalent_points
 
     downward_check_surface = surface.scale_surface(
         surf=check_surface,
@@ -425,13 +427,14 @@ def s2l(
 
     for source in x_list:
 
-        source_coordinates = key_to_sources[source]
-        source_densities = key_to_source_densities[source]
+        source_index = key_to_leaf_index[source]
+        coordinates = sources[source_index_pointer[source_index]:source_index_pointer[source_index+1]]
+        densities = source_densities[source_index_pointer[source_index]:source_index_pointer[source_index+1]]
 
         downward_check_potential = p2p_function(
-            sources=source_coordinates,
+            sources=coordinates,
             targets=downward_check_surface,
-            source_densities=source_densities
+            source_densities=densities
         )
 
         local_expansions[key_lidx:key_ridx] += (scale*(dc2e_inv @ (downward_check_potential)))
@@ -440,7 +443,9 @@ def s2l(
 @numba.njit(cache=True)
 def m2t(
         target_key,
+        target_index_pointer,
         key_to_index,
+        key_to_leaf_index,
         w_list,
         target_coordinates,
         target_potentials,
@@ -501,7 +506,9 @@ def m2t(
             alpha=alpha_inner
         )
 
-        target_potentials[target_key] += p2p_function(
+        target_idx = key_to_leaf_index[target_key]
+
+        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1]] += p2p_function(
             sources=upward_equivalent_surface,
             targets=target_coordinates,
             source_densities=multipole_expansions[source_lidx:source_ridx]

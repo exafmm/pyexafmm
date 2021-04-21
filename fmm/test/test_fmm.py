@@ -128,29 +128,39 @@ def test_m2l():
     assert np.allclose(direct, equivalent, rtol=RTOL)
 
 
-# def test_fmm():
-#     """
-#     End To End Fmm Test.
-#     """
-#     experiment = Fmm('test_config')
+def test_fmm():
+    """
+    End To End Fmm Test.
+    """
+    experiment = Fmm('test_config')
 
-#     experiment.run()
+    experiment.run()
 
-#     kernel = experiment.config['kernel']
-#     p2p = KERNELS[kernel]['p2p']
+    kernel = experiment.config['kernel']
+    p2p = KERNELS[kernel]['p2p']
 
-#     for leaf in experiment.leaves:
-#         direct = p2p(
-#             targets=experiment.key_to_targets[leaf],
-#             sources=experiment.sources,
-#             source_densities=experiment.source_densities
-#         )
+    for leaf in experiment.leaves:
 
-#         res = experiment.target_potentials[leaf]
 
-#         diff = res-direct
+        leaf_idx = experiment.key_to_leaf_index[leaf]
 
-#         err = 100*abs(diff)/direct
-#         mean_err = np.mean(err)
+        res = experiment.target_potentials[
+                experiment.target_index_pointer[leaf_idx]:experiment.target_index_pointer[leaf_idx+1]
+            ]
 
-#         assert mean_err < 4
+        targets = experiment.targets[
+            experiment.target_index_pointer[leaf_idx]:experiment.target_index_pointer[leaf_idx+1]
+        ]
+
+        direct = p2p(
+            targets=targets,
+            sources=experiment.sources,
+            source_densities=experiment.source_densities
+        )
+
+        diff = res-direct
+
+        err = 100*abs(diff)/direct
+        mean_err = np.mean(err)
+
+        assert mean_err < 4
