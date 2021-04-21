@@ -330,20 +330,22 @@ class Fmm:
         #             p2p_function=self.p2p_function
         #         )
 
-        #         # Evaluate local expansions at targets
-        #         self.backend['l2t'](
-        #             key=key,
-        #             key_to_index=self.key_to_index,
-        #             target_coordinates=target_coordinates,
-        #             target_potentials=self.target_potentials,
-        #             local_expansions=self.local_expansions,
-        #             x0=self.x0,
-        #             r0=self.r0,
-        #             alpha_outer=self.alpha_outer,
-        #             equivalent_surface=self.equivalent_surface,
-        #             nequivalent_points=self.nequivalent_points,
-        #             p2p_function=self.p2p_function
-        #         )
+                # Evaluate local expansions at targets
+                self.backend['l2t'](
+                    key=key,
+                    key_to_index=self.key_to_index,
+                    key_to_leaf_index=self.key_to_leaf_index,
+                    target_coordinates=target_coordinates,
+                    target_potentials=self.target_potentials,
+                    target_index_pointer=self.target_index_pointer,
+                    local_expansions=self.local_expansions,
+                    x0=self.x0,
+                    r0=self.r0,
+                    alpha_outer=self.alpha_outer,
+                    equivalent_surface=self.equivalent_surface,
+                    nequivalent_points=self.nequivalent_points,
+                    p2p_function=self.p2p_function
+                )
 
                 # P2P interactions within node
                 self.backend['near_field_node'](

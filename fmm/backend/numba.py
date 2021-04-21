@@ -512,8 +512,10 @@ def m2t(
 def l2t(
         key,
         key_to_index,
+        key_to_leaf_index,
         target_coordinates,
         target_potentials,
+        target_index_pointer,
         local_expansions,
         x0,
         r0,
@@ -552,7 +554,7 @@ def l2t(
     """
     source_idx = key_to_index[key]
     source_lidx = (source_idx)*nequivalent_points
-    source_ridx = (source_idx+1)*nequivalent_points
+    source_ridx = source_lidx+nequivalent_points
 
     level = np.int32(morton.find_level(key))
     center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
@@ -565,7 +567,9 @@ def l2t(
         alpha_outer
     )
 
-    target_potentials[key] += p2p_function(
+    target_idx = key_to_leaf_index[key]
+
+    target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1]] += p2p_function(
         sources=downward_equivalent_surface,
         targets=target_coordinates,
         source_densities=local_expansions[source_lidx:source_ridx]
