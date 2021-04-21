@@ -25,6 +25,38 @@ def prepare_p2m_data(
         p2p_function,
         scale_function
     ):
+    """
+    Create vector of scales, and check potentials, required for the P2M operator.
+
+    Parameters:
+    -----------
+    leaves : np.array(nleaves, np.int64)
+    nleaves : np.int32
+    sources : np.array((nsources, 3), np.float32)
+    source_densities : np.array(nsources, np.float32)
+    source_index_pointer : np.array(nleaves+1,np.float32)
+    key_to_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_outer: np.float32
+        Relative size of outer surface
+    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+        Discretised check surface.
+    ncheck_points : np.int32
+        Number of quadrature points on the check surface.
+    p2p_function : function handle
+        Serial P2P function.
+    scale_function : function handle
+        Scaling function for kernel.
+
+    Returns:
+    --------
+    (np.array(np.float32), np.array(np.float32))
+        Tuple of scales and check potentials (ordered by leaf index) respectively.
+    """
 
     scales = np.zeros(nleaves, dtype=np.float32)
     check_potentials = np.zeros(nleaves*ncheck_points, np.float32)
@@ -78,6 +110,23 @@ def p2m_core(
         multipole_expansions,
         check_potentials
     ):
+    """
+    Core loop of P2M operator.
+
+    Parameters:
+    -----------
+    leaves : np.array(nleaves, np.int64)
+    nleaves : np.int32
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to complete tree index.
+    nequivalent_points : np.int32
+        Number of quadrature points on the equivalent surface.
+    ncheck_points : np.int32
+        Number of quadrature points on the check surface.
+    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
+    """
 
     for thread_idx in numba.prange(nleaves):
 
@@ -111,6 +160,42 @@ def p2m(
         p2p_function,
         scale_function
     ):
+    """
+    P2M Operator. Compute the multipole expansion from the sources at each
+    leaf node. Composed of two numba-fied operators.
+
+    Parameters:
+    -----------
+    leaves : np.array(nleaves, np.int64)
+    nleaves : np.int32
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to complete tree index.
+    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    sources : np.array((nsources, 3), np.float32)
+    source_densities : np.array(nsources, np.float32)
+    source_index_pointer : np.array(nleaves+1,np.float32)
+    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
+        Array of all multipole expansions.
+    nequivalent_points : np.int32
+        Number of quadrature points on the equivalent surface.
+    x0 : np.array(shape=(1, 3), dtype=np.float32)
+        Physical center of octree root node.
+    r0 : np.float32
+        Half side length of octree root node.
+    alpha_outer: np.float32
+        Relative size of outer surface
+    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+        Discretised check surface.
+    ncheck_points : np.int32
+        Number of quadrature points on the check surface.
+    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
+    p2p_function : function handle
+        Serial P2P function.
+    scale_function : function handle
+        Scaling function for kernel.
+    """
+
     scales, check_potentials = prepare_p2m_data(
         leaves=leaves,
         nleaves=nleaves,

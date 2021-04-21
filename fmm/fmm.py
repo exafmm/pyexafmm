@@ -177,7 +177,6 @@ class Fmm:
 
         # Pre-order traversal
         for level in range(2, self.depth + 1):
-            print('level', level)
 
             # Keys at this level
             keys = self.complete[self.complete_levels == level]
@@ -240,7 +239,6 @@ class Fmm:
                 )
 
         # Leaf near-field computations
-        print('starting near field computations')
         for key in self.leaves:
 
             global_idx = self.key_to_index[key]
