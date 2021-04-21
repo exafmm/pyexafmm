@@ -10,14 +10,14 @@ The goal of PyExaFMM is to develop a highly performant implementation of the ada
 
 ## Performance
 
-PyExaFMM compares favourably on realsitic problem sizes with naive (direct) evaluation. The figure below provides a benchmark for the Laplace kernel evaluated on uniformly distributed points.
+PyExaFMM compares favourably on realsitic problem sizes with naive direct evaluation with a numba-fied kernel. The figure below provides a benchmark for the Laplace kernel evaluated on uniformly distributed points.
 
 <img src="static/performance.png" alt="Laplace" width="800">
 
 
 ## System Requirements
 
-An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
+An NVidia GPU is required, as PyExaFsMM is accellerated with CUDA.
 
 ## Install
 
