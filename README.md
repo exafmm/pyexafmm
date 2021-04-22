@@ -15,7 +15,7 @@ PyExaFMM compares favourably on realistic problem sizes with naive direct evalua
 <img src="static/performance.png" alt="Laplace" width="800">
 
 
-Here we use an order 5 multipole expansion, an order 6 local expansion, and constrain leaf nodes to contain a maximum of 100 particles. The target rank in our M2L operator compression is kept at 1.
+Here we use an order 5 multipole expansion, an order 6 local expansion, and constrain leaf nodes to contain a maximum of 100 particles. The target rank in our M2L operator compression is kept at 1. The benchmark was run on an Intel i7-9750H processor.
 
 ## System Requirements
 
