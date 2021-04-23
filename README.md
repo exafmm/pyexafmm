@@ -144,17 +144,17 @@ e = Fmm()
 # Optionally specify non-default config filename, e.g. 'test_config.json'
 # e = Fmm('test_config')
 
-# Run upward & downward pass
+# Run FMM algorithm
 e.run()
 
-## Result data, potentials due to all sources evaluated at all targets
-# e.target_potentials
+# Access target potentials at each node via an index pointer
+# Find index of a given node in the complete octree
+key = e.complete[42]
+idx = e.key_to_index[key]
+e.target_potentials[e.target_index_pointer[idx]:e.target_index_pointer[idx+1]]
 
-## Accessed at each node via an index pointer
-## Find index of a given node in the complete octree within
-# key e.complete[42]
-# idx = e.key_to_index[key]
-# e.target_potentials[e.target_index_pointer[idx]:e.target_index_pointer[idx+1]]
+## These correspond to the the similarly indexed targets
+e.targets[e.target_index_pointer[idx]:e.target_index_pointer[idx+1]]
 ```
 
 
