@@ -150,7 +150,7 @@ e.run()
 ## Result data, potentials due to all sources evaluated at all targets
 # e.target_potentials
 
-## Accessed at each node via an index vector
+## Accessed at each node via an index pointer
 ## Find index of a given node in the complete octree within
 # key e.complete[42]
 # idx = e.key_to_index[key]
