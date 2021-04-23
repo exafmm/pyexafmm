@@ -153,7 +153,7 @@ key = e.complete[42]
 idx = e.key_to_index[key]
 e.target_potentials[e.target_index_pointer[idx]:e.target_index_pointer[idx+1]]
 
-## These correspond to the the similarly indexed targets
+# These correspond to the the similarly indexed targets
 e.targets[e.target_index_pointer[idx]:e.target_index_pointer[idx+1]]
 ```
 
