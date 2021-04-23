@@ -19,7 +19,7 @@ Here we use an order 5 multipole expansion, an order 6 local expansion, and cons
 
 ## System Requirements
 
-An NVidia GPU is required, as PyExaFsMM is accellerated with CUDA.
+An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
 
 ## Install
 
@@ -61,10 +61,10 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
 ```json
 {
     "experiment": "fmm",
-    "npoints": 1000,
+    "npoints": 100000,
     "data_type": "random",
-    "order_equivalent": 2,
-    "order_check": 12,
+    "order_equivalent": 5,
+    "order_check": 6,
     "kernel": "laplace",
     "backend": "numba",
     "alpha_inner": 1.05,
@@ -138,17 +138,23 @@ Example usage of the API presented by the `Fmm` class is as follows:
 ```python
 from fmm import Fmm
 
-# Instantiate an FMM object, with config
-experiment = Fmm()
+# Instantiate an experiment through an FMM object, with default 'config.json'
+e = Fmm()
 
-# Optionally specify non-default config filename:
-# experiment = Fmm('test')
+# Optionally specify non-default config filename, e.g. 'test_config.json'
+# e = Fmm('test_config')
 
 # Run upward & downward pass
-experiment.run()
+e.run()
 
-# Result data, potentials due to all sources evaluated at all targets.
-print(experiment.target_potentials)
+## Result data, potentials due to all sources evaluated at all targets
+# e.target_potentials
+
+## Accessed at each node via an index vector
+## Find index of a given node in the complete octree within
+# key e.complete[42]
+# idx = e.key_to_index[key]
+# e.target_potentials[e.target_index_pointer[idx]:e.target_index_pointer[idx+1]]
 ```
 
 
