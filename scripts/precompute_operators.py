@@ -429,8 +429,8 @@ def compute_inv_c2e(
         sources=downward_equivalent_surface,
     )
 
-    uc2e_inv = linalg.pinv2(uc2e)
-    dc2e_inv = linalg.pinv2(dc2e)
+    uc2e_inv = linalg.pinv2(uc2e, cond=config['cond'])
+    dc2e_inv = linalg.pinv2(dc2e, cond=config['cond'])
 
     if 'uc2e_inv' in db.keys() and 'dc2e_inv' in db.keys():
 
