@@ -13,119 +13,137 @@ import fmm.surface as surface
 from fmm.kernel import KERNELS
 
 
-RTOL = 1e-1
+# RTOL = 1e-1
+
+# def test_upward_pass():
+#     """
+#     Test that multipole expansion of root node is the same as a direct
+#         computation for a set of source points, at a target point located
+#         at a distance.
+#     """
+#     experiment = Fmm('test_config')
+#     experiment.upward_pass()
 
 
-def test_upward_pass():
-    """
-    Test that multipole expansion of root node is the same as a direct
-        computation for a set of source points, at a target point located
-        at a distance.
-    """
-    experiment = Fmm('test_config')
-    experiment.upward_pass()
+#     for key in experiment.complete[experiment.complete_levels == experiment.depth]:
 
-    upward_equivalent_surface = surface.scale_surface(
-        surf=experiment.equivalent_surface,
-        radius=experiment.r0,
-        level=np.int32(0),
-        center=experiment.x0,
-        alpha=experiment.alpha_inner
-    )
+#         center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0)
+#         radius = experiment.x0 / (1 << experiment.depth)
 
-    distant_point = np.array([[1e4, 0, 0]])
+#         upward_equivalent_surface = surface.scale_surface(
+#             surf=experiment.equivalent_surface,
+#             radius=experiment.r0,
+#             level=experiment.depth,
+#             center=center,
+#             alpha=experiment.alpha_inner
+#         )
 
-    kernel = experiment.config['kernel']
-    p2p = KERNELS[kernel]['p2p']
+#         distant_point = center+radius*3
 
-    direct = p2p(
-        sources=experiment.sources,
-        targets=distant_point,
-        source_densities=experiment.source_densities
-    )
+#         kernel = experiment.config['kernel']
+#         p2p = KERNELS[kernel]['p2p']
 
-    idx = experiment.key_to_index[0]
-    lidx = idx*experiment.nequivalent_points
-    ridx = (idx+1)*experiment.nequivalent_points
+#         leaf_idx = experiment.key_to_leaf_index[key]
+#         global_idx = experiment.key_to_index[key]
 
-    equivalent = p2p(
-        sources=upward_equivalent_surface,
-        targets=distant_point,
-        source_densities=experiment.multipole_expansions[lidx:ridx]
-    )
+#         lidx = global_idx*experiment.nequivalent_points
+#         ridx = lidx+experiment.nequivalent_points
 
-    assert np.allclose(direct, equivalent, rtol=RTOL)
+#         source_coordinates = experiment.sources[experiment.source_index_pointer[leaf_idx]:experiment.source_index_pointer[leaf_idx+1]]
+#         source_densities = experiment.source_densities[experiment.source_index_pointer[leaf_idx]:experiment.source_index_pointer[leaf_idx+1]]
+
+#         direct = p2p(
+#             sources=source_coordinates,
+#             targets=distant_point,
+#             source_densities=source_densities
+#         )
+
+#         equivalent = p2p(
+#             sources=upward_equivalent_surface,
+#             targets=distant_point,
+#             source_densities=experiment.multipole_expansions[lidx:ridx]
+#         )
+
+#         assert np.allclose(direct, equivalent, atol=1e-2, rtol=0)
 
 
-def test_m2l():
-    """
-    Test that the local expansions of a given target node correspond to the
-        multipole expansions of source nodes in its V list at a local point
-        within the target node.
-    """
-    experiment = Fmm('test_config')
+# def test_m2l():
+#     """
+#     Test that the local expansions of a given target node correspond to the
+#         multipole expansions of source nodes in its V list at a local point
+#         within the target node.
+#     """
+#     experiment = Fmm('test_config')
 
-    experiment.run()
+#     experiment.run()
 
-    p2p = experiment.p2p_function
+#     p2p = experiment.p2p_function
 
-    level_2_idxs = experiment.complete_levels == 2
-    key = experiment.complete[level_2_idxs][0]
-    idx = experiment.key_to_index[key]
-    target_lidx = idx*experiment.nequivalent_points
-    target_ridx = target_lidx+experiment.nequivalent_points
-    v_list = experiment.v_lists[idx]
-    v_list = v_list[v_list != -1]
+#     level_2_idxs = experiment.complete_levels == 2
 
-    target_coordinates = experiment.targets[experiment.target_index_pointer[idx]:experiment.target_index_pointer[idx+1]]
+#     for i, key in enumerate(experiment.complete[level_2_idxs]):
+#         idx = experiment.key_to_index[key]
+#         target_lidx = idx*experiment.nequivalent_points
+#         target_ridx = target_lidx+experiment.nequivalent_points
+#         v_list = experiment.v_lists[idx]
+#         v_list = v_list[v_list != -1]
 
-    level = np.int32(morton.find_level(key))
-    center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0).astype(np.float32)
 
-    local_expansion = experiment.local_expansions[target_lidx:target_ridx]
+#         level = np.int32(morton.find_level(key))
+#         center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0).astype(np.float32)
 
-    downward_equivalent_surface = surface.scale_surface(
-        surf=experiment.equivalent_surface,
-        radius=experiment.r0,
-        level=level,
-        center=center,
-        alpha=experiment.alpha_outer
-    )
+#         local_expansion = experiment.local_expansions[target_lidx:target_ridx]
 
-    equivalent = p2p(
-        sources=downward_equivalent_surface,
-        targets=target_coordinates,
-        source_densities=local_expansion
-    )
+#         downward_check_surface = surface.scale_surface(
+#             surf=experiment.equivalent_surface,
+#             radius=experiment.r0,
+#             level=level,
+#             center=center,
+#             alpha=experiment.alpha_inner
+#         )
 
-    direct = np.zeros_like(equivalent)
+#         downward_equivalent_surface = surface.scale_surface(
+#             surf=experiment.equivalent_surface,
+#             radius=experiment.r0,
+#             level=level,
+#             center=center,
+#             alpha=experiment.alpha_outer
+#         )
 
-    for source in v_list:
+#         equivalent = p2p(
+#             sources=downward_equivalent_surface,
+#             targets=downward_check_surface,
+#             source_densities=local_expansion
+#         )
 
-        source_level = np.int32(morton.find_level(source))
-        source_center = morton.find_physical_center_from_key(source, experiment.x0, experiment.r0).astype(np.float32)
+#         direct = np.zeros_like(equivalent)
 
-        upward_equivalent_surface = surface.scale_surface(
-            surf=experiment.equivalent_surface,
-            radius=experiment.r0,
-            level=source_level,
-            center=source_center,
-            alpha=experiment.alpha_inner
-        )
+#         for source in v_list:
 
-        source_idx = experiment.key_to_index[source]
-        source_lidx = source_idx*experiment.nequivalent_points
-        source_ridx = source_lidx+experiment.nequivalent_points
+#             source_level = np.int32(morton.find_level(source))
+#             source_center = morton.find_physical_center_from_key(source, experiment.x0, experiment.r0).astype(np.float32)
 
-        tmp = p2p(
-            sources=upward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=experiment.multipole_expansions[source_lidx:source_ridx]
-        )
+#             upward_equivalent_surface = surface.scale_surface(
+#                 surf=experiment.equivalent_surface,
+#                 radius=experiment.r0,
+#                 level=source_level,
+#                 center=source_center,
+#                 alpha=experiment.alpha_inner
+#             )
 
-        direct += tmp
+#             source_idx = experiment.key_to_index[source]
+#             source_lidx = source_idx*experiment.nequivalent_points
+#             source_ridx = source_lidx+experiment.nequivalent_points
 
-    assert np.allclose(direct, equivalent, rtol=RTOL)
+#             tmp = p2p(
+#                 sources=upward_equivalent_surface,
+#                 targets=downward_check_surface,
+#                 source_densities=experiment.multipole_expansions[source_lidx:source_ridx]
+#             )
+
+#             direct += tmp
+
+#         assert np.allclose(direct, equivalent, rtol=0.01, atol=0)
 
 
 def test_fmm():
@@ -163,4 +181,10 @@ def test_fmm():
         err = 100*abs(diff)/direct
         mean_err = np.mean(err)
 
-        assert mean_err < 4
+        if mean_err < 4:
+            print('success', leaf, morton.find_level(leaf), mean_err)
+            pass
+        else:
+            print('failure', leaf, morton.find_level(leaf), mean_err)
+
+    assert False

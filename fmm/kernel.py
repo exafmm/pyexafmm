@@ -4,7 +4,7 @@ Kernels accelerated with CUDA and Numba.
 import math
 
 import numba
-from numba import cuda
+# from numba import cuda
 import numpy as np
 
 # GPU Kernel parameters
@@ -19,7 +19,10 @@ TOL = 1e-6
 ###############################################################################
 
 
-@numba.njit(cache=True)
+@numba.njit(
+    [numba.float32(numba.int32)],
+    cache=True
+)
 def laplace_scale(level):
     """
     Level scale for the Laplace kernel.
@@ -32,7 +35,7 @@ def laplace_scale(level):
     --------
     np.float32
     """
-    return np.float32(1/(2**level))
+    return numba.float32(1/(2**level))
 
 
 @numba.njit(cache=True)
@@ -57,240 +60,240 @@ def laplace_cpu(x, y):
     return res
 
 
-@cuda.jit(device=True)
-def laplace_cuda(ax, ay, az, bx, by, bz):
-    """
-    Numba-Cuda Laplace device kernel.
+# @cuda.jit(device=True)
+# def laplace_cuda(ax, ay, az, bx, by, bz):
+#     """
+#     Numba-Cuda Laplace device kernel.
 
-    Parameters:
-    -----------
-    ax : np.float32
-        'x' coordinate of a point.
-    ay : np.float32
-        'y' coordinate of a point.
-    az : np.float32
-        'z' coordinate of a point.
-    bx : np.float32
-        'x' coordinate of a point.
-    by : np.float32
-        'y' coordinate of a point.
-    bz : np.float32
-        'z' coordinate of a point.
+#     Parameters:
+#     -----------
+#     ax : np.float32
+#         'x' coordinate of a point.
+#     ay : np.float32
+#         'y' coordinate of a point.
+#     az : np.float32
+#         'z' coordinate of a point.
+#     bx : np.float32
+#         'x' coordinate of a point.
+#     by : np.float32
+#         'y' coordinate of a point.
+#     bz : np.float32
+#         'z' coordinate of a point.
 
-    Returns:
-    --------
-    nb.cuda.float32
-    """
-    rx = ax-bx
-    ry = ay-by
-    rz = az-bz
+#     Returns:
+#     --------
+#     nb.cuda.float32
+#     """
+#     rx = ax-bx
+#     ry = ay-by
+#     rz = az-bz
 
-    dist = rx**2+ry**2+rz**2
-    dist_sqr = math.sqrt(dist)
-    inv_dist_sqr =  1./(4*math.pi*dist_sqr)
+#     dist = rx**2+ry**2+rz**2
+#     dist_sqr = math.sqrt(dist)
+#     inv_dist_sqr =  1./(4*math.pi*dist_sqr)
 
-    if math.isinf(inv_dist_sqr):
-        return 0.
+#     if math.isinf(inv_dist_sqr):
+#         return 0.
 
-    return numba.float32(inv_dist_sqr)
-
-
-@cuda.jit
-def laplace_implicit_gram_matrix(
-        sources,
-        targets,
-        rhs,
-        result,
-        height,
-        width,
-        idx
-    ):
-    """
-    Implicitly apply the Gram matrix to a vector, computing Green's function on
-        the fly on the device, and multiplying by random matrices to approximate
-        the basis. Multiple RHS are computed in a loop, specified by the index.
-
-    Parameters:
-    -----------
-    sources : np.array(shape=(nsources, 3))
-        nsources rows of gram matrix
-    targets : np.array(shape=(ntargets, 3))
-        ntargets columns of gram matrix
-    rhs : np.array(shape=(ntargets, nrhs))
-        Multiple right hand sides, indexed by 'idx'
-    result : np.array(shape=(height, nrhs))
-        Dimensions of result matrix defined by matrix height
-        and number of right hand sides
-    height : int
-        'height' of implicit gram matrix. Defined by m, where
-        m > n, and m is either ntargets or nsources.
-    width : int
-        'width' of implicit gram matrix.
-    idx: int
-        RHS index.
-    """
-
-    blockWidth = cuda.shared.array(1, numba.int32)
-    blockxInd = cuda.shared.array(1, numba.int32)
-    blockyInd = cuda.shared.array(1, numba.int32)
-
-    # Calculate once, and share amongs thread-block
-    if cuda.threadIdx.x == 0:
-        if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
-            blockWidth[0] = numba.int32(BLOCK_WIDTH)
-        else:
-            blockWidth[0] = numba.int32(width % BLOCK_WIDTH)
-
-        blockxInd[0] = numba.int32(cuda.blockIdx.x*BLOCK_WIDTH)
-        blockyInd[0] = numba.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
-
-    cuda.syncthreads()
-
-    # Extract tile of RHS, of size up to BLOCK_WIDTH
-    tmp = cuda.shared.array(BLOCK_WIDTH, numba.float32)
-
-    if cuda.threadIdx.x < blockWidth[0]:
-        tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
-
-    cuda.syncthreads()
-
-    # Accumulate matvec of tile into variable
-    row_sum = 0
-
-    threadyInd = blockyInd[0]+cuda.threadIdx.x
-
-    if threadyInd < height:
-        for i in range(blockWidth[0]):
-            col_idx = blockxInd[0] + i
-            row_idx = threadyInd
-            source = sources[row_idx]
-            target  = targets[col_idx]
-
-            sx = source[0]
-            sy = source[1]
-            sz = source[2]
-
-            tx = target[0]
-            ty = target[1]
-            tz = target[2]
-
-            row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
-
-    cuda.atomic.add(result, (threadyInd, idx), row_sum)
+#     return numba.float32(inv_dist_sqr)
 
 
-@cuda.jit
-def laplace_implicit_gram_matrix_blocked(
-        sources,
-        targets,
-        rhs,
-        result,
-        height,
-        width,
-        sub_height,
-        sub_width,
-        idx
-    ):
-    """
-    Implicitly apply the Gram matrix to a vector, computing Green's function on
-        the fly on the device, and multiplying by random matrices to approximate
-        the basis. Multiple RHS are computed in a loop, specified by the index.
-        This kernel assumes that the sources/targets specified by the user
-        specify multiple Gram matrices, i.e. the global Gram matrix is 'blocked',
+# @cuda.jit
+# def laplace_implicit_gram_matrix(
+#         sources,
+#         targets,
+#         rhs,
+#         result,
+#         height,
+#         width,
+#         idx
+#     ):
+#     """
+#     Implicitly apply the Gram matrix to a vector, computing Green's function on
+#         the fly on the device, and multiplying by random matrices to approximate
+#         the basis. Multiple RHS are computed in a loop, specified by the index.
 
-        e.g. gram = ((g_1) | (g_2) | ... | (g_{n-1}) | g_n)
+#     Parameters:
+#     -----------
+#     sources : np.array(shape=(nsources, 3))
+#         nsources rows of gram matrix
+#     targets : np.array(shape=(ntargets, 3))
+#         ntargets columns of gram matrix
+#     rhs : np.array(shape=(ntargets, nrhs))
+#         Multiple right hand sides, indexed by 'idx'
+#     result : np.array(shape=(height, nrhs))
+#         Dimensions of result matrix defined by matrix height
+#         and number of right hand sides
+#     height : int
+#         'height' of implicit gram matrix. Defined by m, where
+#         m > n, and m is either ntargets or nsources.
+#     width : int
+#         'width' of implicit gram matrix.
+#     idx: int
+#         RHS index.
+#     """
 
-        therefore, one additionally needs to specify the dimensions of the
-        'sub' gram matrices in order to pick out the correct matrix elements
-        for application to a given RHS.
+#     blockWidth = cuda.shared.array(1, numba.int32)
+#     blockxInd = cuda.shared.array(1, numba.int32)
+#     blockyInd = cuda.shared.array(1, numba.int32)
 
-    Parameters:
-    -----------
-    sources : np.array(shape=(nsources, 3), dtype=np.float32)
-        nsources rows of gram matrix
-    targets : np.array(shape=(ntargets, 3), dtype=np.float32)
-        ntargets columns of gram matrix
-    rhs : np.array(shape=(ntargets, nrhs), dtype=np.float32)
-        Multiple right hand sides, indexed by 'idx'
-    result : np.array(shape=(height, nrhs), dtype=np.float32)
-        Dimensions of result matrix defined by matrix height
-        and number of right hand sides
-    height : np.int32
-        'height' of global Gram matrix. Defined by m, where
-        m > n, and m is either ntargets or nsources.
-    width : np.int32
-        'width' of Global gram matrix.
-    sub_height : np.int32
-        height of sub-Gram matrix. Defined by m, where
-        m > n, and m is either ntargets or nsources.
-    sub_width : np.int32
-        'width' of sub-Gram matrix.
-    idx: np.int32
-        RHS index.
-    """
+#     # Calculate once, and share amongs thread-block
+#     if cuda.threadIdx.x == 0:
+#         if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
+#             blockWidth[0] = numba.int32(BLOCK_WIDTH)
+#         else:
+#             blockWidth[0] = numba.int32(width % BLOCK_WIDTH)
 
-    blockWidth = cuda.shared.array(1, numba.int32)
-    blockxInd = cuda.shared.array(1, numba.int32)
-    blockyInd = cuda.shared.array(1, numba.int32)
+#         blockxInd[0] = numba.int32(cuda.blockIdx.x*BLOCK_WIDTH)
+#         blockyInd[0] = numba.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
 
-    # Calculate once, and share amongs thread-block
-    if cuda.threadIdx.x == 0:
-        if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
-            blockWidth[0] = numba.int32(BLOCK_WIDTH)
-        else:
-            blockWidth[0] = numba.int32(width % BLOCK_WIDTH)
+#     cuda.syncthreads()
 
-        blockxInd[0] = numba.int32(cuda.blockIdx.x*BLOCK_WIDTH)
-        blockyInd[0] = numba.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
+#     # Extract tile of RHS, of size up to BLOCK_WIDTH
+#     tmp = cuda.shared.array(BLOCK_WIDTH, numba.float32)
 
-    cuda.syncthreads()
+#     if cuda.threadIdx.x < blockWidth[0]:
+#         tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
 
-    # Extract tile of RHS, of size up to BLOCK_WIDTH
-    tmp = cuda.shared.array(BLOCK_WIDTH, numba.float32)
+#     cuda.syncthreads()
 
-    if cuda.threadIdx.x < blockWidth[0]:
-        tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
+#     # Accumulate matvec of tile into variable
+#     row_sum = 0
 
-    cuda.syncthreads()
+#     threadyInd = blockyInd[0]+cuda.threadIdx.x
 
-    # Accumulate matvec of tile into variable
-    row_sum = 0
+#     if threadyInd < height:
+#         for i in range(blockWidth[0]):
+#             col_idx = blockxInd[0] + i
+#             row_idx = threadyInd
+#             source = sources[row_idx]
+#             target  = targets[col_idx]
 
-    threadyInd = blockyInd[0]+cuda.threadIdx.x
-    threadxInd = blockxInd[0]+cuda.threadIdx.x
+#             sx = source[0]
+#             sy = source[1]
+#             sz = source[2]
 
-    # Find the index of the sub-Gram matrix, dependent on orientation.
-    if sub_width == width:
-        submatrixInd = numba.int32(math.floor(threadyInd/sub_height))*sub_width
+#             tx = target[0]
+#             ty = target[1]
+#             tz = target[2]
 
-    if sub_height == height:
-        submatrixInd = numba.int32(math.floor(threadxInd/sub_width))*sub_height
+#             row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
 
-    if threadyInd < height:
-        for i in range(blockWidth[0]):
-            col_idx = (blockxInd[0] + i)
-            row_idx = threadyInd
+#     cuda.atomic.add(result, (threadyInd, idx), row_sum)
 
-            # Pick out matrix element for sub-Gram matrix
-            if sub_width == width:
-                source = sources[col_idx+submatrixInd]
-                target  = targets[row_idx]
 
-            elif sub_height == height:
-                source = sources[col_idx]
-                target = targets[row_idx+submatrixInd]
+# @cuda.jit
+# def laplace_implicit_gram_matrix_blocked(
+#         sources,
+#         targets,
+#         rhs,
+#         result,
+#         height,
+#         width,
+#         sub_height,
+#         sub_width,
+#         idx
+#     ):
+#     """
+#     Implicitly apply the Gram matrix to a vector, computing Green's function on
+#         the fly on the device, and multiplying by random matrices to approximate
+#         the basis. Multiple RHS are computed in a loop, specified by the index.
+#         This kernel assumes that the sources/targets specified by the user
+#         specify multiple Gram matrices, i.e. the global Gram matrix is 'blocked',
 
-            sx = source[0]
-            sy = source[1]
-            sz = source[2]
+#         e.g. gram = ((g_1) | (g_2) | ... | (g_{n-1}) | g_n)
 
-            tx = target[0]
-            ty = target[1]
-            tz = target[2]
+#         therefore, one additionally needs to specify the dimensions of the
+#         'sub' gram matrices in order to pick out the correct matrix elements
+#         for application to a given RHS.
 
-            row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
+#     Parameters:
+#     -----------
+#     sources : np.array(shape=(nsources, 3), dtype=np.float32)
+#         nsources rows of gram matrix
+#     targets : np.array(shape=(ntargets, 3), dtype=np.float32)
+#         ntargets columns of gram matrix
+#     rhs : np.array(shape=(ntargets, nrhs), dtype=np.float32)
+#         Multiple right hand sides, indexed by 'idx'
+#     result : np.array(shape=(height, nrhs), dtype=np.float32)
+#         Dimensions of result matrix defined by matrix height
+#         and number of right hand sides
+#     height : np.int32
+#         'height' of global Gram matrix. Defined by m, where
+#         m > n, and m is either ntargets or nsources.
+#     width : np.int32
+#         'width' of Global gram matrix.
+#     sub_height : np.int32
+#         height of sub-Gram matrix. Defined by m, where
+#         m > n, and m is either ntargets or nsources.
+#     sub_width : np.int32
+#         'width' of sub-Gram matrix.
+#     idx: np.int32
+#         RHS index.
+#     """
 
-    cuda.atomic.add(result, (threadyInd, idx), row_sum)
+#     blockWidth = cuda.shared.array(1, numba.int32)
+#     blockxInd = cuda.shared.array(1, numba.int32)
+#     blockyInd = cuda.shared.array(1, numba.int32)
+
+#     # Calculate once, and share amongs thread-block
+#     if cuda.threadIdx.x == 0:
+#         if (cuda.blockIdx.x + 1)*BLOCK_WIDTH <= width:
+#             blockWidth[0] = numba.int32(BLOCK_WIDTH)
+#         else:
+#             blockWidth[0] = numba.int32(width % BLOCK_WIDTH)
+
+#         blockxInd[0] = numba.int32(cuda.blockIdx.x*BLOCK_WIDTH)
+#         blockyInd[0] = numba.int32(cuda.blockIdx.y*BLOCK_HEIGHT)
+
+#     cuda.syncthreads()
+
+#     # Extract tile of RHS, of size up to BLOCK_WIDTH
+#     tmp = cuda.shared.array(BLOCK_WIDTH, numba.float32)
+
+#     if cuda.threadIdx.x < blockWidth[0]:
+#         tmp[cuda.threadIdx.x] = rhs[idx][blockxInd[0]+cuda.threadIdx.x]
+
+#     cuda.syncthreads()
+
+#     # Accumulate matvec of tile into variable
+#     row_sum = 0
+
+#     threadyInd = blockyInd[0]+cuda.threadIdx.x
+#     threadxInd = blockxInd[0]+cuda.threadIdx.x
+
+#     # Find the index of the sub-Gram matrix, dependent on orientation.
+#     if sub_width == width:
+#         submatrixInd = numba.int32(math.floor(threadyInd/sub_height))*sub_width
+
+#     if sub_height == height:
+#         submatrixInd = numba.int32(math.floor(threadxInd/sub_width))*sub_height
+
+#     if threadyInd < height:
+#         for i in range(blockWidth[0]):
+#             col_idx = (blockxInd[0] + i)
+#             row_idx = threadyInd
+
+#             # Pick out matrix element for sub-Gram matrix
+#             if sub_width == width:
+#                 source = sources[col_idx+submatrixInd]
+#                 target  = targets[row_idx]
+
+#             elif sub_height == height:
+#                 source = sources[col_idx]
+#                 target = targets[row_idx+submatrixInd]
+
+#             sx = source[0]
+#             sy = source[1]
+#             sz = source[2]
+
+#             tx = target[0]
+#             ty = target[1]
+#             tz = target[2]
+
+#             row_sum += laplace_cuda(sx, sy, sz, tx, ty, tz)*tmp[i]
+
+#     cuda.atomic.add(result, (threadyInd, idx), row_sum)
 
 
 @numba.njit(cache=True, parallel=False, fastmath=True, error_model="numpy")
@@ -439,11 +442,11 @@ KERNELS = {
     'laplace': {
         'eval': laplace_cpu,
         'scale': laplace_scale,
-        'cuda': laplace_cuda,
+        # 'cuda': laplace_cuda,
         'dense_gram': laplace_gram_matrix_serial,
         'dense_gram_parallel': laplace_gram_matrix_parallel,
-        'implicit_gram': laplace_implicit_gram_matrix,
-        'implicit_gram_blocked': laplace_implicit_gram_matrix_blocked,
+        # 'implicit_gram': laplace_implicit_gram_matrix,
+        # 'implicit_gram_blocked': laplace_implicit_gram_matrix_blocked,
         'p2p': laplace_p2p_serial,
         'p2p_parallel': laplace_p2p_parallel
     },

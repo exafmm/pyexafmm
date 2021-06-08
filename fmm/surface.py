@@ -86,7 +86,7 @@ def scale_surface(surf, radius, level, center, alpha):
     scaled_radius = (0.5)**level * radius
     dilated_radius = alpha*scaled_radius
 
-    scaled_surf = np.copy(surf)
+    scaled_surf = np.zeros_like(surf, np.float32)
 
     for i in range(n_coeffs):
         scaled_surf[i] = surf[i]*dilated_radius + center

@@ -1,6 +1,7 @@
 """
 Compute operators, accelerated with Numba.
 """
+from operator import mul
 import numba
 import numpy as np
 
@@ -319,7 +320,6 @@ def m2l_core(
     scale : np.float32
         Precomputed kernel scale for this level.
     """
-
     nv_list = len(v_list)
 
     # Index of local expansion
@@ -328,19 +328,19 @@ def m2l_core(
     for i in range(nv_list):
 
         source = v_list[i]
-        midx = key_to_index[source]*nequivalent_points
 
         transfer_vector = morton.find_transfer_vector(target, source)
-        u_idx = hash_to_index[transfer_vector]
-        u_lidx = u_idx*ncheck_points
+        v_idx = hash_to_index[transfer_vector]
+        v_lidx = v_idx*ncheck_points
+        v_ridx = v_lidx+ncheck_points
+        vt_sub = vt[:, v_lidx:v_ridx]
 
-        u_sub = u[u_lidx:u_lidx+ncheck_points]
+        m_lidx = key_to_index[source]*nequivalent_points
+        m_ridx = m_lidx+nequivalent_points
+        local_expansions[lidx:lidx+nequivalent_points] += (scale*dc2e_inv) @ (u @ np.diag(s) @ vt_sub) @ multipole_expansions[m_lidx:m_ridx]
 
-        multipole_expansion = multipole_expansions[midx:midx+nequivalent_points]
-        local_expansions[lidx:lidx+nequivalent_points] += scale*(dc2e_inv @ (u_sub @ (s @ ( vt @ multipole_expansion))))
 
-
-@numba.njit(cache=True, parallel=True)
+@numba.njit(cache=True, parallel=False)
 def m2l(
         targets,
         v_lists,
@@ -367,7 +367,7 @@ def m2l(
     u : np.array(np.float32)
         Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
     s : np.array(np.float32)
-        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
+        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.`
     vt : np.array(np.float32)
         Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
     dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
@@ -443,13 +443,13 @@ def l2l(
     parent = morton.find_parent(key)
     parent_idx = key_to_index[parent]
     parent_lidx = parent_idx*nequivalent_points
-    parent_ridx = (parent_idx+1)*nequivalent_points
+    parent_ridx = parent_lidx+nequivalent_points
     parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
 
     # Compute expansion index
     child_idx = key_to_index[key]
     child_lidx = child_idx*nequivalent_points
-    child_ridx = (child_idx+1)*nequivalent_points
+    child_ridx = child_lidx+nequivalent_points
 
     # Compute operator index
     operator_idx = key == morton.find_siblings(key)
@@ -515,9 +515,10 @@ def s2l(
     p2p_function : function
         Function handle for kernel P2P.
     """
-    level = np.int32(morton.find_level(key))
-    scale = np.int32(scale_function(level))
-    center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
+
+    level = morton.find_level(key)
+    scale = scale_function(level)
+    center = morton.find_physical_center_from_key(key, x0, r0)
 
     key_idx = key_to_index[key]
     key_lidx = key_idx*nequivalent_points
@@ -601,10 +602,10 @@ def m2t(
 
         source_idx = key_to_index[source]
         source_lidx = source_idx*nequivalent_points
-        source_ridx = (source_idx+1)*nequivalent_points
+        source_ridx = source_lidx+nequivalent_points
 
-        source_level = np.int32(morton.find_level(source))
-        source_center = morton.find_physical_center_from_key(source, x0, r0).astype(np.float32)
+        source_level = morton.find_level(source)
+        source_center = morton.find_physical_center_from_key(source, x0, r0)
 
         upward_equivalent_surface = surface.scale_surface(
             surf=equivalent_surface,
@@ -673,8 +674,8 @@ def l2t(
     source_lidx = (source_idx)*nequivalent_points
     source_ridx = source_lidx+nequivalent_points
 
-    level = np.int32(morton.find_level(key))
-    center = morton.find_physical_center_from_key(key, x0, r0).astype(np.float32)
+    level = morton.find_level(key)
+    center = morton.find_physical_center_from_key(key, x0, r0)
 
     downward_equivalent_surface = surface.scale_surface(
         equivalent_surface,
