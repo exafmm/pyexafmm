@@ -27,7 +27,11 @@ def db():
     return h5py.File(ROOT / f"{experiment}.hdf5", "r")
 
 def test_m2m(db):
-
+    """
+    Test the convergence of the multipole expansion of the root node. If this
+        as expected, then the M2M translation operators as well as the P2M step
+        work.
+    """
     parent_key = 0
     child_key = morton.find_children(parent_key)[0]
 
@@ -54,8 +58,7 @@ def test_m2m(db):
         db["m2m"][operator_idx], child_equivalent_density
     )
 
-    # distant_point = parent_center+r0*CONFIG['alpha_outer']*1.1
-    distant_point = np.array([[1e2, 0, 0]])
+    distant_point = parent_center+r0*CONFIG['alpha_outer']*1.1
 
     child_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
@@ -85,10 +88,14 @@ def test_m2m(db):
         source_densities=child_equivalent_density,
     )
 
-    assert np.isclose(parent_direct, child_direct, atol=1e-6, rtol=0)
+    assert np.isclose(parent_direct, child_direct, atol=1e-3, rtol=0)
+
 
 def test_l2l(db):
-
+    """
+    Test the convergence of the local expansion after L2L has been performed
+        on a given parent/child pair.
+    """
     parent_key = 1
     child_key = morton.find_children(parent_key)[-1]
 
@@ -142,8 +149,15 @@ def test_l2l(db):
 
     assert np.isclose(parent_direct, child_direct, atol=1e-4, rtol=0)
 
-def test_m2l(db):
 
+def test_m2l(db):
+    """
+    Test convergence of local expansion after M2L translation has been applied,
+        as well as SVD compression by computing result from all multipole
+        expansions of source nodes for a given target node in its V list, and
+        comparing with local expansion result computed with compressed M2L
+        translation operator.
+    """
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...][0]
     dc2e_inv = db['dc2e_inv'][...]
