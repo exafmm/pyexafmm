@@ -10,6 +10,6 @@
     "alpha_outer": 2.9,
     "max_level": 10,
     "max_points": 150,
-    "target_rank": 50,
+    "target_rank": 10,
     "tol": 1e-4
 }
