@@ -333,14 +333,14 @@ def m2l_core(
         v_idx = hash_to_index[transfer_vector]
         v_lidx = v_idx*ncheck_points
         v_ridx = v_lidx+ncheck_points
-        vt_sub = vt[:, v_lidx:v_ridx]
+        vt_sub = np.copy(vt[:, v_lidx:v_ridx])
 
         m_lidx = key_to_index[source]*nequivalent_points
         m_ridx = m_lidx+nequivalent_points
-        local_expansions[lidx:lidx+nequivalent_points] += (scale*dc2e_inv) @ (u @ np.diag(s) @ vt_sub) @ multipole_expansions[m_lidx:m_ridx]
+        local_expansions[lidx:lidx+nequivalent_points] += (scale*dc2e_inv) @ (u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx])))
 
 
-@numba.njit(cache=True, parallel=False)
+@numba.njit(cache=True, parallel=True)
 def m2l(
         targets,
         v_lists,

@@ -186,7 +186,7 @@ class Fmm:
             # M2L operator stored in terms of its SVD components for each level
             str_level = str(level)
             u = self.m2l[str_level]["u"][...]
-            s = self.m2l[str_level]["s"][...]
+            s = np.diag(self.m2l[str_level]["s"][...])
             vt = self.m2l[str_level]["vt"][...]
 
             # Hashed transfer vectors for a given level, provide index for M2L operators

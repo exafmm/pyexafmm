@@ -22,7 +22,6 @@ def test_upward_pass():
     experiment = Fmm('test_config')
     experiment.upward_pass()
 
-
     for key in experiment.complete[experiment.complete_levels == experiment.depth]:
 
         center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0)
