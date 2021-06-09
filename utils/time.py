@@ -24,11 +24,9 @@ class Timer:
 def seconds_to_minutes(seconds):
     """
     Convert seconds to minutes and seconds.
-
     Parameters:
     -----------
     seconds : float
-
     Returns:
     --------
     (float, float)

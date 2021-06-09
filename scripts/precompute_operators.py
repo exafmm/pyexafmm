@@ -6,32 +6,29 @@ import pathlib
 import sys
 import time
 
-import cupy as cp
 import h5py
 import numba
 import numpy as np
-import scipy.linalg as linalg
+from sklearn.utils.extmath import randomized_svd
 
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
-from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
+from fmm.kernel import KERNELS
+import fmm.linalg as linalg
 import fmm.surface as surface
 
 import utils.data as data
 import utils.time
 
-
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 WORKING_DIR = pathlib.Path(os.getcwd())
 
-TPB = BLOCK_HEIGHT
-
 
 def compress_m2l_gram_matrix(
         level, x0, r0, depth, alpha_inner, check_surface,
-        equivalent_surface, k, implicit_gram_matrix
+        equivalent_surface, k
     ):
     """
     Compute compressed representation of unique Gram matrices for targets and
@@ -78,11 +75,9 @@ def compress_m2l_gram_matrix(
 
     n_targets_per_node = len(check_surface)
     n_sources_per_node = len(equivalent_surface)
-    n_targets = len(targets)
     n_sources = len(sources)
 
-    dsources = cp.zeros((n_sources*n_sources_per_node, 3)).astype(np.float32)
-    dtargets = cp.zeros((n_targets*n_targets_per_node, 3)).astype(np.float32)
+    se2tc = np.zeros((n_targets_per_node, n_sources*n_sources_per_node), np.float32)
 
     for idx in range(len(targets)):
 
@@ -101,13 +96,10 @@ def compress_m2l_gram_matrix(
             r0=r0
         )
 
-        lidx_targets = (idx)*n_targets_per_node
-        ridx_targets = (idx+1)*n_targets_per_node
-
         lidx_sources = (idx)*n_sources_per_node
-        ridx_sources = (idx+1)*n_sources_per_node
+        ridx_sources = lidx_sources+n_sources_per_node
 
-        target_coordinates = surface.scale_surface(
+        target_check_surface = surface.scale_surface(
             surf=check_surface,
             radius=np.float32(r0),
             level=np.int32(level),
@@ -115,7 +107,7 @@ def compress_m2l_gram_matrix(
             alpha=np.float32(alpha_inner)
         )
 
-        source_coordinates = surface.scale_surface(
+        source_equivalent_surface = surface.scale_surface(
             surf=equivalent_surface,
             radius=np.float32(r0),
             level=np.int32(level),
@@ -123,60 +115,15 @@ def compress_m2l_gram_matrix(
             alpha=np.float32(alpha_inner)
         )
 
-        # Compress the Gram matrix between these sources/targets
-        dsources[lidx_sources:ridx_sources, :] = cp.asarray(source_coordinates)
-        dtargets[lidx_targets:ridx_targets, :] = cp.asarray(target_coordinates)
+        tmp = KERNELS[config['kernel']]['dense_gram'](
+                sources=source_equivalent_surface, targets=target_check_surface
+            )
 
+        se2tc[:, lidx_sources:ridx_sources] = tmp
 
-    # Height and width of Gram matrix
-    height = n_targets_per_node*n_targets
-    sub_height = n_targets_per_node
+    u, s, vt = randomized_svd(se2tc, k)
 
-    width = n_sources_per_node
-    sub_width = n_sources_per_node
-
-    bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
-
-    # Result data, in the language of RSVD
-    dY = cp.zeros((height, k)).astype(np.float32)
-
-    # Random matrix, for compressed basis
-    dOmega = cp.random.rand(n_sources_per_node, k).astype(np.float32)
-    dOmegaT = dOmega.T
-
-    # Perform implicit matrix matrix product between Gram matrix and random
-    # matrix Omega
-    for idx in range(k):
-        implicit_gram_matrix[bpg, TPB](
-            dsources, dtargets, dOmegaT, dY, height, width, sub_height, sub_width, idx
-        )
-
-    # Perform QR decomposition on the GPU
-    dQ, _ = cp.linalg.qr(dY)
-    dQT = dQ.T
-
-    # Perform transposed matrix-matrix multiplication implicitly
-    height = n_sources_per_node
-    sub_height = n_sources_per_node
-    width = n_targets_per_node*n_targets
-    sub_width = n_targets_per_node
-
-    dBT = cp.zeros((n_sources_per_node, k)).astype(np.float32)
-
-    # Blocking is transposed
-    bpg = (int(np.ceil(width/BLOCK_WIDTH)), int(np.ceil(height/BLOCK_HEIGHT)))
-
-    for idx in range(k):
-        implicit_gram_matrix[bpg, TPB](
-            dtargets, dsources, dQT, dBT, height, width, sub_height, sub_width, idx
-        )
-
-    # Perform SVD on reduced matrix
-    du, dS, dVT = cp.linalg.svd(dBT.T, full_matrices=False)
-    dU = cp.matmul(dQ, du)
-
-    # Return compressed SVD components
-    return dU.get(), dS.get(), dVT.get(), hashes
+    return u.astype(np.float32), s.astype(np.float32), vt.astype(np.float32), hashes
 
 
 def compute_surfaces(config, db):
@@ -279,7 +226,6 @@ def compute_octree(config, db):
     start_level = 1
 
     sources = db['particle_data']['sources'][...]
-    source_densities = db['particle_data']['source_densities'][...]
     targets = db['particle_data']['targets'][...]
     points = np.vstack((sources, targets))
 
@@ -387,6 +333,7 @@ def compute_inv_c2e(
 
     print("Computing Inverse of Check To Equivalent Gram Matrix")
 
+    equivalent_surface = surface.compute_surface(config['order_equivalent'])
     upward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
         radius=np.float32(r0),
@@ -395,6 +342,7 @@ def compute_inv_c2e(
         alpha=np.float32(config['alpha_inner'])
     )
 
+    check_surface = surface.compute_surface(config['order_check'])
     upward_check_surface = surface.scale_surface(
         surf=check_surface,
         radius=np.float32(r0),
@@ -403,6 +351,7 @@ def compute_inv_c2e(
         alpha=np.float32(config['alpha_outer'])
     )
 
+    equivalent_surface = surface.compute_surface(config['order_equivalent'])
     downward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
         radius=np.float32(r0),
@@ -411,6 +360,7 @@ def compute_inv_c2e(
         alpha=np.float32(config['alpha_outer'])
     )
 
+    check_surface = surface.compute_surface(config['order_check'])
     downward_check_surface = surface.scale_surface(
         surf=check_surface,
         radius=np.float32(r0),
@@ -429,14 +379,17 @@ def compute_inv_c2e(
         sources=downward_equivalent_surface,
     )
 
-    uc2e_inv = linalg.pinv2(uc2e, cond=config['cond'])
-    dc2e_inv = linalg.pinv2(dc2e, cond=config['cond'])
+    uc2e_inv = linalg.pinv(uc2e, config['tol'])
+    dc2e_inv = linalg.pinv(dc2e, config['tol'])
 
     if 'uc2e_inv' in db.keys() and 'dc2e_inv' in db.keys():
-
+        del db['uc2e']
+        del db['dc2e']
         del db['uc2e_inv']
         del db['dc2e_inv']
 
+    db['uc2e'] = uc2e
+    db['dc2e'] = dc2e
     db['uc2e_inv']= uc2e_inv
     db['dc2e_inv']= dc2e_inv
 
@@ -552,7 +505,7 @@ def compute_m2m_and_l2l(
 
 
 def compute_m2l(
-        config, db, implicit_gram_matrix, k,  equivalent_surface, check_surface,
+        config, db, k,  equivalent_surface, check_surface,
         x0, r0, depth
     ):
     """
@@ -602,7 +555,7 @@ def compute_m2l(
 
         u, s, vt, hashes = compress_m2l_gram_matrix(
             level, x0, r0, depth, config['alpha_inner'], check_surface,
-            equivalent_surface, k, implicit_gram_matrix
+            equivalent_surface, k
         )
 
         db['m2l'][str_level]['u'] = u
@@ -629,7 +582,7 @@ def main(**config):
     kernel = config['kernel']
     k = config['target_rank']
 
-    implicit_gram_matrix = KERNELS[kernel]['implicit_gram_blocked']
+    # implicit_gram_matrix = KERNELS[kernel]['implicit_gram_blocked']
     dense_gram_matrix = KERNELS[kernel]['dense_gram']
     kernel_scale = KERNELS[kernel]['scale']
 
@@ -651,7 +604,7 @@ def main(**config):
 
     # Step 4: Compute M2L operators for each level, and their transfer vectors
     compute_m2l(
-        config, db, implicit_gram_matrix, k,  equivalent_surface, check_surface,
+        config, db, k,  equivalent_surface, check_surface,
         x0, r0, depth
     )
 

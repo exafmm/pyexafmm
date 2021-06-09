@@ -4,7 +4,7 @@ PyExaFMM
 
 [![Anaconda-Server Badge](https://img.shields.io/conda/v/skailasa/pyexafmm.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/latest_release_date.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/platforms.svg)](https://anaconda.org/skailasa/pyexafmm)
 
-PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in pure Python with some extensions. Representing a compromise between portability, ease of use, and performance. Optimisations are currently implemented  using Numba, Numpy, and CUDA acceleration.
+PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in pure Python with some extensions. Representing a compromise between portability, ease of use, and performance. Optimisations are currently implemented using Numba.
 
 The goal of PyExaFMM is to develop a highly performant implementation of the adaptive particle FMM written in Python, as the utility of FMM algorithms are hindered by their relatively complex implementation, especially for achieving high-performance.
 
@@ -14,12 +14,7 @@ PyExaFMM compares favourably on realistic problem sizes with naive direct evalua
 
 <img src="static/performance.png" alt="Laplace" width="800">
 
-
 Here we use an order 5 multipole expansion, an order 6 local expansion, and constrain leaf nodes to contain a maximum of 100 particles. The target rank in our M2L operator compression is kept at 1. The benchmark was run on an Intel i7-9750H processor.
-
-## System Requirements
-
-An NVidia GPU is required, as PyExaFMM is accellerated with CUDA.
 
 ## Install
 
@@ -60,19 +55,19 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
 
 ```json
 {
-    "experiment": "fmm",
-    "npoints": 100000,
+    "experiment": "test",
+    "npoints": 10000,
     "data_type": "random",
     "order_equivalent": 5,
-    "order_check": 6,
+    "order_check": 5,
     "kernel": "laplace",
     "backend": "numba",
     "alpha_inner": 1.05,
-    "alpha_outer": 2.95,
+    "alpha_outer": 2.9,
     "max_level": 10,
-    "max_points": 100,
-    "target_rank": 1,
-    "cond": 1e-16
+    "max_points": 150,
+    "target_rank": 10,
+    "tol": 1e-4
 }
 ```
 
@@ -89,7 +84,7 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
 | `alpha_outer`	| Relative size of outer surface's radius.           |
 | `max_level`   | Depth of octree to use in simulations.             |
 | `target_rank` | Target rank in low-rank compression of M2L matrix. |
-| `cond` | Threshold under which to ignore singular values in randomised SVD. |
+| `tol` | Threshold under which to ignore singular values in SVD taken to invert check-to-equivalent matrices |
 
 PyExaFMM provides some simple test-data generation functions, which can be configured for. However, to use your own data, simply create a HDF5 file, with the same name as `experiment` in your configuration file, with the following group hierarchy,
 

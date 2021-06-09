@@ -11,10 +11,10 @@ with open(PATH_VERSION, mode='r', encoding='utf-8') as f:
     exec(f.read(), ABOUT)
 
 requirements = [
-    "adaptoctree==1.2.0",
+    "adaptoctree==1.2.1",
     "scipy==1.6.1",
     "h5py==2.10.0",
-    "cupy==8.3.0",
+    "scikit-learn==0.24.2",
     "click==7.1.2",
 ]
 

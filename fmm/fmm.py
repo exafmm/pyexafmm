@@ -180,7 +180,7 @@ class Fmm:
 
             # Keys at this level
             keys = self.complete[self.complete_levels == level]
-            scale = self.scale_function(level)
+            scale = np.float32(self.scale_function(level))
 
             # V List interactions
             # M2L operator stored in terms of its SVD components for each level
@@ -217,8 +217,6 @@ class Fmm:
                 )
 
             for key in keys:
-
-                idx = self.key_to_index[key]
 
                 # Translate local expansion from the node's parent
                 self.backend['l2l'](

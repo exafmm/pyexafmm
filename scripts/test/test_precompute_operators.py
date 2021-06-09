@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 
 import adaptoctree.morton as morton
-import adaptoctree.utils as utils
 
 from fmm.kernel import KERNELS
 import fmm.surface as surface
@@ -21,17 +20,18 @@ ROOT = HERE.parent.parent
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
 CONFIG = data.load_json(CONFIG_FILEPATH)
 
-RTOL = 1e-1
-
 
 @pytest.fixture
 def db():
     experiment = CONFIG["experiment"]
     return h5py.File(ROOT / f"{experiment}.hdf5", "r")
 
-
 def test_m2m(db):
-
+    """
+    Test the convergence of the multipole expansion of the root node. If this
+        as expected, then the M2M translation operators as well as the P2M step
+        work.
+    """
     parent_key = 0
     child_key = morton.find_children(parent_key)[0]
 
@@ -58,7 +58,7 @@ def test_m2m(db):
         db["m2m"][operator_idx], child_equivalent_density
     )
 
-    distant_point = np.array([[1e2, 0, 0]])
+    distant_point = parent_center+r0*CONFIG['alpha_outer']*1.1
 
     child_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
@@ -88,11 +88,14 @@ def test_m2m(db):
         source_densities=child_equivalent_density,
     )
 
-    assert np.isclose(parent_direct, child_direct, rtol=RTOL)
+    assert np.isclose(parent_direct, child_direct, atol=1e-3, rtol=0)
 
 
 def test_l2l(db):
-
+    """
+    Test the convergence of the local expansion after L2L has been performed
+        on a given parent/child pair.
+    """
     parent_key = 1
     child_key = morton.find_children(parent_key)[-1]
 
@@ -144,15 +147,20 @@ def test_l2l(db):
         source_densities=child_equivalent_density,
     )
 
-    assert np.isclose(parent_direct, child_direct, rtol=RTOL)
+    assert np.isclose(parent_direct, child_direct, atol=1e-4, rtol=0)
 
 
 def test_m2l(db):
-
+    """
+    Test convergence of local expansion after M2L translation has been applied,
+        as well as SVD compression by computing result from all multipole
+        expansions of source nodes for a given target node in its V list, and
+        comparing with local expansion result computed with compressed M2L
+        translation operator.
+    """
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...][0]
     dc2e_inv = db['dc2e_inv'][...]
-    depth = db['octree']['depth'][0]
     equivalent_surface = db["surface"]["equivalent"][...]
     npoints_equivalent = len(equivalent_surface)
     check_surface = db['surface']['check'][...]
@@ -195,12 +203,11 @@ def test_m2l(db):
         )
 
         lidx = idx*npoints_equivalent
-        ridx = (idx+1)*npoints_equivalent
+        ridx = lidx+npoints_equivalent
 
         sources[lidx:ridx] = source_equivalent_surface
 
-    # place unit densities on source boxes
-    source_equivalent_density = np.ones(len(v_list)*npoints_equivalent)
+    # place densities on source boxes
     source_equivalent_density = np.random.rand(len(v_list)*npoints_equivalent)
 
     u = db['m2l'][str(target_level)]['u']
@@ -216,13 +223,12 @@ def test_m2l(db):
         transfer_vec = morton.find_transfer_vector(target_key, source_key)
         m2l_idx = np.where(transfer_vec == hashes)[0][0]
         m2l_lidx = (m2l_idx)*npoints_check
-        m2l_ridx = (m2l_idx+1)*npoints_check
-        u_sub = u[m2l_lidx:m2l_ridx]
-        m2l_matrix = (scale*dc2e_inv) @ (u_sub @ np.diag(s) @ vt)
+        m2l_ridx = m2l_lidx+npoints_check
+        vt_sub = vt[:, m2l_lidx:m2l_ridx]
 
         lidx = i*npoints_equivalent
-        ridx = (i+1)*npoints_equivalent
-        target_equivalent_density_sub = m2l_matrix @ source_equivalent_density[lidx:ridx]
+        ridx = lidx+npoints_equivalent
+        target_equivalent_density_sub = (scale*dc2e_inv) @ (u @ np.diag(s) @ vt_sub) @ source_equivalent_density[lidx:ridx]
         target_equivalent_density += target_equivalent_density_sub
 
     targets = surface.scale_surface(
@@ -247,4 +253,4 @@ def test_m2l(db):
         source_densities=source_equivalent_density
     )
 
-    assert np.isclose(target_direct, source_direct, rtol=RTOL)
+    assert np.isclose(target_direct, source_direct, atol=1e-1, rtol=0)
