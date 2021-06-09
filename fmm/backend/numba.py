@@ -1,7 +1,6 @@
 """
 Compute operators, accelerated with Numba.
 """
-from operator import mul
 import numba
 import numpy as np
 

@@ -1,8 +1,6 @@
 """
 Kernels accelerated with CUDA and Numba.
 """
-import math
-
 import numba
 import numpy as np
 

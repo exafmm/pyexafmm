@@ -1,7 +1,6 @@
 """
 Operator helper methods.
 """
-
 import numba
 import numpy as np
 
