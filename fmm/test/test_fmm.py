@@ -13,8 +13,6 @@ import fmm.surface as surface
 from fmm.kernel import KERNELS
 
 
-RTOL = 1e-1
-
 def test_upward_pass():
     """
     Test that multipole expansion of root node is the same as a direct

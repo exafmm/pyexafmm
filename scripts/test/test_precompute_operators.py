@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 
 import adaptoctree.morton as morton
-import adaptoctree.utils as utils
 
 from fmm.kernel import KERNELS
 import fmm.surface as surface
@@ -21,14 +20,11 @@ ROOT = HERE.parent.parent
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
 CONFIG = data.load_json(CONFIG_FILEPATH)
 
-RTOL = 1e-5
-
 
 @pytest.fixture
 def db():
     experiment = CONFIG["experiment"]
     return h5py.File(ROOT / f"{experiment}.hdf5", "r")
-
 
 def test_m2m(db):
 
@@ -91,7 +87,6 @@ def test_m2m(db):
 
     assert np.isclose(parent_direct, child_direct, atol=1e-6, rtol=0)
 
-
 def test_l2l(db):
 
     parent_key = 1
@@ -147,13 +142,11 @@ def test_l2l(db):
 
     assert np.isclose(parent_direct, child_direct, atol=1e-4, rtol=0)
 
-
 def test_m2l(db):
 
     x0 = db["octree"]["x0"][...]
     r0 = db["octree"]["r0"][...][0]
     dc2e_inv = db['dc2e_inv'][...]
-    depth = db['octree']['depth'][0]
     equivalent_surface = db["surface"]["equivalent"][...]
     npoints_equivalent = len(equivalent_surface)
     check_surface = db['surface']['check'][...]

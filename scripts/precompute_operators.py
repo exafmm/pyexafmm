@@ -6,7 +6,6 @@ import pathlib
 import sys
 import time
 
-
 import h5py
 import numba
 import numpy as np
@@ -15,19 +14,16 @@ from sklearn.utils.extmath import randomized_svd
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
-from fmm.kernel import KERNELS, BLOCK_WIDTH, BLOCK_HEIGHT
+from fmm.kernel import KERNELS
 import fmm.linalg as linalg
 import fmm.surface as surface
 
 import utils.data as data
 import utils.time
 
-
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 WORKING_DIR = pathlib.Path(os.getcwd())
-
-TPB = BLOCK_HEIGHT
 
 
 def compress_m2l_gram_matrix(
@@ -230,7 +226,6 @@ def compute_octree(config, db):
     start_level = 1
 
     sources = db['particle_data']['sources'][...]
-    source_densities = db['particle_data']['source_densities'][...]
     targets = db['particle_data']['targets'][...]
     points = np.vstack((sources, targets))
 
