@@ -879,6 +879,8 @@ def near_field_node(
         p2p_function
     ):
     """
+    Evaluate all near field particles for source particles within a given
+        target node
 
     Parameters:
     -----------
