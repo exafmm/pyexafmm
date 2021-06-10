@@ -47,6 +47,16 @@ conda install --use-local pyexafmm
 python setup.py develop
 ```
 
+### Build Documentation
+
+Developers may want to build and edit the documentation.
+
+```bash
+cd docs/
+sphinx-apidoc -f -o source ../fmm
+make html
+```
+
 ## Configure
 
 After installation, you must precompute and cache the FMM operators for your dataset. Most of these are calculated using the techniques in [1], notably M2M and L2L matrices can be computed for a single parent node and its children, and scaled in a simple fashion for the kernels implemented by PyExaFMM. For the M2L operators, we introduce a randomised SVD compression [2], to avoid storing and applying potentially very large dense matrices.
