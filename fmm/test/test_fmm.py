@@ -157,4 +157,4 @@ def test_fmm():
     direct = p2p(experiment.sources, experiment.targets, experiment.source_densities)
     equivalent = experiment.target_potentials
 
-    np.allclose(direct, equivalent, rtol=1e-2, atol=0)
+    assert np.allclose(direct, equivalent, rtol=1e-2, atol=0)
