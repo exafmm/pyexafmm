@@ -189,7 +189,7 @@ def compute_index_pointer(keys, points_indices):
 
     index_pointer = [curr_idx]
 
-    for idx in range(nkeys-1):
+    for idx in range(nkeys):
         next_key = sorted_keys[idx]
         if next_key != curr_key:
             index_pointer.append(idx)
