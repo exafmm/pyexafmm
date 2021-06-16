@@ -87,6 +87,21 @@ def spiral_data(npoints):
 
 
 def spherical_data(npoints):
+    """
+    Generate `npoints` targets and `npoints` sources, which are supported on the
+        surface of a sphere, with a unit diameter.
+
+    Parameters:
+    -----------
+    npoints : int
+
+    Returns :
+        tuple(
+            np.array(shape=(npoints, 3)),
+            np.array(shape=(npoints, 3)),
+            np.array(shape=npoints)
+        )
+    """
     phi = np.random.rand(npoints)*2*np.pi
     costheta = (np.random.rand(npoints)-0.5)*2
 
