@@ -35,8 +35,7 @@ def random_data(npoints):
         )
     """
     np.random.seed(0)
-    rand = np.random.rand
-    sources = targets = rand(npoints, 3)
+    sources = targets = np.random.rand(npoints, 3)
     source_densities = np.ones(npoints)
 
     return (targets, sources, source_densities)
@@ -59,19 +58,20 @@ def well_separated_data(npoints):
             np.array(shape=npoints)
         )
     """
+    np.random.seed(0)
     source_center = np.array([-1, -1, -1])
     target_center = np.array([1, 1, 1])
     rand = np.random.rand(npoints, 3)*0.1
 
     sources = rand + source_center
     targets = rand + target_center
-    source_densities = np.ones(npoints)
+    source_densities = np.random.rand(npoints)
 
     return (targets, sources, source_densities)
 
 
 def spiral_data(npoints):
-
+    np.random.seed(0)
     theta = np.linspace(0, np.pi, npoints)
     phi = np.linspace(0, 2*np.pi, npoints)
 
@@ -81,7 +81,7 @@ def spiral_data(npoints):
 
     sources = np.vstack([x, y, z]).T
     targets = sources
-    source_densities = np.ones(npoints)
+    source_densities = np.random.rand(npoints)
 
     return (targets, sources, source_densities)
 
@@ -102,6 +102,7 @@ def spherical_data(npoints):
             np.array(shape=npoints)
         )
     """
+    np.random.seed(0)
     phi = np.random.rand(npoints)*2*np.pi
     costheta = (np.random.rand(npoints)-0.5)*2
 
