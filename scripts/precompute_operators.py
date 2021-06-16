@@ -244,10 +244,14 @@ def compute_octree(config, db):
     depth = tree.find_depth(octree)
     complete = tree.complete_tree(octree)
     complete = np.sort(complete, kind='stable')
-    u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
 
+    # Find leaf nodes which points lie in (some leaf nodes may be empty!)
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
+
+    # Overwrite octree with non-empty leaf nodes
+    octree = np.unique(np.hstack((sources_to_keys, targets_to_keys)))
+    u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
 
     # Impose order
     source_indices = np.argsort(sources_to_keys, kind='stable')

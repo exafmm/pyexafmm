@@ -86,10 +86,28 @@ def spiral_data(npoints):
     return (targets, sources, source_densities)
 
 
+def spherical_data(npoints):
+    phi = np.random.rand(npoints)*2*np.pi
+    costheta = (np.random.rand(npoints)-0.5)*2
+
+    theta = np.arccos(costheta)
+    r = 0.5
+
+    x = r * np.sin(theta) * np.cos(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta)
+
+    sources = np.vstack((x, y, z))
+    source_densities = np.random.rand(npoints)
+
+    return (sources.T, sources.T, source_densities)
+
+
 DATA_FUNCTIONS = {
     'random': random_data,
     'separated': well_separated_data,
-    'spiral': spiral_data
+    'spiral': spiral_data,
+    'sphere': spherical_data,
 }
 
 
