@@ -189,7 +189,7 @@ def compute_index_pointer(keys, points_indices):
 
     index_pointer = [curr_idx]
 
-    for idx in range(nkeys-1):
+    for idx in range(nkeys):
         next_key = sorted_keys[idx]
         if next_key != curr_key:
             index_pointer.append(idx)
@@ -242,12 +242,16 @@ def compute_octree(config, db):
 
     octree = np.sort(octree, kind='stable')
     depth = tree.find_depth(octree)
+
+    # Find leaf nodes which points lie in (some leaf nodes may be empty!)
+    sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
+    targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
+
+    # Overwrite octree with non-empty leaf nodes
+    octree = np.unique(np.hstack((sources_to_keys, targets_to_keys)))
     complete = tree.complete_tree(octree)
     complete = np.sort(complete, kind='stable')
     u, x, v, w = tree.find_interaction_lists(octree, complete, depth)
-
-    sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
-    targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
 
     # Impose order
     source_indices = np.argsort(sources_to_keys, kind='stable')

@@ -35,8 +35,7 @@ def random_data(npoints):
         )
     """
     np.random.seed(0)
-    rand = np.random.rand
-    sources = targets = rand(npoints, 3)
+    sources = targets = np.random.rand(npoints, 3)
     source_densities = np.ones(npoints)
 
     return (targets, sources, source_densities)
@@ -59,19 +58,20 @@ def well_separated_data(npoints):
             np.array(shape=npoints)
         )
     """
+    np.random.seed(0)
     source_center = np.array([-1, -1, -1])
     target_center = np.array([1, 1, 1])
     rand = np.random.rand(npoints, 3)*0.1
 
     sources = rand + source_center
     targets = rand + target_center
-    source_densities = np.ones(npoints)
+    source_densities = np.random.rand(npoints)
 
     return (targets, sources, source_densities)
 
 
 def spiral_data(npoints):
-
+    np.random.seed(0)
     theta = np.linspace(0, np.pi, npoints)
     phi = np.linspace(0, 2*np.pi, npoints)
 
@@ -81,15 +81,49 @@ def spiral_data(npoints):
 
     sources = np.vstack([x, y, z]).T
     targets = sources
-    source_densities = np.ones(npoints)
+    source_densities = np.random.rand(npoints)
 
     return (targets, sources, source_densities)
+
+
+def spherical_data(npoints):
+    """
+    Generate `npoints` targets and `npoints` sources, which are supported on the
+        surface of a sphere, with a unit diameter.
+
+    Parameters:
+    -----------
+    npoints : int
+
+    Returns :
+        tuple(
+            np.array(shape=(npoints, 3)),
+            np.array(shape=(npoints, 3)),
+            np.array(shape=npoints)
+        )
+    """
+    np.random.seed(0)
+    phi = np.random.rand(npoints)*2*np.pi
+    costheta = (np.random.rand(npoints)-0.5)*2
+
+    theta = np.arccos(costheta)
+    r = 0.5
+
+    x = r * np.sin(theta) * np.cos(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta)
+
+    sources = np.vstack((x, y, z))
+    source_densities = np.random.rand(npoints)
+
+    return (sources.T, sources.T, source_densities)
 
 
 DATA_FUNCTIONS = {
     'random': random_data,
     'separated': well_separated_data,
-    'spiral': spiral_data
+    'spiral': spiral_data,
+    'sphere': spherical_data,
 }
 
 
