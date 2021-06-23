@@ -156,5 +156,6 @@ def test_fmm():
 
     direct = p2p(experiment.sources, experiment.targets, experiment.source_densities)
     equivalent = experiment.target_potentials
-
-    assert np.allclose(direct, equivalent, rtol=1e-2, atol=0)
+    err = np.mean(abs(direct-equivalent)/direct)
+    accuracy = -np.log10(err)
+    assert accuracy > 5

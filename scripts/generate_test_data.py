@@ -36,7 +36,7 @@ def random_data(npoints):
     """
     np.random.seed(0)
     sources = targets = np.random.rand(npoints, 3)
-    source_densities = np.ones(npoints)
+    source_densities = np.random.rand(npoints)
 
     return (targets, sources, source_densities)
 

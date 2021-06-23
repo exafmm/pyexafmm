@@ -222,8 +222,8 @@ def test_m2l(db):
         source_key = v_list[i]
         transfer_vec = morton.find_transfer_vector(target_key, source_key)
         m2l_idx = np.where(transfer_vec == hashes)[0][0]
-        m2l_lidx = (m2l_idx)*npoints_check
-        m2l_ridx = m2l_lidx+npoints_check
+        m2l_lidx = m2l_idx*npoints_equivalent
+        m2l_ridx = m2l_lidx+npoints_equivalent
         vt_sub = vt[:, m2l_lidx:m2l_ridx]
 
         lidx = i*npoints_equivalent

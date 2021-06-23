@@ -67,7 +67,6 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
     "max_level": 10,
     "max_points": 150,
     "target_rank": 10,
-    "tol": 1e-4
 }
 ```
 
@@ -84,7 +83,6 @@ This is done via a `config.json` file, PyExaFMM will look for this in your **cur
 | `alpha_outer`	| Relative size of outer surface's radius.           |
 | `max_level`   | Depth of octree to use in simulations.             |
 | `target_rank` | Target rank in low-rank compression of M2L matrix. |
-| `tol` | Threshold under which to ignore singular values in SVD taken to invert check-to-equivalent matrices |
 
 PyExaFMM provides some simple test-data generation functions, which can be configured for. However, to use your own data, simply create a HDF5 file, with the same name as `experiment` in your configuration file, with the following group hierarchy,
 

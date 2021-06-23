@@ -3,13 +3,12 @@
     "npoints": 10000,
     "data_type": "random",
     "order_equivalent": 5,
-    "order_check": 5,
+    "order_check": 7,
     "kernel": "laplace",
     "backend": "numba",
     "alpha_inner": 1.05,
     "alpha_outer": 2.9,
     "max_level": 10,
     "max_points": 150,
-    "target_rank": 10,
-    "tol": 1e-4
+    "target_rank": 50
 }
