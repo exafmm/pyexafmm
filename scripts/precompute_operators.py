@@ -383,26 +383,38 @@ def compute_inv_c2e(
         sources=downward_equivalent_surface,
     )
 
-    uc2e_inv = linalg.pinv(uc2e, config['tol'])
-    dc2e_inv = linalg.pinv(dc2e, config['tol'])
+    uc2e_inv = linalg.pinv(uc2e)
+    uc2e_inv_a, uc2e_inv_b = linalg.pinv2(uc2e)
+
+    dc2e_inv = linalg.pinv(dc2e)
+    dc2e_inv_a, dc2e_inv_b = linalg.pinv2(dc2e)
 
     if 'uc2e_inv' in db.keys() and 'dc2e_inv' in db.keys():
         del db['uc2e']
         del db['dc2e']
         del db['uc2e_inv']
+        del db['uc2e_inv_a']
+        del db['uc2e_inv_b']
         del db['dc2e_inv']
+        del db['dc2e_inv_a']
+        del db['dc2e_inv_b']
 
     db['uc2e'] = uc2e
     db['dc2e'] = dc2e
     db['uc2e_inv']= uc2e_inv
+    db['uc2e_inv_a']= uc2e_inv_a
+    db['uc2e_inv_b']= uc2e_inv_b
     db['dc2e_inv']= dc2e_inv
+    db['dc2e_inv_a']= dc2e_inv_a
+    db['dc2e_inv_b']= dc2e_inv_b
 
-    return uc2e_inv, dc2e_inv
+    return uc2e_inv_a, uc2e_inv_b, dc2e_inv_a, dc2e_inv_b
 
 
 def compute_m2m_and_l2l(
         config, db, equivalent_surface, check_surface, dense_gram_matrix,
-        kernel_scale, uc2e_inv, dc2e_inv, parent_center, parent_radius
+        kernel_scale, uc2e_inv_a, uc2e_inv_b, dc2e_inv_a,
+        dc2e_inv_b, parent_center, parent_radius
     ):
     """
     Compute M2M and L2L operators at level of root node, and its children, and
@@ -486,7 +498,7 @@ def compute_m2m_and_l2l(
         )
 
         # Compute M2M operator for this octant
-        m2m.append(np.matmul(uc2e_inv, pc2ce))
+        m2m.append(uc2e_inv_a @ (uc2e_inv_b @ pc2ce))
 
         # Compute L2L operator for this octant
         cc2pe = dense_gram_matrix(
@@ -494,7 +506,7 @@ def compute_m2m_and_l2l(
             sources=parent_downward_equivalent_surface
         )
 
-        l2l.append(np.matmul(scale*dc2e_inv, cc2pe))
+        l2l.append(scale*(dc2e_inv_a @ (dc2e_inv_b @ cc2pe)))
 
     # Save M2M & L2L operators
     m2m = np.array(m2m)
@@ -595,7 +607,7 @@ def main(**config):
 
     # Step 2: Use surfaces to compute inverse of check to equivalent Gram matrix.
     # This is a useful quantity that will form the basis of most operators.
-    uc2e_inv, dc2e_inv = compute_inv_c2e(
+    uc2e_inv_a, uc2e_inv_b, dc2e_inv_a, dc2e_inv_b = compute_inv_c2e(
         config, db, dense_gram_matrix, equivalent_surface, check_surface,
         x0, r0
     )
@@ -603,7 +615,7 @@ def main(**config):
     # Step 3: Compute M2M/L2L operators
     compute_m2m_and_l2l(
         config, db, equivalent_surface, check_surface, dense_gram_matrix,
-        kernel_scale, uc2e_inv, dc2e_inv, x0, r0
+        kernel_scale, uc2e_inv_a, uc2e_inv_b, dc2e_inv_a, dc2e_inv_b, x0, r0
     )
 
     # Step 4: Compute M2L operators for each level, and their transfer vectors

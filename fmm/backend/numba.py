@@ -105,7 +105,8 @@ def p2m_core(
         key_to_index,
         nequivalent_points,
         ncheck_points,
-        uc2e_inv,
+		uc2e_inv_a,
+		uc2e_inv_b,
         scales,
         multipole_expansions,
         check_potentials
@@ -123,7 +124,8 @@ def p2m_core(
         Number of quadrature points on the equivalent surface.
     ncheck_points : np.int32
         Number of quadrature points on the check surface.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
+    uc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=np.float64)
+    uc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
     multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
         Array of all multipole expansions.
     """
@@ -137,7 +139,7 @@ def p2m_core(
 
         check_lidx = thread_idx*ncheck_points
         check_potential = check_potentials[check_lidx:check_lidx+ncheck_points]
-        multipole_expansions[leaf_lidx:leaf_lidx+nequivalent_points] += scale*(uc2e_inv @ (check_potential))
+        multipole_expansions[leaf_lidx:leaf_lidx+nequivalent_points] += scale*(uc2e_inv_a @ (uc2e_inv_b @ check_potential))
 
 
 @numba.njit(cache=True)
@@ -156,7 +158,8 @@ def p2m(
         alpha_outer,
         check_surface,
         ncheck_points,
-        uc2e_inv,
+		uc2e_inv_a,
+		uc2e_inv_b,
         p2p_function,
         scale_function
     ):
@@ -189,7 +192,8 @@ def p2m(
         Discretised check surface.
     ncheck_points : np.int32
         Number of quadrature points on the check surface.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
+    uc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=np.float64)
+    uc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
     p2p_function : function handle
         Serial P2P function.
     scale_function : function handle
@@ -218,7 +222,8 @@ def p2m(
         key_to_index=key_to_index,
         nequivalent_points=nequivalent_points,
         ncheck_points=ncheck_points,
-        uc2e_inv=uc2e_inv,
+		uc2e_inv_a=uc2e_inv_a,
+		uc2e_inv_b=uc2e_inv_b,
         scales=scales,
         multipole_expansions=multipole_expansions,
         check_potentials=check_potentials
@@ -282,11 +287,11 @@ def m2l_core(
         u,
         s,
         vt,
-        dc2e_inv,
+		dc2e_inv_a,
+		dc2e_inv_b,
         local_expansions,
         multipole_expansions,
         nequivalent_points,
-        ncheck_points,
         key_to_index,
         hash_to_index,
         scale
@@ -304,7 +309,8 @@ def m2l_core(
         Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
     vt : np.array(np.float32)
         Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    dc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=np.float64)
+    dc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
     local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
         Array of all local expansions.
     multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
@@ -330,13 +336,13 @@ def m2l_core(
 
         transfer_vector = morton.find_transfer_vector(target, source)
         v_idx = hash_to_index[transfer_vector]
-        v_lidx = v_idx*ncheck_points
-        v_ridx = v_lidx+ncheck_points
+        v_lidx = v_idx*nequivalent_points
+        v_ridx = v_lidx+nequivalent_points
         vt_sub = np.copy(vt[:, v_lidx:v_ridx])
 
         m_lidx = key_to_index[source]*nequivalent_points
         m_ridx = m_lidx+nequivalent_points
-        local_expansions[lidx:lidx+nequivalent_points] += (scale*dc2e_inv) @ (u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx])))
+        local_expansions[lidx:lidx+nequivalent_points] += scale*(dc2e_inv_a @ (dc2e_inv_b @ (u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx])))))
 
 
 @numba.njit(cache=True, parallel=True)
@@ -347,11 +353,11 @@ def m2l(
         u,
         s,
         vt,
-        dc2e_inv,
+		dc2e_inv_a,
+		dc2e_inv_b,
         local_expansions,
         multipole_expansions,
         nequivalent_points,
-        ncheck_points,
         hash_to_index,
         scale
     ):
@@ -369,7 +375,8 @@ def m2l(
         Compressed singular values of SVD of M2L Gram matrix for nodes at this level.`
     vt : np.array(np.float32)
         Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+    dc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=np.float32)
+    dc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=np.float32)
     local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
         Array of all local expansions.
     multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=np.float32)
@@ -404,11 +411,11 @@ def m2l(
             u=u,
             s=s,
             vt=vt,
-            dc2e_inv=dc2e_inv,
+			dc2e_inv_a=dc2e_inv_a,
+			dc2e_inv_b=dc2e_inv_b,
             local_expansions=local_expansions,
             multipole_expansions=multipole_expansions,
             nequivalent_points=nequivalent_points,
-            ncheck_points=ncheck_points,
             key_to_index=key_to_index,
             hash_to_index=hash_to_index,
             scale=scale
@@ -472,7 +479,8 @@ def s2l(
         alpha_inner,
         check_surface,
         nequivalent_points,
-        dc2e_inv,
+		dc2e_inv_a,
+		dc2e_inv_b,
         scale_function,
         p2p_function
     ):
@@ -508,7 +516,8 @@ def s2l(
     check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
         Discretised check surface.
     nequivalent_points : np.int64
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float32)
+    dc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=np.float32)
+    dc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=np.float32)
     scale_function : function
         Function handle for kernel scaling.
     p2p_function : function
@@ -543,7 +552,7 @@ def s2l(
             source_densities=densities
         )
 
-        local_expansions[key_lidx:key_ridx] += (scale*(dc2e_inv @ (downward_check_potential)))
+        local_expansions[key_lidx:key_ridx] += scale*(dc2e_inv_a @ (dc2e_inv_b @ downward_check_potential))
 
 
 @numba.njit(cache=True)
