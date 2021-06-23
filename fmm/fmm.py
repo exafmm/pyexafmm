@@ -154,8 +154,8 @@ class Fmm:
                 alpha_outer=self.alpha_outer,
                 check_surface=self.check_surface,
                 ncheck_points=self.ncheck_points,
-				uc2e_inv_a=self.uc2e_inv_a,
-				uc2e_inv_b=self.uc2e_inv_b,
+                uc2e_inv_a=self.uc2e_inv_a,
+                uc2e_inv_b=self.uc2e_inv_b,
                 p2p_function=self.p2p_function,
                 scale_function=self.scale_function
             )
@@ -210,8 +210,8 @@ class Fmm:
                     u=u,
                     s=s,
                     vt=vt,
-					dc2e_inv_a=self.dc2e_inv_a,
-					dc2e_inv_b=self.dc2e_inv_b,
+                    dc2e_inv_a=self.dc2e_inv_a,
+                    dc2e_inv_b=self.dc2e_inv_b,
                     local_expansions=self.local_expansions,
                     multipole_expansions=self.multipole_expansions,
                     nequivalent_points=self.nequivalent_points,
@@ -275,8 +275,8 @@ class Fmm:
                     alpha_inner=self.alpha_inner,
                     check_surface=self.check_surface,
                     nequivalent_points=self.nequivalent_points,
-					dc2e_inv_a=self.dc2e_inv_a,
-					dc2e_inv_b=self.dc2e_inv_b,
+                    dc2e_inv_a=self.dc2e_inv_a,
+                    dc2e_inv_b=self.dc2e_inv_b,
                     scale_function=self.scale_function,
                     p2p_function=self.p2p_function
                 )
