@@ -61,7 +61,6 @@ def test_upward_pass():
             source_densities=experiment.multipole_expansions[lidx:ridx]
         )
 
-        print(direct, equivalent)
         assert np.allclose(direct, equivalent, atol=1e-2, rtol=0)
 
 

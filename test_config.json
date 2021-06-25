@@ -1,7 +1,7 @@
 {
     "experiment": "test",
     "npoints": 10000,
-    "data_type": "random",
+    "data_type": "sphere",
     "order_equivalent": 5,
     "order_check": 7,
     "kernel": "laplace",
