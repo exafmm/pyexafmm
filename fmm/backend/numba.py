@@ -875,7 +875,6 @@ def near_field_u_list(
         leaf_idx = key_to_leaf_index[leaf]
         target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1]] += res
 
-
 def near_field_node(
         key,
         key_to_leaf_index,

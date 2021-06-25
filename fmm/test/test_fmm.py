@@ -25,7 +25,7 @@ def test_upward_pass():
     for key in experiment.complete[experiment.complete_levels == experiment.depth]:
 
         center = morton.find_physical_center_from_key(key, experiment.x0, experiment.r0)
-        radius = experiment.x0 / (1 << experiment.depth)
+        radius = experiment.r0 / (1 << experiment.depth)
 
         upward_equivalent_surface = surface.scale_surface(
             surf=experiment.equivalent_surface,
@@ -35,7 +35,7 @@ def test_upward_pass():
             alpha=experiment.alpha_inner
         )
 
-        distant_point = center+radius*3
+        distant_point = center+(radius*3)
 
         kernel = experiment.config['kernel']
         p2p = KERNELS[kernel]['p2p']
@@ -61,6 +61,7 @@ def test_upward_pass():
             source_densities=experiment.multipole_expansions[lidx:ridx]
         )
 
+        print(direct, equivalent)
         assert np.allclose(direct, equivalent, atol=1e-2, rtol=0)
 
 

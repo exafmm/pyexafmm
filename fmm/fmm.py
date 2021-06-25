@@ -97,9 +97,9 @@ class Fmm:
 
         # Load interaction lists
         self.v_lists = self.db["interaction_lists"]["v"][...]
-        self.x_lists = self.db["interaction_lists"]["x"]
+        self.x_lists = self.db["interaction_lists"]["x"][...]
         self.u_lists = self.db["interaction_lists"]["u"][...]
-        self.w_lists = self.db["interaction_lists"]["w"]
+        self.w_lists = self.db["interaction_lists"]["w"][...]
 
         # Configure a compute backend and kernel functions
         self.kernel = self.config["kernel"]
@@ -249,8 +249,6 @@ class Fmm:
                 self.source_index_pointer[leaf_idx]:self.source_index_pointer[leaf_idx+1]
             ]
 
-            ntargets = len(target_coordinates)
-
             u_list = self.u_lists[global_idx]
             u_list = u_list[u_list != -1]
 
@@ -281,54 +279,52 @@ class Fmm:
                     p2p_function=self.p2p_function
                 )
 
-            if ntargets > 0:
+            # W List interactions
+            self.backend['m2t'](
+                target_key=key,
+                target_index_pointer=self.target_index_pointer,
+                key_to_index=self.key_to_index,
+                key_to_leaf_index=self.key_to_leaf_index,
+                w_list=w_list,
+                target_coordinates=target_coordinates,
+                target_potentials=self.target_potentials,
+                multipole_expansions=self.multipole_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_inner=self.alpha_inner,
+                equivalent_surface=self.equivalent_surface,
+                nequivalent_points=self.nequivalent_points,
+                p2p_function=self.p2p_function
+            )
 
-                # W List interactions
-                self.backend['m2t'](
-                    target_key=key,
-                    target_index_pointer=self.target_index_pointer,
-                    key_to_index=self.key_to_index,
-                    key_to_leaf_index=self.key_to_leaf_index,
-                    w_list=w_list,
-                    target_coordinates=target_coordinates,
-                    target_potentials=self.target_potentials,
-                    multipole_expansions=self.multipole_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_inner=self.alpha_inner,
-                    equivalent_surface=self.equivalent_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    p2p_function=self.p2p_function
-                )
+            # Evaluate local expansions at targets
+            self.backend['l2t'](
+                key=key,
+                key_to_index=self.key_to_index,
+                key_to_leaf_index=self.key_to_leaf_index,
+                target_coordinates=target_coordinates,
+                target_potentials=self.target_potentials,
+                target_index_pointer=self.target_index_pointer,
+                local_expansions=self.local_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_outer=self.alpha_outer,
+                equivalent_surface=self.equivalent_surface,
+                nequivalent_points=self.nequivalent_points,
+                p2p_function=self.p2p_function
+            )
 
-                # Evaluate local expansions at targets
-                self.backend['l2t'](
-                    key=key,
-                    key_to_index=self.key_to_index,
-                    key_to_leaf_index=self.key_to_leaf_index,
-                    target_coordinates=target_coordinates,
-                    target_potentials=self.target_potentials,
-                    target_index_pointer=self.target_index_pointer,
-                    local_expansions=self.local_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_outer=self.alpha_outer,
-                    equivalent_surface=self.equivalent_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    p2p_function=self.p2p_function
-                )
-
-                # P2P interactions within node
-                self.backend['near_field_node'](
-                    key=key,
-                    key_to_leaf_index=self.key_to_leaf_index,
-                    source_coordinates=source_coordinates,
-                    source_densities=source_densities,
-                    target_coordinates=target_coordinates,
-                    target_index_pointer=self.target_index_pointer,
-                    target_potentials=self.target_potentials,
-                    p2p_function=self.p2p_function
-                )
+            # P2P interactions within node
+            self.backend['near_field_node'](
+                key=key,
+                key_to_leaf_index=self.key_to_leaf_index,
+                source_coordinates=source_coordinates,
+                source_densities=source_densities,
+                target_coordinates=target_coordinates,
+                target_index_pointer=self.target_index_pointer,
+                target_potentials=self.target_potentials,
+                p2p_function=self.p2p_function
+            )
 
         # P2P interactions within U List
         self.backend['near_field_u_list'](
