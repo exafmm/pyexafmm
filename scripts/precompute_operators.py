@@ -230,20 +230,15 @@ def compute_octree(config, db):
     points = np.vstack((sources, targets))
 
     print("Computing octree")
-
-    # Compute Octree
     max_bound, min_bound = morton.find_bounds(points)
     x0 = morton.find_center(max_bound, min_bound)
-    r0 = morton.find_radius(x0, max_bound, min_bound)
+    r0 = morton.find_radius(max_bound, min_bound)
 
     unbalanced = tree.build(targets, max_level, max_points, start_level)
     u_depth = tree.find_depth(unbalanced)
     octree = tree.balance(unbalanced, u_depth)
-
     octree = np.sort(octree, kind='stable')
     depth = tree.find_depth(octree)
-
-    # Find leaf nodes which points lie in (some leaf nodes may be empty!)
     sources_to_keys = tree.points_to_keys(sources, octree, depth, x0, r0)
     targets_to_keys = tree.points_to_keys(targets, octree, depth, x0, r0)
 
