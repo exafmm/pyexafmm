@@ -241,6 +241,6 @@ KERNELS = {
         'dense_gram_parallel': laplace_gram_matrix_parallel,
         'p2p': laplace_p2p_serial,
         'p2p_parallel': laplace_p2p_parallel,
-		'gradient': laplace_gradient,
+        'gradient': laplace_gradient,
     },
 }
