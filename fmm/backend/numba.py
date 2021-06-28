@@ -5,7 +5,6 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
-from numpy.lib.function_base import gradient
 
 import fmm.surface as surface
 
