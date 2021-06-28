@@ -25,8 +25,8 @@ def test_laplace_scale(level, expected):
         (np.array([1, 0, 0], np.float32), np.array([0, 0, 0], np.float32), np.float32(1./(4*np.pi)))
     ]
 )
-def test_laplace_green_function(x, y, expected):
-    assert np.isclose(kernel.laplace_green_function(x, y), expected)
+def test_laplace_cpu(x, y, expected):
+    assert np.isclose(kernel.laplace_cpu(x, y), expected)
 
 
 @pytest.mark.parametrize(
@@ -55,7 +55,7 @@ def test_laplace_p2p_serial(sources, targets, source_densities):
         for j in range(len(sources)):
             source = sources[j]
             source_density = source_densities[j]
-            target_potential += kernel.laplace_green_function(target, source)*source_density
+            target_potential += kernel.laplace_cpu(target, source)*source_density
 
         assert np.isclose(result[i], target_potential)
 

@@ -33,7 +33,7 @@ def laplace_scale(level):
 
 
 @numba.njit(cache=True)
-def laplace_green_function(x, y):
+def laplace_cpu(x, y):
     """
     Numba Laplace CPU kernel.
 
@@ -84,7 +84,7 @@ def laplace_p2p_serial(sources, targets, source_densities):
         for j in range(nsources):
             source = sources[j]
             source_density = source_densities[j]
-            potential += laplace_green_function(target, source)*source_density
+            potential += laplace_cpu(target, source)*source_density
 
         target_densities[i] = potential
 
@@ -162,7 +162,7 @@ def laplace_gram_matrix_serial(sources, targets):
         target = targets[row_idx]
         for col_idx in range(n_sources):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] += laplace_green_function(target, source)
+            matrix[row_idx][col_idx] += laplace_cpu(target, source)
 
     return matrix
 
@@ -193,7 +193,7 @@ def laplace_gram_matrix_parallel(sources, targets):
         target = targets[row_idx]
         for col_idx in range(n_sources):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] += laplace_green_function(target, source)
+            matrix[row_idx][col_idx] += laplace_cpu(target, source)
 
     return matrix
 
@@ -219,7 +219,7 @@ def laplace_gradient(sources, targets, source_densities):
 
 KERNELS = {
     'laplace': {
-        'eval': laplace_green_function,
+        'eval': laplace_cpu,
         'scale': laplace_scale,
         'dense_gram': laplace_gram_matrix_serial,
         'dense_gram_parallel': laplace_gram_matrix_parallel,
