@@ -104,7 +104,7 @@ def laplace_p2p_parallel(
         by index pointers such that they are arranged by interaction. i.e. targets
         and all sources required for P2P evaluation have the same pointer. This
         is needed to maximise cache re-use, and reduce accesses to memory during
-        the parallel evaluation.
+        the parallel evaluation. This function calculates potentials and gradients.
 
     Parameters:
     -----------

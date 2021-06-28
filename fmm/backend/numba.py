@@ -605,6 +605,8 @@ def m2t(
         Discretised equivalent surface.
     p2p_function : function
         Function handle for kernel P2P.
+    gradient_function : function
+        Function handle for kernel gradient P2P.
     """
 
     for source in w_list:
@@ -687,6 +689,8 @@ def l2t(
         Discretised equivalent surface.
     p2p_function : function
         Function handle for kernel P2P.
+    gradient_function : function
+        Function handle for kernel gradient P2P.
     """
     source_idx = key_to_index[key]
     source_lidx = source_idx*nequivalent_points
@@ -923,7 +927,10 @@ def near_field_node(
     target_index_pointer : np.array(np.int32)
     targets_potentials : np.array(shape=(ntargets,), dtype=np.float32)
         Potentials at all target points, due to all source points.
-    p2p_function : function
+    p2p_function: function
+        Function handle for kernel P2P.
+    gradient_function : function
+        Function handle for kernel gradient P2P.
     """
     idx = key_to_leaf_index[key]
 
