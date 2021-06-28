@@ -11,6 +11,7 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
+from numpy.lib.function_base import gradient
 
 from fmm.backend import BACKEND
 from fmm.kernel import KERNELS
@@ -106,6 +107,7 @@ class Fmm:
         self.p2p_function = KERNELS[self.kernel]["p2p"]
         self.p2p_parallel_function = KERNELS[self.kernel]["p2p_parallel"]
         self.scale_function = KERNELS[self.kernel]["scale"]
+        self.gradient_function = KERNELS[self.kernel]["gradient"]
         self.backend = BACKEND[self.config["backend"]]
 
         # Containers for results
@@ -120,7 +122,7 @@ class Fmm:
             )
 
         self.target_potentials = np.zeros(
-            self.ntargets,
+            (self.ntargets, 4),
             dtype=np.float32
         )
 
@@ -294,7 +296,8 @@ class Fmm:
                 alpha_inner=self.alpha_inner,
                 equivalent_surface=self.equivalent_surface,
                 nequivalent_points=self.nequivalent_points,
-                p2p_function=self.p2p_function
+                p2p_function=self.p2p_function,
+                gradient_function=self.gradient_function,
             )
 
             # Evaluate local expansions at targets
@@ -311,7 +314,8 @@ class Fmm:
                 alpha_outer=self.alpha_outer,
                 equivalent_surface=self.equivalent_surface,
                 nequivalent_points=self.nequivalent_points,
-                p2p_function=self.p2p_function
+                p2p_function=self.p2p_function,
+                gradient_function=self.gradient_function,
             )
 
             # P2P interactions within node
@@ -323,7 +327,8 @@ class Fmm:
                 target_coordinates=target_coordinates,
                 target_index_pointer=self.target_index_pointer,
                 target_potentials=self.target_potentials,
-                p2p_function=self.p2p_function
+                p2p_function=self.p2p_function,
+                gradient_function=self.gradient_function,
             )
 
         # P2P interactions within U List

@@ -5,6 +5,7 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
+from numpy.lib.function_base import gradient
 
 import fmm.surface as surface
 
@@ -570,7 +571,8 @@ def m2t(
         alpha_inner,
         equivalent_surface,
         nequivalent_points,
-        p2p_function
+        p2p_function,
+        gradient_function
     ):
     """
     M2T operator. M2L translations aren't applicable, as the source nodes in
@@ -625,11 +627,19 @@ def m2t(
 
         target_idx = key_to_leaf_index[target_key]
 
-        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1]] += p2p_function(
+        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1],0] += p2p_function(
             sources=upward_equivalent_surface,
             targets=target_coordinates,
             source_densities=multipole_expansions[source_lidx:source_ridx]
         )
+
+        target_potentials[
+                target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 1:
+            ] += gradient_function(
+                sources=upward_equivalent_surface,
+                targets=target_coordinates,
+                source_densities=multipole_expansions[source_lidx:source_ridx]
+            )
 
 
 @numba.njit(cache=True)
@@ -647,6 +657,7 @@ def l2t(
         equivalent_surface,
         nequivalent_points,
         p2p_function,
+        gradient_function,
     ):
     """
     L2T operator. Evaluate the local expansion at the target points in a given
@@ -679,7 +690,7 @@ def l2t(
         Function handle for kernel P2P.
     """
     source_idx = key_to_index[key]
-    source_lidx = (source_idx)*nequivalent_points
+    source_lidx = source_idx*nequivalent_points
     source_ridx = source_lidx+nequivalent_points
 
     level = morton.find_level(key)
@@ -695,11 +706,19 @@ def l2t(
 
     target_idx = key_to_leaf_index[key]
 
-    target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1]] += p2p_function(
+    target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1],0] += p2p_function(
         sources=downward_equivalent_surface,
         targets=target_coordinates,
         source_densities=local_expansions[source_lidx:source_ridx]
     )
+
+    target_potentials[
+            target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 1:
+        ] += gradient_function(
+            sources=downward_equivalent_surface,
+            targets=target_coordinates,
+            source_densities=local_expansions[source_lidx:source_ridx]
+        )
 
 
 @numba.njit(cache=True)
@@ -873,7 +892,7 @@ def near_field_u_list(
         res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
         leaf = leaves[i]
         leaf_idx = key_to_leaf_index[leaf]
-        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1]] += res
+        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
 
 
 def near_field_node(
@@ -884,7 +903,8 @@ def near_field_node(
         target_coordinates,
         target_index_pointer,
         target_potentials,
-        p2p_function
+        p2p_function,
+        gradient_function,
     ):
     """
     Evaluate all near field particles for source particles within a given
@@ -909,8 +929,16 @@ def near_field_node(
     idx = key_to_leaf_index[key]
 
     target_potentials[
-        target_index_pointer[idx]:target_index_pointer[idx+1]
+        target_index_pointer[idx]:target_index_pointer[idx+1],0
         ] += p2p_function(
+                    sources=source_coordinates,
+                    targets=target_coordinates,
+                    source_densities=source_densities
+                   )
+
+    target_potentials[
+        target_index_pointer[idx]:target_index_pointer[idx+1],1:
+        ] += gradient_function(
                     sources=source_coordinates,
                     targets=target_coordinates,
                     source_densities=source_densities

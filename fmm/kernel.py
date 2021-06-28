@@ -33,7 +33,7 @@ def laplace_scale(level):
 
 
 @numba.njit(cache=True)
-def laplace_cpu(x, y):
+def laplace_green_function(x, y):
     """
     Numba Laplace CPU kernel.
 
@@ -84,7 +84,7 @@ def laplace_p2p_serial(sources, targets, source_densities):
         for j in range(nsources):
             source = sources[j]
             source_density = source_densities[j]
-            potential += laplace_cpu(target, source)*source_density
+            potential += laplace_green_function(target, source)*source_density
 
         target_densities[i] = potential
 
@@ -119,7 +119,7 @@ def laplace_p2p_parallel(
 
     non_empty_targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
     ntargets = len(non_empty_targets)
-    target_densities = np.zeros(shape=(ntargets), dtype=np.float32)
+    target_densities = np.zeros(shape=(ntargets, 4), dtype=np.float32)
 
     nleaves = len(target_index_pointer)-1
 
@@ -129,7 +129,9 @@ def laplace_p2p_parallel(
         local_source_densities = source_densities[source_index_pointer[i]:source_index_pointer[i+1]]
 
         local_target_densities = laplace_p2p_serial(local_sources, local_targets, local_source_densities)
-        target_densities[target_index_pointer[i]:target_index_pointer[i+1]] += local_target_densities
+        local_gradients = laplace_gradient(local_sources, local_targets, local_source_densities)
+        target_densities[target_index_pointer[i]:target_index_pointer[i+1], 0] += local_target_densities
+        target_densities[target_index_pointer[i]:target_index_pointer[i+1], 1:] += local_gradients
 
     return target_densities
 
@@ -160,7 +162,7 @@ def laplace_gram_matrix_serial(sources, targets):
         target = targets[row_idx]
         for col_idx in range(n_sources):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] += laplace_cpu(target, source)
+            matrix[row_idx][col_idx] += laplace_green_function(target, source)
 
     return matrix
 
@@ -191,18 +193,38 @@ def laplace_gram_matrix_parallel(sources, targets):
         target = targets[row_idx]
         for col_idx in range(n_sources):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] += laplace_cpu(target, source)
+            matrix[row_idx][col_idx] += laplace_green_function(target, source)
 
     return matrix
 
 
+@numba.njit(cache=True)
+def laplace_gradient(sources, targets, source_densities):
+
+    nsources = len(sources)
+    ntargets = len(targets)
+
+    gradients = np.zeros((ntargets, 3), np.float32)
+
+    for i in range(ntargets):
+        target = targets[i]
+        for j in range(nsources):
+            numerator = target-sources[j]
+            denominator = np.sqrt(numerator @ numerator)**3
+            if denominator > 0:
+                gradients[i] -= M_INV_4PI*source_densities[j]*numerator/denominator
+
+    return gradients
+
+
 KERNELS = {
     'laplace': {
-        'eval': laplace_cpu,
+        'eval': laplace_green_function,
         'scale': laplace_scale,
         'dense_gram': laplace_gram_matrix_serial,
         'dense_gram_parallel': laplace_gram_matrix_parallel,
         'p2p': laplace_p2p_serial,
-        'p2p_parallel': laplace_p2p_parallel
+        'p2p_parallel': laplace_p2p_parallel,
+		'gradient': laplace_gradient,
     },
 }
