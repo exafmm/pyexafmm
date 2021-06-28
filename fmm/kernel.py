@@ -200,7 +200,23 @@ def laplace_gram_matrix_parallel(sources, targets):
 
 @numba.njit(cache=True)
 def laplace_gradient(sources, targets, source_densities):
+    """
+    Numba P2P operator for gradient of Laplace kernel.
 
+    Parameters:
+    -----------
+    sources : np.array(shape=(n, 3), dtype=np.float32)
+        The n source locations on a surface.
+    targets : np.array(shape=(m, 3), dtype=np.float32)
+        The m target locations on a surface.
+    source_densities : np.array(shape=(m,), dtype=np.float32)
+        Charge densities at source coordinates.
+
+    Returns:
+    --------
+    np.array(shape=(ntargets, 3), dtype=np.float32)
+        Target potential gradients.
+    """
     nsources = len(sources)
     ntargets = len(targets)
 
