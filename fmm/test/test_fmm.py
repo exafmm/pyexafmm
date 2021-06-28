@@ -152,10 +152,23 @@ def test_fmm():
     experiment.run()
 
     kernel = experiment.config['kernel']
+
+    # Test potential
     p2p = KERNELS[kernel]['p2p']
 
     direct = p2p(experiment.sources, experiment.targets, experiment.source_densities)
     equivalent = experiment.target_potentials
-    err = np.mean(abs(direct-equivalent)/direct)
-    accuracy = -np.log10(err)
+    accuracy = -np.log10(np.mean(abs(direct-equivalent[:,0])/direct))
     assert accuracy > 5
+
+    # Test gradients
+    grad = KERNELS[kernel]['gradient']
+    direct = grad(experiment.sources, experiment.targets, experiment.source_densities)
+    accuracy = -np.log10(np.mean(abs(direct[:,0]-equivalent[:, 1])/direct[:, 0]))
+    assert accuracy > 3
+
+    accuracy = -np.log10(np.mean(abs(direct[:,1]-equivalent[:, 2])/direct[:, 1]))
+    assert accuracy > 3
+
+    accuracy = -np.log10(np.mean(abs(direct[:,2]-equivalent[:, 3])/direct[:, 2]))
+    assert accuracy > 3
