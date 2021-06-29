@@ -199,6 +199,35 @@ def laplace_gram_matrix_parallel(sources, targets):
 
 
 @numba.njit(cache=True)
+def laplace_grad_cpu(x, y, c):
+    """
+    Numba Laplace Gradient CPU kernel.
+
+    Parameters:
+    -----------
+    x : np.array(shape=(3), dtype=np.float32)
+        Source coordinate.
+    y : np.array(shape=(3), dtype=np.float32)
+        Target coordinate.
+
+    Returns:
+    --------
+    np.float32
+    """
+
+    num = x[c] - y[c]
+    diff = (x[0]-y[0])**2+(x[1]-y[1])**2+(x[2]-y[2])**2
+    invdiff = np.reciprocal(np.sqrt(diff))
+    tmp = invdiff
+    tmp *= invdiff
+    tmp *= invdiff
+    tmp *= num
+    tmp *= M_INV_4PI
+    res = tmp if tmp < np.inf else 0.
+    return res
+
+
+@numba.njit(cache=True)
 def laplace_gradient(sources, targets, source_densities):
     """
     Numba P2P operator for gradient of Laplace kernel.
@@ -225,11 +254,10 @@ def laplace_gradient(sources, targets, source_densities):
     for i in range(ntargets):
         target = targets[i]
         for j in range(nsources):
-            numerator = target-sources[j]
-            denominator = np.sqrt(numerator @ numerator)**3
-            if denominator > 0:
-                gradients[i] -= M_INV_4PI*source_densities[j]*numerator/denominator
-
+            source = sources[j]
+            gradients[i][0] -= source_densities[j]*laplace_grad_cpu(target, source, 0)
+            gradients[i][1] -= source_densities[j]*laplace_grad_cpu(target, source, 1)
+            gradients[i][2] -= source_densities[j]*laplace_grad_cpu(target, source, 2)
     return gradients
 
 
