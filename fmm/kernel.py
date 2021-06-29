@@ -209,7 +209,8 @@ def laplace_grad_cpu(x, y, c):
         Source coordinate.
     y : np.array(shape=(3), dtype=np.float32)
         Target coordinate.
-
+    c : np.int32
+        Component to consider
     Returns:
     --------
     np.float32
