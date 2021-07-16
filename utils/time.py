@@ -1,25 +1,36 @@
 """
 Time utilitiles
 """
+from functools import wraps
 import time
 
+def timeit(verbose=False):
+	"""
+	Time functions via decoration. Optionally output time to stdout.
 
-class Timer:
-    """Context manager to measure times."""
+	Parameters:
+	-----------
+	verbose : bool
 
-    def __init__(self):
-        """Constructor."""
-        self.start = 0
-        self.end = 0
-        self.interval = 0
+	Example Usage:
+	>>> @timeit(verbose=True)
+	>>> def foo(*args, **kwargs): pass
+	"""
+	def _timeit(f):
+		@wraps(f)
+		def wrapper(*args, **kwargs):
+			if verbose:
+				start = time.time()
+				res = f(*args, **kwargs)
+				runtime = time.time() - start
+				print(f'{f.__name__!r} in {runtime:.4f} s')
+			else:
+				res = f(*args, **kwargs)
+			return res
 
-    def __enter__(self):
-        self.start = time.time()
-        return self
+		return wrapper
+	return _timeit
 
-    def __exit__(self, *args):
-        self.end = time.time()
-        self.interval = self.end - self.start
 
 def seconds_to_minutes(seconds):
     """
