@@ -1,25 +1,26 @@
 """
 Time utilitiles
 """
+from functools import wraps
 import time
 
+def timeit(verbose=False):
+	def _timeit(f):
+		"""Timer"""
+		@wraps(f)
+		def wrapper(*args, **kwargs):
+			if verbose:
+				start = time.time()
+				res = f(*args, **kwargs)
+				runtime = time.time() - start
+				print(f'{f.__name__!r} in {runtime:.4f} s')
+			else:
+				res = f(*args, **kwargs)
+			return res
 
-class Timer:
-    """Context manager to measure times."""
+		return wrapper
+	return _timeit
 
-    def __init__(self):
-        """Constructor."""
-        self.start = 0
-        self.end = 0
-        self.interval = 0
-
-    def __enter__(self):
-        self.start = time.time()
-        return self
-
-    def __exit__(self, *args):
-        self.end = time.time()
-        self.interval = self.end - self.start
 
 def seconds_to_minutes(seconds):
     """
