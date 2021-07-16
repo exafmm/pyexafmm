@@ -5,8 +5,18 @@ from functools import wraps
 import time
 
 def timeit(verbose=False):
+	"""
+	Time functions via decoration. Optionally output time to stdout.
+
+	Parameters:
+	-----------
+	verbose : bool
+
+	Example Usage:
+	>>> @timeit(verbose=True)
+	>>> def foo(*args, **kwargs): pass
+	"""
 	def _timeit(f):
-		"""Timer"""
 		@wraps(f)
 		def wrapper(*args, **kwargs):
 			if verbose:
