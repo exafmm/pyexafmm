@@ -1,7 +1,5 @@
 """
-The Fmm object is responsible for data handling, calling optimised operator
-functions implemented in distinct backend submodules, as well as implementing
-the logic of the FMM loop.
+The Fmm acts as the API for interacting with PyExaFMM.
 """
 import os
 import pathlib
@@ -11,9 +9,9 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
-from numpy.lib.function_base import gradient
 
 from fmm.backend import BACKEND
+from fmm.dtype import DTYPES
 from fmm.kernel import KERNELS
 
 import utils.data as data
@@ -25,22 +23,39 @@ WORKING_DIR = pathlib.Path(os.getcwd())
 
 class Fmm:
     """
-    FMM class. Configure with pre-computed operators and octree.
+    PyExaFMM API.
+    Configured with precomputed operators and octree via a config JSON. Note that
+
+    Attributes:
+    -----------
+    target_potentials: np.array(shape=(N, 4))
+        Container for computed target potentials, and potential gradients at
+        all N points. Potential stored in column 0, columns 1-3 storr (x, y, z)
+        components of potential gradient.
 
     Example Usage:
     --------------
     >>> exp = Fmm('test_config')
     >>> exp.upward_pass()
     >>> exp.downward_pass()
-    >>> # exp.run() # Run upward & downward passes together
-
-    Parameters:
-    -----------
-    config_filename : str
-        Filename of configuration json file used to pre-compute operators.
+    >>> exp.run() # Run upward & downward passes together
+    >>> exp.clear() # Clear containers to re-run experiment
     """
 
     def __init__(self, config_filename=None):
+        """
+        The Fmm object is instantiated with a config JSON. This specifies the
+        HDF5 database used in operator and tree precomputations.
+
+        Notes:
+        ------
+        The configuration file and the HDF5 database must be located in the
+        same directory to be picked up by PyExaFMM.
+
+        Parameters:
+        -----------
+        config_filename : str
+        """
 
         # Load experimental database
         if config_filename is not None:
@@ -53,22 +68,25 @@ class Fmm:
         db_filepath = WORKING_DIR / f"{self.config['experiment']}.hdf5"
         self.db = h5py.File(db_filepath, "r")
 
+        # Configure precision
+        self.dtype = DTYPES[self.config['dtype']]
+
         # Load required data from disk
         ## Load surfaces, and inverse gram matrices
-        self.check_surface = self.db["surface"]["check"][...].astype(np.float32)
+        self.check_surface = self.db["surface"]["check"][...].astype(self.dtype)
         self.ncheck_points = len(self.check_surface)
-        self.equivalent_surface = self.db["surface"]["equivalent"][...].astype(np.float32)
+        self.equivalent_surface = self.db["surface"]["equivalent"][...].astype(self.dtype)
         self.nequivalent_points = len(self.equivalent_surface)
         self.uc2e_inv_a = self.db["uc2e_inv_a"][...]
         self.uc2e_inv_b = self.db["uc2e_inv_b"][...]
         self.dc2e_inv_a = self.db["dc2e_inv_a"][...]
         self.dc2e_inv_b = self.db["dc2e_inv_b"][...]
-        self.alpha_outer = np.float32(self.config['alpha_outer'])
-        self.alpha_inner = np.float32(self.config['alpha_inner'])
+        self.alpha_outer = self.dtype(self.config['alpha_outer'])
+        self.alpha_inner = self.dtype(self.config['alpha_inner'])
 
         ## Load linear, and complete octrees alongside their parameters
-        self.x0 = self.db["octree"]["x0"][...].astype(np.float32)
-        self.r0 = np.float32(self.db["octree"]["r0"][...][0])
+        self.x0 = self.db["octree"]["x0"][...].astype(self.dtype)
+        self.r0 = self.dtype(self.db["octree"]["r0"][...][0])
         self.depth = self.db["octree"]["depth"][...][0]
         self.leaves = self.db["octree"]["keys"][...]
         self.leaf_indices = np.zeros_like(self.leaves)
@@ -351,3 +369,9 @@ class Fmm:
         """Run full algorithm"""
         self.upward_pass()
         self.downward_pass()
+
+    def clear(self):
+        """Clear containers"""
+        self.target_potentials = np.zeros_like(self.target_potentials)
+        self.multipole_expansions = np.zeros_like(self.multipole_expansions)
+        self.local_expansions = np.zeros_like(self.local_expansions)
