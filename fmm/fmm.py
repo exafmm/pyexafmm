@@ -262,24 +262,24 @@ class Fmm:
 
             # X List interactions
             self.backend['s2l'](
-                    key=key,
-                    sources=self.sources,
-                    source_densities=self.source_densities,
-                    source_index_pointer=self.source_index_pointer,
-                    key_to_index=self.key_to_index,
-                    key_to_leaf_index=self.key_to_leaf_index,
-                    x_list=x_list,
-                    local_expansions=self.local_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_inner=self.alpha_inner,
-                    check_surface=self.check_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    dc2e_inv_a=self.dc2e_inv_a,
-                    dc2e_inv_b=self.dc2e_inv_b,
-                    scale_function=self.scale_function,
-                    p2p_function=self.p2p_function
-                )
+                key=key,
+                sources=self.sources,
+                source_densities=self.source_densities,
+                source_index_pointer=self.source_index_pointer,
+                key_to_index=self.key_to_index,
+                key_to_leaf_index=self.key_to_leaf_index,
+                x_list=x_list,
+                local_expansions=self.local_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_inner=self.alpha_inner,
+                check_surface=self.check_surface,
+                nequivalent_points=self.nequivalent_points,
+                dc2e_inv_a=self.dc2e_inv_a,
+                dc2e_inv_b=self.dc2e_inv_b,
+                scale_function=self.scale_function,
+                p2p_function=self.p2p_function
+            )
 
             # W List interactions
             self.backend['m2t'](
