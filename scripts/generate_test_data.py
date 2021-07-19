@@ -9,6 +9,8 @@ import sys
 import h5py
 import numpy as np
 
+from fmm.dtype import DTYPE
+
 import utils.data as data
 
 
@@ -18,7 +20,7 @@ PARENT = HERE.parent
 WORKING_DIR = pathlib.Path(os.getcwd())
 
 
-def random_data(npoints):
+def random_data(npoints, dtype):
     """
     Generate `npoint` random points with coordinate values in the range [0, 1).
         Points are both targets and sources.
@@ -35,58 +37,13 @@ def random_data(npoints):
         )
     """
     np.random.seed(0)
-    sources = targets = np.random.rand(npoints, 3)
-    source_densities = np.random.rand(npoints)
+    sources = targets = np.random.rand(npoints, 3).astype(dtype)
+    source_densities = np.random.rand(npoints).astype(dtype)
 
     return (targets, sources, source_densities)
 
 
-def well_separated_data(npoints):
-    """
-    Generate `npoints` targets and `npoints` sources, which are wells separated
-        from on another such that there are only 2 nodes occupied nodes in the
-        octree up to and incuding level 4.
-
-    Parameters:
-    -----------
-    npoints : int
-
-    Returns :
-        tuple(
-            np.array(shape=(npoints, 3)),
-            np.array(shape=(npoints, 3)),
-            np.array(shape=npoints)
-        )
-    """
-    np.random.seed(0)
-    source_center = np.array([-1, -1, -1])
-    target_center = np.array([1, 1, 1])
-    rand = np.random.rand(npoints, 3)*0.1
-
-    sources = rand + source_center
-    targets = rand + target_center
-    source_densities = np.random.rand(npoints)
-
-    return (targets, sources, source_densities)
-
-
-def spiral_data(npoints):
-    np.random.seed(0)
-    theta = np.linspace(0, np.pi, npoints)
-    phi = np.linspace(0, 2*np.pi, npoints)
-
-    x = np.sin(theta)*np.cos(phi)
-    y = np.sin(theta)*np.sin(phi)
-    z = np.cos(theta)
-
-    sources = np.vstack([x, y, z]).T
-    targets = sources
-    source_densities = np.random.rand(npoints)
-
-    return (targets, sources, source_densities)
-
-
-def spherical_data(npoints):
+def spherical_data(npoints, dtype):
     """
     Generate `npoints` targets and `npoints` sources, which are supported on the
         surface of a sphere, with a unit diameter.
@@ -113,16 +70,14 @@ def spherical_data(npoints):
     y = r * np.sin(theta) * np.sin(phi)
     z = r * np.cos(theta)
 
-    sources = np.vstack((x, y, z))
-    source_densities = np.random.rand(npoints)
+    sources = np.vstack((x, y, z)).astype(dtype)
+    source_densities = np.random.rand(npoints).astype(dtype)
 
     return (sources.T, sources.T, source_densities)
 
 
 DATA_FUNCTIONS = {
     'random': random_data,
-    'separated': well_separated_data,
-    'spiral': spiral_data,
     'sphere': spherical_data,
 }
 
@@ -131,8 +86,9 @@ def main(**config):
 
     npoints = config['npoints']
     data_function = DATA_FUNCTIONS[config['data_type']]
+    float_type = DTYPE[config['precision']]['float']
 
-    sources, targets, source_densities = data_function(npoints)
+    sources, targets, source_densities = data_function(npoints, float_type)
 
     db = h5py.File(WORKING_DIR/f"{config['experiment']}.hdf5", 'a')
 

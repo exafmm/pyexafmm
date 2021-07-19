@@ -1,5 +1,6 @@
 """
-Precompute and store M2M/L2L/M2L operators for a given points dataset.
+Precompute and store M2M/L2L/M2L operators, and octree, for a given points
+dataset.
 """
 import os
 import pathlib
@@ -14,12 +15,14 @@ from sklearn.utils.extmath import randomized_svd
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
+from fmm.dtype import FLOATING_POINT, INTEGER, DTYPE
 from fmm.kernel import KERNELS
 import fmm.linalg as linalg
 import fmm.surface as surface
 
 import utils.data as data
 import utils.time
+
 
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
@@ -139,15 +142,16 @@ def compute_surfaces(config, db):
 
     Returns:
     --------
-    np.array(shape=(n_equivalent, 3), dtype=np.float32)
+    np.array(shape=(n_equivalent, 3), dtype=float)
         Discretised equivalent surface.
-    np.array(shape=(n_check, 3), dtype=np.float32)
+    np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
     """
+    float_type = DTYPE[config['precision']]['float']
     order_equivalent = config['order_equivalent']
     order_check = config['order_check']
-    equivalent_surface = surface.compute_surface(order_equivalent)
-    check_surface = surface.compute_surface(order_check)
+    equivalent_surface = surface.compute_surface(order_equivalent).astype(float_type)
+    check_surface = surface.compute_surface(order_check).astype(float_type)
 
     print(f"Computing Inner Surface of Order {order_equivalent}")
     print(f"Computing Outer Surface of Order {order_check}")
@@ -172,12 +176,12 @@ def compute_index_pointer(keys, points_indices):
     -----------
     keys : np.int64
         Keys, not necessarily sorted.
-    points_indices : np.array(np.int64)
+    points_indices : np.array(int)
         Indices that will sort the keys.
 
     Returns:
     --------
-    np.array(np.int64)
+    np.array(int)
         Index pointer for sorted keys.
     """
     sorted_keys = keys[points_indices]
@@ -202,8 +206,7 @@ def compute_index_pointer(keys, points_indices):
 
 def compute_octree(config, db):
     """
-    Compute balanced as well as completed octree and all interaction  lists,
-        and save to disk.
+    Compute balanced as well as complete octree and all interaction lists.
 
     Parameters:
     -----------
@@ -214,13 +217,14 @@ def compute_octree(config, db):
 
     Returns:
     --------
-    np.array(shape=(1, 3), dtype=np.float64)
+    np.array(shape=(1, 3), dtype=float)
         Physical center of octree root node.
-    np.float64
+    float
         Half side length of octree root node.
-    np.int64
+    int
         Depth of octree.
     """
+    float_type = DTYPE[config['precision']]['float']
     max_level = config['max_level']
     max_points = config['max_points']
     start_level = 1
@@ -230,9 +234,15 @@ def compute_octree(config, db):
     points = np.vstack((sources, targets))
 
     print("Computing octree")
+
+    # Morton functions have separate precision constraints from AdaptOctree
+    # library, for type safety convert explicitly here for usage within PyExaFMM
     max_bound, min_bound = morton.find_bounds(points)
-    x0 = morton.find_center(max_bound, min_bound)
-    r0 = morton.find_radius(max_bound, min_bound)
+    max_bound = max_bound.astype(float_type)
+    min_bound = min_bound.astype(float_type)
+
+    x0 = morton.find_center(max_bound, min_bound).astype(float_type)
+    r0 = morton.find_radius(max_bound, min_bound).astype(float_type)
 
     unbalanced = tree.build(targets, max_level, max_points, start_level)
     u_depth = tree.find_depth(unbalanced)
@@ -276,9 +286,9 @@ def compute_octree(config, db):
         db.create_group('interaction_lists')
 
     db['octree']['keys'] = np.sort(octree)
-    db['octree']['depth'] = np.array([depth], np.int32)
-    db['octree']['x0'] = np.array([x0], np.float32)
-    db['octree']['r0'] = np.array([r0], np.float32)
+    db['octree']['depth'] = np.array([depth])
+    db['octree']['x0'] = np.array([x0])
+    db['octree']['r0'] = np.array([r0])
     db['octree']['complete'] = np.sort(complete)
 
     # Save source to index mappings
@@ -313,59 +323,62 @@ def compute_inv_c2e(
         HDF5 file handle containing all experimental data.
     dense_gram_matrix : Numba JIT function handle
         Function to calculate dense gram matrix on CPU
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+    check_surface : np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
-    x0 : np.array(shape=(1, 3), dtype=np.float64)
+    x0 : np.array(shape=(1, 3), dtype=float)
         Physical center of octree root node.
-    r0 : np.float64
+    r0 : float
         Half side length of octree root node.
 
     Returns:
     --------
     (
-        np.array(shape=(n_check, n_equivalent), dtype=np.float64),
-        np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+        np.array(shape=(n_check, n_equivalent), dtype=float),
+        np.array(shape=(n_equivalent, n_check), dtype=float)
     )
         Tuple of downward-check-to-equivalent Gram matrix inverse, and the
         upward-check-to-equivalent Gram matrix inverse.
     """
 
+    float_type = DTYPE[config['precision']]['float']
+
     print("Computing Inverse of Check To Equivalent Gram Matrix")
 
     equivalent_surface = surface.compute_surface(config['order_equivalent'])
+
     upward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_inner'])
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_inner']
     )
 
     check_surface = surface.compute_surface(config['order_check'])
     upward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_outer'])
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_outer']
     )
 
     equivalent_surface = surface.compute_surface(config['order_equivalent'])
     downward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_outer'])
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_outer']
     )
 
     check_surface = surface.compute_surface(config['order_check'])
     downward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_inner'])
+        radius=r0,
+        level=0,
+        center=x0,
+        alpha=config['alpha_inner']
     )
 
     uc2e = dense_gram_matrix(
@@ -378,7 +391,6 @@ def compute_inv_c2e(
         sources=downward_equivalent_surface,
     )
 
-    uc2e_inv = linalg.pinv(uc2e)
     uc2e_inv_a, uc2e_inv_b = linalg.pinv2(uc2e)
 
     dc2e_inv = linalg.pinv(dc2e)
