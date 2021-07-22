@@ -1,23 +1,23 @@
 """
 Operator helper methods.
 """
-import numba
 import numpy as np
 
 
-@numba.njit(cache=True)
-def compute_surface(order):
+def compute_surface(order, dtype):
     """
-    Compute surface to a specified order.
+    Compute surface to a specified expansion order and datatype.
 
     Parameters:
     -----------
     order : int
-        Order
+        Order of expansion.
+    dtype : type
+        Numpy float data type.
 
     """
     n_coeffs = 6*(order-1)**2 + 2
-    surf = np.zeros(shape=(n_coeffs, 3))
+    surf = np.zeros(shape=(n_coeffs, 3), dtype=dtype)
 
     surf[0] = np.array([-1, -1, -1])
     count = 1
@@ -53,7 +53,6 @@ def compute_surface(order):
     return surf
 
 
-@numba.njit(cache=True)
 def scale_surface(surf, radius, level, center, alpha):
     """
     Shift and scale a given surface to a new center, and radius relative to the
@@ -67,7 +66,7 @@ def scale_surface(surf, radius, level, center, alpha):
         Half side length of the Octree's root node that this surface lives in.
     level : int
         Octree level of the shifted node.
-    center : coordinate
+    center : np.array(shape=(1, 3))
         Coordinates of the centre of the shifted node.
     alpha : float
         Ratio between side length of shifted/scaled node and original node.
@@ -82,7 +81,7 @@ def scale_surface(surf, radius, level, center, alpha):
     n_coeffs = len(surf)
 
     # Translate box to specified centre, and scale
-    scaled_radius = (0.5)**level * radius
+    scaled_radius = (0.5)**level*radius
     dilated_radius = alpha*scaled_radius
 
     scaled_surf = np.zeros_like(surf)
