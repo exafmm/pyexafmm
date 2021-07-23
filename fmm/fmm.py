@@ -1,7 +1,5 @@
 """
-The Fmm object is responsible for data handling, calling optimised operator
-functions implemented in distinct backend submodules, as well as implementing
-the logic of the FMM loop.
+The Fmm acts as the API for interacting with PyExaFMM.
 """
 import os
 import pathlib
@@ -11,8 +9,8 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
-from numpy.lib.function_base import gradient
 
+from fmm.dtype import PRECISION
 from fmm.backend import BACKEND
 from fmm.kernel import KERNELS
 
@@ -29,10 +27,9 @@ class Fmm:
 
     Example Usage:
     --------------
-    >>> exp = Fmm('test_config')
-    >>> exp.upward_pass()
-    >>> exp.downward_pass()
-    >>> # exp.run() # Run upward & downward passes together
+    >>> e = Fmm('config') # Initialize experiment
+    >>> e.run() # Run upward & downward passes together
+    >>> e.clear() # Clear containers, to re-run experiment
 
     Parameters:
     -----------
@@ -41,7 +38,19 @@ class Fmm:
     """
 
     def __init__(self, config_filename=None):
+        """
+        The Fmm object is instantiated with a config JSON. This specifies the
+        HDF5 database used in operator and tree precomputations.
 
+        Notes:
+        ------
+        The configuration file and the HDF5 database must be located in the
+        same directory to be picked up by PyExaFMM.
+
+        Parameters:
+        -----------
+        config_filename : str
+        """
         # Load experimental database
         if config_filename is not None:
             config_filepath = WORKING_DIR / f"{config_filename}.json"
@@ -55,9 +64,9 @@ class Fmm:
 
         # Load required data from disk
         ## Load surfaces, and inverse gram matrices
-        self.check_surface = self.db["surface"]["check"][...].astype(np.float32)
+        self.check_surface = self.db["surface"]["check"][...]
         self.ncheck_points = len(self.check_surface)
-        self.equivalent_surface = self.db["surface"]["equivalent"][...].astype(np.float32)
+        self.equivalent_surface = self.db["surface"]["equivalent"][...]
         self.nequivalent_points = len(self.equivalent_surface)
         self.uc2e_inv_a = self.db["uc2e_inv_a"][...]
         self.uc2e_inv_b = self.db["uc2e_inv_b"][...]
@@ -67,8 +76,8 @@ class Fmm:
         self.alpha_inner = np.float32(self.config['alpha_inner'])
 
         ## Load linear, and complete octrees alongside their parameters
-        self.x0 = self.db["octree"]["x0"][...].astype(np.float32)
-        self.r0 = np.float32(self.db["octree"]["r0"][...][0])
+        self.x0 = self.db["octree"]["x0"][...]
+        self.r0 = self.db["octree"]["r0"][...][0]
         self.depth = self.db["octree"]["depth"][...][0]
         self.leaves = self.db["octree"]["keys"][...]
         self.leaf_indices = np.zeros_like(self.leaves)
@@ -81,14 +90,14 @@ class Fmm:
         self.sources_to_keys = self.db["particle_data"]["sources_to_keys"][...]
         self.source_indices= self.db["particle_data"]["source_indices"][...]
         self.source_index_pointer = self.db["particle_data"]["source_index_pointer"][...]
-        self.sources = self.db["particle_data"]["sources"][...][self.source_indices].astype(np.float32)
-        self.source_densities = self.db["particle_data"]["source_densities"][...][self.source_indices].astype(np.float32)
+        self.sources = self.db["particle_data"]["sources"][...][self.source_indices]
+        self.source_densities = self.db["particle_data"]["source_densities"][...][self.source_indices]
         self.nsources = len(self.sources)
 
         self.targets_to_keys = self.db["particle_data"]["targets_to_keys"][...]
         self.target_indices = self.db["particle_data"]["target_indices"][...]
         self.target_index_pointer = self.db["particle_data"]["target_index_pointer"][...]
-        self.targets = self.db["particle_data"]["targets"][...][self.target_indices].astype(np.float32)
+        self.targets = self.db["particle_data"]["targets"][...][self.target_indices]
         self.ntargets = len(self.targets)
 
         ## Load pre-computed operators
@@ -110,20 +119,23 @@ class Fmm:
         self.gradient_function = KERNELS[self.kernel]["gradient"]
         self.backend = BACKEND[self.config["backend"]]
 
+        # Configure experimental precision
+        self.dtype = PRECISION[self.config["precision"]]
+
         # Containers for results
         self.multipole_expansions = np.zeros(
                 self.nequivalent_points*self.ncomplete,
-                dtype=np.float32
+                dtype=self.dtype
             )
 
         self.local_expansions = np.zeros(
                self.nequivalent_points*self.ncomplete,
-               dtype=np.float32
+               dtype=self.dtype
             )
 
         self.target_potentials = np.zeros(
             (self.ntargets, 4),
-            dtype=np.float32
+            dtype=self.dtype
         )
 
         self.key_to_leaf_index = numba.typed.Dict.empty(key_type=numba.int64, value_type=numba.int64)
@@ -262,24 +274,24 @@ class Fmm:
 
             # X List interactions
             self.backend['s2l'](
-                    key=key,
-                    sources=self.sources,
-                    source_densities=self.source_densities,
-                    source_index_pointer=self.source_index_pointer,
-                    key_to_index=self.key_to_index,
-                    key_to_leaf_index=self.key_to_leaf_index,
-                    x_list=x_list,
-                    local_expansions=self.local_expansions,
-                    x0=self.x0,
-                    r0=self.r0,
-                    alpha_inner=self.alpha_inner,
-                    check_surface=self.check_surface,
-                    nequivalent_points=self.nequivalent_points,
-                    dc2e_inv_a=self.dc2e_inv_a,
-                    dc2e_inv_b=self.dc2e_inv_b,
-                    scale_function=self.scale_function,
-                    p2p_function=self.p2p_function
-                )
+                key=key,
+                sources=self.sources,
+                source_densities=self.source_densities,
+                source_index_pointer=self.source_index_pointer,
+                key_to_index=self.key_to_index,
+                key_to_leaf_index=self.key_to_leaf_index,
+                x_list=x_list,
+                local_expansions=self.local_expansions,
+                x0=self.x0,
+                r0=self.r0,
+                alpha_inner=self.alpha_inner,
+                check_surface=self.check_surface,
+                nequivalent_points=self.nequivalent_points,
+                dc2e_inv_a=self.dc2e_inv_a,
+                dc2e_inv_b=self.dc2e_inv_b,
+                scale_function=self.scale_function,
+                p2p_function=self.p2p_function
+            )
 
             # W List interactions
             self.backend['m2t'](
@@ -351,3 +363,9 @@ class Fmm:
         """Run full algorithm"""
         self.upward_pass()
         self.downward_pass()
+
+    def clear(self):
+        """Clear experiment"""
+        self.target_potentials = np.zeros_like(self.target_potentials)
+        self.multipole_expansions = np.zeros_like(self.multipole_expansions)
+        self.local_expansions = np.zeros_like(self.local_expansions)

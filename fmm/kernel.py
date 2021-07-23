@@ -2,55 +2,51 @@
 Kernels accelerated with CUDA and Numba.
 """
 import numba
+import numba.types as types
 import numpy as np
 
 M_INV_4PI = 1.0 / (4*np.pi)
-
-TOL = 1e-6
+ZERO = 0.
 
 ###############################################################################
 #                                   Laplace                                   #
 ###############################################################################
 
 
-@numba.njit(
-    [numba.float32(numba.int32)],
-    cache=True
-)
+@numba.njit(cache=True)
 def laplace_scale(level):
     """
-    Level scale for the Laplace kernel.
+    Laplace kernel scale.
 
     Parameters:
     -----------
-    level : np.int32
+    level : int
 
     Returns:
     --------
-    np.float32
+    float
     """
-    return numba.float32(1/(2**level))
+    return 1./(1 << level)
 
 
 @numba.njit(cache=True)
-def laplace_cpu(x, y):
+def laplace_cpu(x, y, m_inv_4pi, zero):
     """
-    Numba Laplace CPU kernel.
+    Laplace kernel.
 
     Parameters:
     -----------
-    x : np.array(shape=(3), dtype=np.float32)
-        Source coordinate.
-    y : np.array(shape=(3), dtype=np.float32)
-        Target coordinate.
+    x : np.array(shape=(3), dtype=float)
+    y : np.array(shape=(3), dtype=float)
+    m_inv_4pi : float
 
     Returns:
     --------
-    np.float32
+    float
     """
     diff = (x[0]-y[0])**2+(x[1]-y[1])**2+(x[2]-y[2])**2
-    tmp = np.reciprocal(np.sqrt(diff))*M_INV_4PI
-    res = tmp if tmp < np.inf else 0.
+    tmp = np.reciprocal(np.sqrt(diff))*m_inv_4pi
+    res = tmp if tmp < np.inf else zero
     return res
 
 
@@ -61,34 +57,37 @@ def laplace_p2p_serial(sources, targets, source_densities):
 
     Parameters:
     -----------
-    sources : np.array(shape=(n, 3), dtype=np.float32)
+    sources : np.array(shape=(n, 3), dtype=float)
         The n source locations on a surface.
-    targets : np.array(shape=(m, 3), dtype=np.float32)
+    targets : np.array(shape=(m, 3), dtype=float)
         The m target locations on a surface.
-    source_densities : np.array(shape=(m,), dtype=np.float32)
+    source_densities : np.array(shape=(m,), dtype=float)
         Charge densities at source coordinates.
 
     Returns:
     --------
-    np.array(shape=(ntargets), dtype=np.float32)
-        Target potential densities.
+    np.array(shape=(m), dtype=float)
+        Potentials.
     """
-    ntargets = len(targets)
-    nsources = len(sources)
+    m = len(targets)
+    n = len(sources)
+    dtype = targets.dtype
+    m_inv_4pi = dtype.type(M_INV_4PI)
+    zero = dtype.type(ZERO)
 
-    target_densities = np.zeros(shape=(ntargets), dtype=np.float32)
+    potentials = np.zeros(shape=m, dtype=dtype)
 
-    for i in range(ntargets):
+    for i in range(m):
         target = targets[i]
         potential = 0
-        for j in range(nsources):
+        for j in range(n):
             source = sources[j]
             source_density = source_densities[j]
-            potential += laplace_cpu(target, source)*source_density
+            potential += laplace_cpu(target, source, m_inv_4pi, zero)*source_density
 
-        target_densities[i] = potential
+        potentials[i] = potential
 
-    return target_densities
+    return potentials
 
 
 @numba.njit(cache=True, parallel=True, fastmath=True, error_model="numpy")
@@ -108,18 +107,24 @@ def laplace_p2p_parallel(
 
     Parameters:
     -----------
-    sources: np.array((nsources, 3), dtype=np.float32)
-    targets : np.array((ntargets, 3), dtype=np.float32)
-    source_densities : np.array((nsources, 3), dtype=np.float32)
-    source_index_pointer: np.array(nnodes+1, dtype=np.int32)
+    sources: np.array((n, 3), dtype=float)
+    targets : np.array((m, 3), dtype=float)
+    source_densities : np.array((n, 3), dtype=float)
+    source_index_pointer: np.array(nnodes+1, dtype=int)
         Created using the backend.prepare_u_list_data function.
-    target_index_pointer: np.array(nnodes+1, dtype=np.int32)
+    target_index_pointer: np.array(nnodes+1, dtype=int)
         Created using the backend.prepare_u_list_data function.
+
+    Returns:
+    --------
+    np.array(shape=(m, 4), dtype=float)
+        Potentials and potentials gradients.
     """
 
     non_empty_targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
-    ntargets = len(non_empty_targets)
-    target_densities = np.zeros(shape=(ntargets, 4), dtype=np.float32)
+    m = len(non_empty_targets)
+    dtype = targets.dtype
+    potentials = np.zeros(shape=(m, 4), dtype=dtype)
 
     nleaves = len(target_index_pointer)-1
 
@@ -130,90 +135,86 @@ def laplace_p2p_parallel(
 
         local_target_densities = laplace_p2p_serial(local_sources, local_targets, local_source_densities)
         local_gradients = laplace_gradient(local_sources, local_targets, local_source_densities)
-        target_densities[target_index_pointer[i]:target_index_pointer[i+1], 0] += local_target_densities
-        target_densities[target_index_pointer[i]:target_index_pointer[i+1], 1:] += local_gradients
+        potentials[target_index_pointer[i]:target_index_pointer[i+1], 0] += local_target_densities
+        potentials[target_index_pointer[i]:target_index_pointer[i+1], 1:] += local_gradients
 
-    return target_densities
+    return potentials
 
 
 @numba.njit(cache=True, parallel=False, fastmath=True, error_model="numpy")
 def laplace_gram_matrix_serial(sources, targets):
     """
-    Dense Numba P2P operator for Laplace kernel.
+    Laplace Gram matrix, computed in serial.
 
     Parameters:
     -----------
-    sources : np.array(shape=(n, 3), dtype=np.float32)
-        The n source locations on a surface.
-    targets : np.array(shape=(m, 3), dtype=np.float32)
-        The m target locations on a surface.
+    sources : np.array(shape=(n, 3), dtype=float)
+    targets : np.array(shape=(m, 3), dtype=float)
 
     Returns:
     --------
-    np.array(shape=(m, n), dtype=np.float32)
-        The Gram matrix.
+    np.array(shape=(m, n), dtype=float)
     """
-    n_sources = len(sources)
-    n_targets = len(targets)
+    n = len(sources)
+    m = len(targets)
+    dtype = sources.dtype
+    m_inv_4pi = dtype.type(M_INV_4PI)
+    zero = dtype.type(ZERO)
+    gram_matrix = np.zeros(shape=(m, n), dtype=dtype)
 
-    matrix = np.zeros(shape=(n_targets, n_sources), dtype=np.float32)
-
-    for row_idx in range(n_targets):
+    for row_idx in range(m):
         target = targets[row_idx]
-        for col_idx in range(n_sources):
+        for col_idx in range(n):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] += laplace_cpu(target, source)
+            gram_matrix[row_idx][col_idx] += laplace_cpu(target, source, m_inv_4pi, zero)
 
-    return matrix
+    return gram_matrix
 
 
 @numba.njit(cache=True, parallel=True, fastmath=True, error_model="numpy")
 def laplace_gram_matrix_parallel(sources, targets):
     """
-    Dense Numba P2P operator for Laplace kernel.
+    Laplace Gram matrix, computed in parallel.
 
     Parameters:
     -----------
-    sources : np.array(shape=(n, 3), dtype=np.float32)
-        The n source locations on a surface.
-    targets : np.array(shape=(m, 3), dtype=np.float32)
-        The m target locations on a surface.
+    sources : np.array(shape=(n, 3), dtype=float)
+    targets : np.array(shape=(m, 3), dtype=float)
 
     Returns:
     --------
-    np.array(shape=(m, n), dtype=np.float32)
-        The Gram matrix.
+    np.array(shape=(m, n), dtype=float)
     """
-    n_sources = len(sources)
-    n_targets = len(targets)
+    n = len(sources)
+    m = len(targets)
+    dtype = sources.dtype
+    m_inv_4pi = dtype.type(M_INV_4PI)
+    zero = dtype.type(ZERO)
+    gram_matrix = np.zeros(shape=(m, n), dtype=dtype)
 
-    matrix = np.zeros(shape=(n_targets, n_sources), dtype=np.float32)
-
-    for row_idx in numba.prange(n_targets):
+    for row_idx in numba.prange(m):
         target = targets[row_idx]
-        for col_idx in range(n_sources):
+        for col_idx in range(n):
             source = sources[col_idx]
-            matrix[row_idx][col_idx] += laplace_cpu(target, source)
+            gram_matrix[row_idx][col_idx] += laplace_cpu(target, source, m_inv_4pi, zero)
 
-    return matrix
+    return gram_matrix
 
 
 @numba.njit(cache=True)
-def laplace_grad_cpu(x, y, c):
+def laplace_grad_cpu(x, y, c, m_inv_4pi, zero):
     """
-    Numba Laplace Gradient CPU kernel.
+    Laplce gradient.
 
     Parameters:
     -----------
-    x : np.array(shape=(3), dtype=np.float32)
-        Source coordinate.
-    y : np.array(shape=(3), dtype=np.float32)
-        Target coordinate.
-    c : np.int32
-        Component to consider
+    x : np.array(shape=(3), dtype=float)
+    y : np.array(shape=(3), dtype=float)
+    c : int
+        Component to consider, c ∈ {0, 1, 2}.
     Returns:
     --------
-    np.float32
+    float
     """
 
     num = x[c] - y[c]
@@ -223,8 +224,8 @@ def laplace_grad_cpu(x, y, c):
     tmp *= invdiff
     tmp *= invdiff
     tmp *= num
-    tmp *= M_INV_4PI
-    res = tmp if tmp < np.inf else 0.
+    tmp *= m_inv_4pi
+    res = tmp if tmp < np.inf else zero
     return res
 
 
@@ -235,30 +236,32 @@ def laplace_gradient(sources, targets, source_densities):
 
     Parameters:
     -----------
-    sources : np.array(shape=(n, 3), dtype=np.float32)
+    sources : np.array(shape=(n, 3), dtype=float)
         The n source locations on a surface.
-    targets : np.array(shape=(m, 3), dtype=np.float32)
+    targets : np.array(shape=(m, 3), dtype=float)
         The m target locations on a surface.
-    source_densities : np.array(shape=(m,), dtype=np.float32)
+    source_densities : np.array(shape=(m,), dtype=float)
         Charge densities at source coordinates.
 
     Returns:
     --------
-    np.array(shape=(ntargets, 3), dtype=np.float32)
+    np.array(shape=(ntargets, 3), dtype=float)
         Target potential gradients.
     """
-    nsources = len(sources)
-    ntargets = len(targets)
+    n = len(sources)
+    m = len(targets)
+    dtype = sources.dtype
+    m_inv_4pi = dtype.type(M_INV_4PI)
+    zero = dtype.type(ZERO)
+    gradients = np.zeros((m, 3), np.float32)
 
-    gradients = np.zeros((ntargets, 3), np.float32)
-
-    for i in range(ntargets):
+    for i in range(m):
         target = targets[i]
-        for j in range(nsources):
+        for j in range(n):
             source = sources[j]
-            gradients[i][0] -= source_densities[j]*laplace_grad_cpu(target, source, 0)
-            gradients[i][1] -= source_densities[j]*laplace_grad_cpu(target, source, 1)
-            gradients[i][2] -= source_densities[j]*laplace_grad_cpu(target, source, 2)
+            gradients[i][0] -= source_densities[j]*laplace_grad_cpu(target, source, 0, m_inv_4pi, zero)
+            gradients[i][1] -= source_densities[j]*laplace_grad_cpu(target, source, 1, m_inv_4pi, zero)
+            gradients[i][2] -= source_densities[j]*laplace_grad_cpu(target, source, 2, m_inv_4pi, zero)
     return gradients
 
 
