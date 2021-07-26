@@ -14,6 +14,7 @@ from sklearn.utils.extmath import randomized_svd
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
+from fmm.dtype import PRECISION
 from fmm.kernel import KERNELS
 import fmm.linalg as linalg
 import fmm.surface as surface
@@ -139,18 +140,20 @@ def compute_surfaces(config, db):
 
     Returns:
     --------
-    np.array(shape=(n_equivalent, 3), dtype=np.float32)
+    np.array(shape=(n_equivalent, 3), dtype=float)
         Discretised equivalent surface.
-    np.array(shape=(n_check, 3), dtype=np.float32)
+    np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
     """
     order_equivalent = config['order_equivalent']
     order_check = config['order_check']
-    equivalent_surface = surface.compute_surface(order_equivalent)
-    check_surface = surface.compute_surface(order_check)
+    precision = config['precision']
+    dtype = PRECISION[precision]
+    equivalent_surface = surface.compute_surface(order_equivalent, dtype)
+    check_surface = surface.compute_surface(order_check, dtype)
 
-    print(f"Computing Inner Surface of Order {order_equivalent}")
-    print(f"Computing Outer Surface of Order {order_check}")
+    print(f"Computing Inner Surface of Order {order_equivalent} at {dtype} precision")
+    print(f"Computing Outer Surface of Order {order_check} at {dtype} precision")
 
     if 'surface' in db.keys():
         del db['surface']
