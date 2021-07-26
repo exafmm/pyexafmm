@@ -60,29 +60,32 @@ def scale_surface(surf, radius, level, center, alpha):
 
     Parameters:
     -----------
-    surface : np.array(shape=(n, 3))
+    surface : np.array(shape=(n, 3), dtype=float)
         Original node surface, being shifted/scaled.
     radius : float
         Half side length of the Octree's root node that this surface lives in.
     level : int
         Octree level of the shifted node.
-    center : np.array(shape=(1, 3))
+    center : np.array(shape=(1, 3), dtype=float)
         Coordinates of the centre of the shifted node.
     alpha : float
         Ratio between side length of shifted/scaled node and original node.
 
     Returns:
     --------
-    np.array(shape=(n_coeffs, 3))
+    np.array(shape=(n_coeffs, 3), dtype=float)
         Vector of coordinates of surface points. `n_coeffs` is the number of
         points that discretise the surface of a node.
     """
-
     n_coeffs = len(surf)
-
+    dtype = surf.dtype
     # Translate box to specified centre, and scale
     scaled_radius = (0.5)**level*radius
     dilated_radius = alpha*scaled_radius
+
+    # Cast center and radius
+    dilated_radius = dtype.type(dilated_radius)
+    center = center.astype(dtype)
 
     scaled_surf = np.zeros_like(surf)
 

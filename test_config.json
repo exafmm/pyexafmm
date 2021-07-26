@@ -11,5 +11,5 @@
     "max_level": 10,
     "max_points": 150,
     "target_rank": 50,
-    "precision": "single"
+    "precision": "double"
 }
