@@ -3,7 +3,7 @@
     "npoints": 10000,
     "data_type": "sphere",
     "order_equivalent": 5,
-    "order_check": 7,
+    "order_check": 5,
     "kernel": "laplace",
     "backend": "numba",
     "alpha_inner": 1.05,
