@@ -14,7 +14,7 @@ from sklearn.utils.extmath import randomized_svd
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
-from fmm.dtype import PRECISION
+from fmm.dtype import NUMPY
 from fmm.kernel import KERNELS
 import fmm.linalg as linalg
 import fmm.surface as surface
@@ -145,7 +145,7 @@ def compute_surfaces(config, db):
     order_equivalent = config['order_equivalent']
     order_check = config['order_check']
     precision = config['precision']
-    dtype = PRECISION[precision]
+    dtype = NUMPY[precision]
     equivalent_surface = surface.compute_surface(order_equivalent, dtype)
     check_surface = surface.compute_surface(order_check, dtype)
 
@@ -224,7 +224,7 @@ def compute_octree(config, db):
     max_level = config['max_level']
     max_points = config['max_points']
     precision = config['precision']
-    dtype = PRECISION[precision]
+    dtype = NUMPY[precision]
     start_level = 1
 
     # AdaptOctree restricted to double precision, hence cast for compatibility
@@ -340,52 +340,68 @@ def compute_inv_c2e(
     precision = config['precision']
     alpha_inner = config['alpha_inner']
     alpha_outer = config['alpha_outer']
-    dtype = PRECISION[precision]
+    max_level = config['max_level']
+    dtype = NUMPY[precision]
 
     equivalent_surface = surface.compute_surface(order_e, dtype)
     check_surface = surface.compute_surface(order_c, dtype)
     level = 0
 
-    upward_equivalent_surface = surface.scale_surface(
-        surf=equivalent_surface,
-        radius=r0,
-        level=level,
-        center=x0,
-        alpha=alpha_inner
-    )
+    upward_equivalent_surfaces = []
+    upward_check_surfaces = []
+    downward_equivalent_surfaces = []
+    downward_check_surfaces = []
 
-    upward_check_surface = surface.scale_surface(
-        surf=check_surface,
-        radius=r0,
-        level=level,
-        center=x0,
-        alpha=alpha_outer
-    )
+    for level in range(0, max_level+1):
 
-    downward_equivalent_surface = surface.scale_surface(
-        surf=equivalent_surface,
-        radius=r0,
-        level=level,
-        center=x0,
-        alpha=alpha_outer
-    )
+        upward_equivalent_surfaces.append(
+            surface.scale_surface(
+                surf=equivalent_surface,
+                radius=r0,
+                level=level,
+                center=x0,
+                alpha=alpha_inner
+            )
+        )
 
-    downward_check_surface = surface.scale_surface(
-        surf=check_surface,
-        radius=r0,
-        level=level,
-        center=x0,
-        alpha=alpha_inner
-    )
+        upward_check_surfaces.append(
+            surface.scale_surface(
+                surf=check_surface,
+                radius=r0,
+                level=level,
+                center=x0,
+                alpha=alpha_outer
+            )
+        )
+
+        downward_equivalent_surfaces.append(
+            surface.scale_surface(
+                surf=equivalent_surface,
+                radius=r0,
+                level=level,
+                center=x0,
+                alpha=alpha_outer
+            )
+        )
+
+        downward_check_surfaces.append(
+            surface.scale_surface(
+                surf=check_surface,
+                radius=r0,
+                level=level,
+                center=x0,
+                alpha=alpha_inner
+            )
+        )
 
     uc2e = dense_gram_matrix(
-        targets=upward_check_surface,
-        sources=upward_equivalent_surface,
+        targets=upward_check_surfaces[0],
+        sources=upward_equivalent_surfaces[0],
     )
 
     dc2e = dense_gram_matrix(
-        targets=downward_check_surface,
-        sources=downward_equivalent_surface,
+        targets=downward_check_surfaces[0],
+        sources=downward_equivalent_surfaces[0],
     )
 
     uc2e_inv_a, uc2e_inv_b = linalg.pinv2(uc2e)
@@ -399,12 +415,32 @@ def compute_inv_c2e(
         del db['dc2e_inv_a']
         del db['dc2e_inv_b']
 
+        for level in range(0, max_level+1):
+            str_level = str(level)
+            del db['surfaces'][str_level]['upward_equivalent_surface']
+            del db['surfaces'][str_level]['upward_check_surface']
+            del db['surfaces'][str_level]['downward_equivalent_surface']
+            del db['surfaces'][str_level]['downward_check_surface']
+
     db['uc2e'] = uc2e
     db['dc2e'] = dc2e
     db['uc2e_inv_a'] = uc2e_inv_a
     db['uc2e_inv_b'] = uc2e_inv_b
     db['dc2e_inv_a'] = dc2e_inv_a
     db['dc2e_inv_b'] = dc2e_inv_b
+
+    db.create_group('surfaces')
+
+    group = db['surfaces']
+    for level in range(0, max_level+1):
+        str_level = str(level)
+
+        group.create_group(str_level)
+
+        group[str_level]['upward_equivalent_surface'] = upward_equivalent_surfaces[level]
+        group[str_level]['upward_check_surface'] = upward_check_surfaces[level]
+        group[str_level]['downward_equivalent_surface'] = downward_equivalent_surfaces[level]
+        group[str_level]['downward_check_surface'] = downward_check_surfaces[level]
 
     return uc2e_inv_a, uc2e_inv_b, dc2e_inv_a, dc2e_inv_b
 
@@ -441,7 +477,7 @@ def compute_m2m_and_l2l(
     alpha_outer = config['alpha_outer']
     alpha_inner = config['alpha_inner']
     precision = config['precision']
-    dtype = PRECISION[precision]
+    dtype = NUMPY[precision]
 
     parent_level = 0
     child_level = 1
@@ -550,7 +586,7 @@ def compute_m2l(
         Depth of octree.
     """
     dense_gram = KERNELS[config['kernel']]['dense_gram']
-    dtype = PRECISION[config['precision']]
+    dtype = NUMPY[config['precision']]
     alpha_inner = config['alpha_inner']
 
     if 'm2l' in db.keys():

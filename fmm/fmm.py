@@ -10,7 +10,7 @@ import numpy as np
 
 import adaptoctree.morton as morton
 
-from fmm.dtype import PRECISION
+from fmm.dtype import NUMPY, NUMBA
 from fmm.backend import BACKEND
 from fmm.kernel import KERNELS
 
@@ -62,23 +62,21 @@ class Fmm:
         db_filepath = WORKING_DIR / f"{self.config['experiment']}.hdf5"
         self.db = h5py.File(db_filepath, "r")
 
-        # Load required data from disk
-        ## Load surfaces, and inverse gram matrices
-        self.check_surface = self.db["surface"]["check"][...]
-        self.ncheck_points = len(self.check_surface)
-        self.equivalent_surface = self.db["surface"]["equivalent"][...]
-        self.nequivalent_points = len(self.equivalent_surface)
+        # Configure experimental precision
+        self.numpy_dtype = NUMPY[self.config["precision"]]
+        self.numba_dtype = NUMBA[self.config["precision"]]
+
+        # Load inverse gram matrices
         self.uc2e_inv_a = self.db["uc2e_inv_a"][...]
         self.uc2e_inv_b = self.db["uc2e_inv_b"][...]
         self.dc2e_inv_a = self.db["dc2e_inv_a"][...]
         self.dc2e_inv_b = self.db["dc2e_inv_b"][...]
-        self.alpha_outer = np.float32(self.config['alpha_outer'])
-        self.alpha_inner = np.float32(self.config['alpha_inner'])
 
         ## Load linear, and complete octrees alongside their parameters
         self.x0 = self.db["octree"]["x0"][...]
         self.r0 = self.db["octree"]["r0"][...][0]
         self.depth = self.db["octree"]["depth"][...][0]
+        self.max_level = self.config['max_level']
         self.leaves = self.db["octree"]["keys"][...]
         self.leaf_indices = np.zeros_like(self.leaves)
         self.nleaves = len(self.leaves)
@@ -100,6 +98,32 @@ class Fmm:
         self.targets = self.db["particle_data"]["targets"][...][self.target_indices]
         self.ntargets = len(self.targets)
 
+        # Load surfaces and surface parameters
+        self.alpha_outer = self.config['alpha_outer']
+        self.alpha_inner = self.config['alpha_inner']
+
+        self.upward_equivalent_surfaces = numba.typed.Dict.empty(
+            key_type=numba.int64, value_type=self.numba_dtype[:,::1]
+        )
+        self.upward_check_surfaces = numba.typed.Dict.empty(
+            key_type=numba.int64, value_type=self.numba_dtype[:,::1]
+        )
+        self.downward_equivalent_surfaces = numba.typed.Dict.empty(
+            key_type=numba.int64, value_type=self.numba_dtype[:,::1]
+        )
+        self.downward_check_surfaces = numba.typed.Dict.empty(
+            key_type=numba.int64, value_type=self.numba_dtype[:,::1]
+        )
+        for level in range(0, self.max_level+1):
+            str_level = str(level)
+            self.upward_equivalent_surfaces[level] = self.db["surfaces"][str_level]["upward_equivalent_surface"][...]
+            self.upward_check_surfaces[level] = self.db["surfaces"][str_level]["upward_check_surface"][...]
+            self.downward_equivalent_surfaces[level] = self.db["surfaces"][str_level]["downward_equivalent_surface"][...]
+            self.downward_check_surfaces[level] = self.db["surfaces"][str_level]["downward_check_surface"][...]
+
+        self.ncheck_points = 6*(self.config["order_check"]-1)**2 + 2
+        self.nequivalent_points = 6*(self.config["order_equivalent"]-1)**2 + 2
+
         ## Load pre-computed operators
         self.m2m = self.db["m2m"][...]
         self.m2l = self.db["m2l"]
@@ -119,25 +143,23 @@ class Fmm:
         self.gradient_function = KERNELS[self.kernel]["gradient"]
         self.backend = BACKEND[self.config["backend"]]
 
-        # Configure experimental precision
-        self.dtype = PRECISION[self.config["precision"]]
-
         # Containers for results
         self.multipole_expansions = np.zeros(
                 self.nequivalent_points*self.ncomplete,
-                dtype=self.dtype
+                dtype=self.numpy_dtype
             )
 
         self.local_expansions = np.zeros(
                self.nequivalent_points*self.ncomplete,
-               dtype=self.dtype
+               dtype=self.numpy_dtype
             )
 
         self.target_potentials = np.zeros(
             (self.ntargets, 4),
-            dtype=self.dtype
+            dtype=self.numpy_dtype
         )
 
+        # Create index pointer lookups
         self.key_to_leaf_index = numba.typed.Dict.empty(key_type=numba.int64, value_type=numba.int64)
         self.key_to_index = numba.typed.Dict.empty(key_type=numba.int64, value_type=numba.int64)
 
@@ -166,7 +188,14 @@ class Fmm:
                 x0=self.x0,
                 r0=self.r0,
                 alpha_outer=self.alpha_outer,
-                check_surface=self.check_surface,
+                check_surfaces=self.
+
+
+
+
+
+                #
+                # ]zzxcx x x  xx xcheck_surfaces,
                 ncheck_points=self.ncheck_points,
                 uc2e_inv_a=self.uc2e_inv_a,
                 uc2e_inv_b=self.uc2e_inv_b,

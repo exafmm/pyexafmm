@@ -31,21 +31,21 @@ def prepare_p2m_data(
     Parameters:
     -----------
     leaves : np.array(nleaves, np.int64)
-    nleaves : np.int32
-    sources : np.array((nsources, 3), np.float32)
-    source_densities : np.array(nsources, np.float32)
-    source_index_pointer : np.array(nleaves+1,np.float32)
+    nleaves : int
+    sources : np.array((nsources, 3), float)
+    source_densities : np.array(nsources, float)
+    source_index_pointer : np.array(nleaves+1, int)
     key_to_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
-    x0 : np.array(shape=(1, 3), dtype=np.float32)
+    x0 : np.array(shape=(1, 3), dtype=float)
         Physical center of octree root node.
-    r0 : np.float32
+    r0 : float
         Half side length of octree root node.
-    alpha_outer: np.float32
+    alpha_outer: float
         Relative size of outer surface
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+    check_surface : np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
-    ncheck_points : np.int32
+    ncheck_points : int
         Number of quadrature points on the check surface.
     p2p_function : function handle
         Serial P2P function.
@@ -54,12 +54,14 @@ def prepare_p2m_data(
 
     Returns:
     --------
-    (np.array(np.float32), np.array(np.float32))
+    (np.array(float), np.array(float))
         Tuple of scales and check potentials (ordered by leaf index) respectively.
     """
 
-    scales = np.zeros(nleaves, dtype=np.float32)
-    check_potentials = np.zeros(nleaves*ncheck_points, np.float32)
+    dtype = sources.dtype
+
+    scales = np.zeros(nleaves, dtype=dtype)
+    check_potentials = np.zeros(nleaves*ncheck_points, dtype=dtype)
 
     for thread_idx in numba.prange(nleaves):
 

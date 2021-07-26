@@ -9,7 +9,7 @@ import sys
 import h5py
 import numpy as np
 
-from fmm.dtype import PRECISION
+from fmm.dtype import NUMPY
 
 import utils.data as data
 
@@ -85,7 +85,7 @@ DATA_FUNCTIONS = {
 def main(**config):
 
     npoints = config['npoints']
-    dtype = PRECISION[config['precision']]
+    dtype = NUMPY[config['precision']]
     data_function = DATA_FUNCTIONS[config['data_type']]
 
     sources, targets, source_densities = data_function(npoints, dtype)
