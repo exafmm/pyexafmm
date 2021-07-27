@@ -9,7 +9,6 @@ import numba
 import numpy as np
 
 import adaptoctree.morton as morton
-from numpy.lib.function_base import gradient
 
 from fmm.backend import BACKEND
 from fmm.dtype import NUMBA, NUMPY
@@ -193,7 +192,7 @@ class Fmm:
 
             # Keys at this level
             keys = self.complete[self.complete_levels == level]
-            scale = np.float32(self.scale_function(level))
+            scale = self.numpy_dtype(self.scale_function(level))
 
             # V List interactions
             # M2L operator stored in terms of its SVD components for each level
@@ -286,7 +285,8 @@ class Fmm:
                 dc2e_inv_a=self.dc2e_inv_a,
                 dc2e_inv_b=self.dc2e_inv_b,
                 scale_function=self.scale_function,
-                p2p_function=self.p2p_function
+                p2p_function=self.p2p_function,
+                dtype=self.numpy_dtype
             )
 
             # W List interactions
@@ -352,7 +352,8 @@ class Fmm:
             key_to_leaf_index=self.key_to_leaf_index,
             max_points=self.config['max_points'],
             target_potentials=self.target_potentials,
-            p2p_parallel_function=self.p2p_parallel_function
+            p2p_parallel_function=self.p2p_parallel_function,
+            dtype=self.numpy_dtype
         )
 
     def run(self):

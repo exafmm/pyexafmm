@@ -70,11 +70,11 @@ def laplace_p2p_serial(sources, targets, source_densities):
     """
     m = len(targets)
     n = len(sources)
-    dtype = sources.dtype
+    dtype = sources.dtype.type
 
-    target_densities = np.zeros(shape=m, dtype=dtype.type)
-    m_inv_4pi = dtype.type(M_INV_4PI)
-    zero = dtype.type(ZERO)
+    target_densities = np.zeros(shape=m, dtype=dtype)
+    m_inv_4pi = dtype(M_INV_4PI)
+    zero = dtype(ZERO)
 
     for i in range(m):
         target = targets[i]
@@ -115,10 +115,10 @@ def laplace_p2p_parallel(
         Created using the backend.prepare_u_list_data function.
     """
 
-    dtype = sources.dtype
+    dtype = sources.dtype.type
     non_empty_targets = targets[target_index_pointer[0]:target_index_pointer[-1]]
     ntargets = len(non_empty_targets)
-    target_densities = np.zeros(shape=(ntargets, 4), dtype=dtype.type)
+    target_densities = np.zeros(shape=(ntargets, 4), dtype=dtype)
 
     nleaves = len(target_index_pointer)-1
 
@@ -186,11 +186,11 @@ def laplace_gram_matrix_parallel(sources, targets):
     n = len(sources)
     m = len(targets)
 
-    dtype = sources.dtype
-    m_inv_4pi = dtype.type(M_INV_4PI)
-    zero = dtype.type(ZERO)
+    dtype = sources.dtype.type
+    m_inv_4pi = dtype(M_INV_4PI)
+    zero = dtype(ZERO)
 
-    result = np.zeros(shape=(m, n), dtype=dtype.type)
+    result = np.zeros(shape=(m, n), dtype=dtype)
 
     for i in numba.prange(m):
         target = targets[i]
@@ -247,11 +247,11 @@ def laplace_gradient(sources, targets, source_densities):
     n = len(sources)
     m = len(targets)
 
-    dtype = sources.dtype
-    m_inv_4pi = dtype.type(M_INV_4PI)
-    zero = dtype.type(ZERO)
+    dtype = sources.dtype.type
+    m_inv_4pi = dtype(M_INV_4PI)
+    zero = dtype(ZERO)
 
-    gradients = np.zeros((m, 3), dtype.type)
+    gradients = np.zeros((m, 3), dtype)
 
     for i in range(m):
         target = targets[i]

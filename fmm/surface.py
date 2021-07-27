@@ -1,6 +1,7 @@
 """
 Surface creation utilities
 """
+import numba
 import numpy as np
 
 
@@ -52,6 +53,7 @@ def compute_surface(order, dtype):
     return surf
 
 
+@numba.njit(cache=True)
 def scale_surface(surf, radius, level, center, alpha):
     """
     Shift and scale a given surface to a new center, and radius relative to the
@@ -77,13 +79,13 @@ def scale_surface(surf, radius, level, center, alpha):
         points that discretise the surface of a node.
     """
     n_coeffs = len(surf)
-    dtype = surf.dtype
+    dtype = surf.dtype.type
     # Translate box to specified centre, and scale
     scaled_radius = (0.5)**level*radius
     dilated_radius = alpha*scaled_radius
 
     # Cast center and radius
-    dilated_radius = dtype.type(dilated_radius)
+    dilated_radius = dtype(dilated_radius)
     center = center.astype(dtype)
 
     scaled_surf = np.zeros_like(surf)
