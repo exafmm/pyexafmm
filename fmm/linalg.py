@@ -24,9 +24,10 @@ def _svd(a, full_matrices, dtype):
 def pinv(a):
     """
     Moore-Penrose Pseudo-Inverse calculation via SVD.
+
     Parameters:
     -----------
-    a : np.array(shape=(m, n), dtype=np.float32)
+    a : np.array(shape=(m, n), dtype=float)
     """
     dtype = a.dtype
     u, s, vt, _ = _svd(a, full_matrices=0, dtype=dtype.type)
@@ -45,6 +46,7 @@ def pinv2(a):
     """
     Moore-Penrose Pseudo-Inverse calculation via SVD. Return SVD result in two
         components, as in Malhotra et. al. (2015).
+
     Parameters:
     -----------
     a : np.array(shape=(m, n), dtype=float)

@@ -1,12 +1,10 @@
 """
-Operator helper methods.
+Surface creation utilities
 """
-import numba
 import numpy as np
 
 
-@numba.njit(cache=True)
-def compute_surface(order):
+def compute_surface(order, dtype):
     """
     Compute surface to a specified order.
 
@@ -14,12 +12,13 @@ def compute_surface(order):
     -----------
     order : int
         Order
-
+    dtype : type
+        np.float32, np.float64
     """
     n_coeffs = 6*(order-1)**2 + 2
-    surf = np.zeros(shape=(n_coeffs, 3))
+    surf = np.zeros(shape=(n_coeffs, 3), dtype=dtype)
 
-    surf[0] = np.array([-1, -1, -1])
+    surf[0] = np.array([-1, -1, -1], dtype=dtype)
     count = 1
 
     # Hold x fixed
@@ -53,7 +52,6 @@ def compute_surface(order):
     return surf
 
 
-@numba.njit(cache=True)
 def scale_surface(surf, radius, level, center, alpha):
     """
     Shift and scale a given surface to a new center, and radius relative to the
@@ -61,31 +59,34 @@ def scale_surface(surf, radius, level, center, alpha):
 
     Parameters:
     -----------
-    surface : np.array(shape=(n, 3))
+    surface : np.array(shape=(n, 3), dtype=float)
         Original node surface, being shifted/scaled.
     radius : float
         Half side length of the Octree's root node that this surface lives in.
     level : int
         Octree level of the shifted node.
-    center : coordinate
+    center : np.array(shape=(1, 3), dtype=float)
         Coordinates of the centre of the shifted node.
     alpha : float
         Ratio between side length of shifted/scaled node and original node.
 
     Returns:
     --------
-    np.array(shape=(n_coeffs, 3))
+    np.array(shape=(n_coeffs, 3), dtype=float)
         Vector of coordinates of surface points. `n_coeffs` is the number of
         points that discretise the surface of a node.
     """
-
     n_coeffs = len(surf)
-
+    dtype = surf.dtype
     # Translate box to specified centre, and scale
-    scaled_radius = (0.5)**level * radius
+    scaled_radius = (0.5)**level*radius
     dilated_radius = alpha*scaled_radius
 
-    scaled_surf = np.zeros_like(surf, np.float32)
+    # Cast center and radius
+    dilated_radius = dtype.type(dilated_radius)
+    center = center.astype(dtype)
+
+    scaled_surf = np.zeros_like(surf)
 
     for i in range(n_coeffs):
         scaled_surf[i] = surf[i]*dilated_radius + center
