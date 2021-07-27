@@ -5,13 +5,17 @@ import os
 import pathlib
 
 import h5py
+from numba.core.types.npytypes import DType
 import numpy as np
 import pytest
 
 import adaptoctree.morton as morton
 
+
+from fmm.dtype import NUMPY
 from fmm.kernel import KERNELS
 import fmm.surface as surface
+
 import utils.data as data
 
 
@@ -19,12 +23,14 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 ROOT = HERE.parent.parent
 CONFIG_FILEPATH = HERE.parent.parent / "test_config.json"
 CONFIG = data.load_json(CONFIG_FILEPATH)
+TOL =  1e-5
 
 
 @pytest.fixture
 def db():
     experiment = CONFIG["experiment"]
     return h5py.File(ROOT / f"{experiment}.hdf5", "r")
+
 
 def test_m2m(db):
     """
@@ -88,7 +94,8 @@ def test_m2m(db):
         source_densities=child_equivalent_density,
     )
 
-    assert np.isclose(parent_direct, child_direct, atol=1e-3, rtol=0)
+
+    assert np.isclose(parent_direct, child_direct, atol=TOL, rtol=0)
 
 
 def test_l2l(db):
@@ -147,7 +154,7 @@ def test_l2l(db):
         source_densities=child_equivalent_density,
     )
 
-    assert np.isclose(parent_direct, child_direct, atol=1e-4, rtol=0)
+    assert np.isclose(parent_direct, child_direct, atol=TOL, rtol=0)
 
 
 def test_m2l(db):
@@ -253,4 +260,4 @@ def test_m2l(db):
         source_densities=source_equivalent_density
     )
 
-    assert np.isclose(target_direct, source_direct, atol=1e-1, rtol=0)
+    assert np.isclose(target_direct, source_direct, atol=0.5, rtol=0)

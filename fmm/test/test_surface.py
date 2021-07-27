@@ -15,29 +15,24 @@ HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 ROOT = HERE.parent.parent
 
 
-ORDER = 3
-NTARGETS = 4
-NSOURCES = 3
-
-CONFIG_FILEPATH = ROOT / 'test_config.json'
-CONFIG = data.load_json(CONFIG_FILEPATH)
+def surf32():
+    return surface.compute_surface(5, np.float32)
 
 
-@pytest.fixture
-def surf():
-    """Order 2 surface"""
-    return surface.compute_surface(order=ORDER)
+def surf64():
+    return surface.compute_surface(5, np.float64)
 
 
 @pytest.mark.parametrize(
-    "order",
+    "order, dtype",
     [
-        (2),
+        (2, np.float32),
+        (2, np.float64),
     ]
 )
-def test_compute_surface(order):
+def test_compute_surface(order, dtype):
     """Test surface computation"""
-    surf =  surface.compute_surface(order)
+    surf =  surface.compute_surface(order, dtype)
 
     # Test that surface centered at origin
     assert np.array_equal(surf.mean(axis=0), np.array([0, 0, 0]))
@@ -46,15 +41,18 @@ def test_compute_surface(order):
     n_coeffs = 6*(order-1)**2 + 2
     assert surf.shape == (n_coeffs, 3)
 
+    # Test that surface is of correct type
+    assert isinstance(surf[0, 0], dtype)
+
 
 @pytest.mark.parametrize(
-    "radius, level, center, alpha",
+    "surf, radius, level, center, alpha, dtype",
     [
-        (np.int32(1), np.int32(0), np.array([0.5, 0.5, 0.5], dtype=np.float32), np.float32(2)),
-        (np.int32(1), np.int32(1), np.array([0.5, 0.5, 0.5], dtype=np.float32), np.float32(2)),
+        (surf32(), 1., 0, np.array([0.5, 0.5, 0.5]), 2, np.float32),
+        (surf64(), 1., 1, np.array([0.5, 0.5, 0.5]), 2, np.float64),
     ]
 )
-def test_scale_surface(surf, radius, level, center, alpha):
+def test_scale_surface(surf, radius, level, center, alpha, dtype):
     """Test shifting/scaling surface"""
 
     scaled_surf = surface.scale_surface(
@@ -78,4 +76,7 @@ def test_scale_surface(surf, radius, level, center, alpha):
 
     # Test that the original surface remains unchanged
     assert ~np.array_equal(surf, scaled_surf)
-    assert np.array_equal(surf,  surface.compute_surface(ORDER))
+    assert np.array_equal(surf,  surface.compute_surface(5, dtype))
+
+    # Test the data type
+    assert isinstance(scaled_surf[0, 0], dtype)

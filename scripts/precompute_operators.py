@@ -9,11 +9,13 @@ import time
 import h5py
 import numba
 import numpy as np
-from sklearn.utils.extmath import randomized_svd
+from sklearn.utils.extmath import *
+import scipy.linalg.lapack as lapack
 
 import adaptoctree.morton as morton
 import adaptoctree.tree as tree
 
+from fmm.dtype import NUMPY
 from fmm.kernel import KERNELS
 import fmm.linalg as linalg
 import fmm.surface as surface
@@ -26,18 +28,137 @@ PARENT = HERE.parent
 WORKING_DIR = pathlib.Path(os.getcwd())
 
 
+def rsvd(M, n_components, *, n_oversamples=10, n_iter='auto',
+                   power_iteration_normalizer='auto', transpose='auto',
+                   flip_sign=True, random_state=0):
+    """Computes a truncated randomized SVD.
+    Parameters
+    ----------
+    M : {ndarray, sparse matrix}
+        Matrix to decompose.
+    n_components : int
+        Number of singular values and vectors to extract.
+    n_oversamples : int, default=10
+        Additional number of random vectors to sample the range of M so as
+        to ensure proper conditioning. The total number of random vectors
+        used to find the range of M is n_components + n_oversamples. Smaller
+        number can improve speed but can negatively impact the quality of
+        approximation of singular vectors and singular values.
+    n_iter : int or 'auto', default='auto'
+        Number of power iterations. It can be used to deal with very noisy
+        problems. When 'auto', it is set to 4, unless `n_components` is small
+        (< .1 * min(X.shape)) `n_iter` in which case is set to 7.
+        This improves precision with few components.
+        .. versionchanged:: 0.18
+    power_iteration_normalizer : {'auto', 'QR', 'LU', 'none'}, default='auto'
+        Whether the power iterations are normalized with step-by-step
+        QR factorization (the slowest but most accurate), 'none'
+        (the fastest but numerically unstable when `n_iter` is large, e.g.
+        typically 5 or larger), or 'LU' factorization (numerically stable
+        but can lose slightly in accuracy). The 'auto' mode applies no
+        normalization if `n_iter` <= 2 and switches to LU otherwise.
+        .. versionadded:: 0.18
+    transpose : bool or 'auto', default='auto'
+        Whether the algorithm should be applied to M.T instead of M. The
+        result should approximately be the same. The 'auto' mode will
+        trigger the transposition if M.shape[1] > M.shape[0] since this
+        implementation of randomized SVD tend to be a little faster in that
+        case.
+        .. versionchanged:: 0.18
+    flip_sign : bool, default=True
+        The output of a singular value decomposition is only unique up to a
+        permutation of the signs of the singular vectors. If `flip_sign` is
+        set to `True`, the sign ambiguity is resolved by making the largest
+        loadings for each component in the left singular vectors positive.
+    random_state : int, RandomState instance or None, default=0
+        The seed of the pseudo random number generator to use when shuffling
+        the data, i.e. getting the random vectors to initialize the algorithm.
+        Pass an int for reproducible results across multiple function calls.
+        See :term:`Glossary <random_state>`.
+    Notes
+    -----
+    This algorithm finds a (usually very good) approximate truncated
+    singular value decomposition using randomization to speed up the
+    computations. It is particularly fast on large matrices on which
+    you wish to extract only a small number of components. In order to
+    obtain further speed up, `n_iter` can be set <=2 (at the cost of
+    loss of precision).
+    References
+    ----------
+    * Finding structure with randomness: Stochastic algorithms for constructing
+      approximate matrix decompositions
+      Halko, et al., 2009 https://arxiv.org/abs/0909.4061
+    * A randomized algorithm for the decomposition of matrices
+      Per-Gunnar Martinsson, Vladimir Rokhlin and Mark Tygert
+    * An implementation of a randomized algorithm for principal component
+      analysis
+      A. Szlam et al. 2014
+    """
+    if isinstance(M, (sparse.lil_matrix, sparse.dok_matrix)):
+        warnings.warn("Calculating SVD of a {} is expensive. "
+                      "csr_matrix is more efficient.".format(
+                          type(M).__name__),
+                      sparse.SparseEfficiencyWarning)
+
+    random_state = check_random_state(random_state)
+    n_random = n_components + n_oversamples
+    n_samples, n_features = M.shape
+
+    if n_iter == 'auto':
+        # Checks if the number of iterations is explicitly specified
+        # Adjust n_iter. 7 was found a good compromise for PCA. See #5299
+        n_iter = 7 if n_components < .1 * min(M.shape) else 4
+
+    if transpose == 'auto':
+        transpose = n_samples < n_features
+    if transpose:
+        # this implementation is a bit faster with smaller shape[1]
+        M = M.T
+
+    # Get datatype
+    dtype = M.dtype.type
+
+    Q = randomized_range_finder(
+        M, size=n_random, n_iter=n_iter,
+        power_iteration_normalizer=power_iteration_normalizer,
+        random_state=random_state)
+
+    # project M to the (k + p) dimensional space using the basis vectors
+    B = safe_sparse_dot(Q.T, M)
+
+    # compute the SVD on the thin matrix: (k + p) wide
+    if dtype == np.float32:
+        Uhat, s, Vt, _ = lapack.sgesvd(B, full_matrices=0)
+    elif dtype == np.float64:
+        Uhat, s, Vt, _ = lapack.dgesvd(B, full_matrices=0)
+
+    del B
+    U = np.dot(Q, Uhat)
+
+    if flip_sign:
+        if not transpose:
+            U, Vt = svd_flip(U, Vt)
+        else:
+            # In case of transpose u_based_decision=false
+            # to actually flip based on u and not v.
+            U, Vt = svd_flip(U, Vt, u_based_decision=False)
+
+    if transpose:
+        # transpose back the results according to the input convention
+        return Vt[:n_components, :].T, s[:n_components], U[:, :n_components].T
+    else:
+        return U[:, :n_components], s[:n_components], Vt[:n_components, :]
+
+
 def compress_m2l_gram_matrix(
-        level, x0, r0, depth, alpha_inner, check_surface,
-        equivalent_surface, k
+        dense_gram_matrix, level, x0, r0, depth, alpha_inner, check_surface,
+        equivalent_surface, k, dtype
     ):
     """
     Compute compressed representation of unique Gram matrices for targets and
     sources at a given level of the octree, specified by their unique transfer
     vectors. Compression is computed using the randomised-SVD of Halko et. al.
-    (2011), and accelerated using CUDA. The Gram matrix is potentially extremely
-    large for meshes of useful order of discretisation, therefore it is never
-    computed explicitly, instead matrix elements are computed on the fly and
-    applied to a given RHS where needed.
+    (2011).
 
     Parameters:
     -----------
@@ -49,14 +170,12 @@ def compress_m2l_gram_matrix(
         Half side length of octree root node.
     alpha_inner : np.float32
         Relative size of inner surface
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+    check_surface : np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=np.float32)
+    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=float)
         Discretised equivalent surface.
     k : np.int32
         Target compression rank.
-    implicit_gram_matrix : CUDA JIT function handle.
-        Function to apply gram matrix implicitly to a given RHS.
 
     Returns:
     --------
@@ -77,7 +196,7 @@ def compress_m2l_gram_matrix(
     n_sources_per_node = len(equivalent_surface)
     n_sources = len(sources)
 
-    se2tc = np.zeros((n_targets_per_node, n_sources*n_sources_per_node), np.float32)
+    se2tc = np.zeros((n_targets_per_node, n_sources*n_sources_per_node), dtype)
 
     for idx in range(len(targets)):
 
@@ -96,34 +215,32 @@ def compress_m2l_gram_matrix(
             r0=r0
         )
 
-        lidx_sources = (idx)*n_sources_per_node
+        lidx_sources = idx*n_sources_per_node
         ridx_sources = lidx_sources+n_sources_per_node
 
         target_check_surface = surface.scale_surface(
             surf=check_surface,
-            radius=np.float32(r0),
-            level=np.int32(level),
-            center=target_center.astype(np.float32),
-            alpha=np.float32(alpha_inner)
+            radius=r0,
+            level=level,
+            center=target_center,
+            alpha=alpha_inner
         )
 
         source_equivalent_surface = surface.scale_surface(
             surf=equivalent_surface,
-            radius=np.float32(r0),
-            level=np.int32(level),
-            center=source_center.astype(np.float32),
-            alpha=np.float32(alpha_inner)
+            radius=r0,
+            level=level,
+            center=source_center,
+            alpha=alpha_inner
         )
 
-        tmp = KERNELS[config['kernel']]['dense_gram'](
+        se2tc[:, lidx_sources:ridx_sources] =  dense_gram_matrix(
                 sources=source_equivalent_surface, targets=target_check_surface
             )
 
-        se2tc[:, lidx_sources:ridx_sources] = tmp
+    u, s, vt = rsvd(se2tc, k)
 
-    u, s, vt = randomized_svd(se2tc, k)
-
-    return u.astype(np.float32), s.astype(np.float32), vt.astype(np.float32), hashes
+    return u, s, vt, hashes
 
 
 def compute_surfaces(config, db):
@@ -139,15 +256,16 @@ def compute_surfaces(config, db):
 
     Returns:
     --------
-    np.array(shape=(n_equivalent, 3), dtype=np.float32)
+    np.array(shape=(n_equivalent, 3), dtype=float)
         Discretised equivalent surface.
-    np.array(shape=(n_check, 3), dtype=np.float32)
+    np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
     """
     order_equivalent = config['order_equivalent']
     order_check = config['order_check']
-    equivalent_surface = surface.compute_surface(order_equivalent)
-    check_surface = surface.compute_surface(order_check)
+    dtype = NUMPY[config['precision']]
+    equivalent_surface = surface.compute_surface(order_equivalent, dtype)
+    check_surface = surface.compute_surface(order_check, dtype)
 
     print(f"Computing Inner Surface of Order {order_equivalent}")
     print(f"Computing Outer Surface of Order {order_check}")
@@ -225,8 +343,9 @@ def compute_octree(config, db):
     max_points = config['max_points']
     start_level = 1
 
-    sources = db['particle_data']['sources'][...]
-    targets = db['particle_data']['targets'][...]
+    # AdaptOctree restricted to double precision, cast for compatibility
+    sources = db['particle_data']['sources'][...].astype(np.float64)
+    targets = db['particle_data']['targets'][...].astype(np.float64)
     points = np.vstack((sources, targets))
 
     print("Computing octree")
@@ -276,9 +395,9 @@ def compute_octree(config, db):
         db.create_group('interaction_lists')
 
     db['octree']['keys'] = np.sort(octree)
-    db['octree']['depth'] = np.array([depth], np.int32)
-    db['octree']['x0'] = np.array([x0], np.float32)
-    db['octree']['r0'] = np.array([r0], np.float32)
+    db['octree']['depth'] = np.array([depth])
+    db['octree']['x0'] = np.array([x0])
+    db['octree']['r0'] = np.array([r0])
     db['octree']['complete'] = np.sort(complete)
 
     # Save source to index mappings
@@ -323,49 +442,56 @@ def compute_inv_c2e(
     Returns:
     --------
     (
-        np.array(shape=(n_check, n_equivalent), dtype=np.float64),
-        np.array(shape=(n_equivalent, n_check), dtype=np.float64)
+        np.array(shape=(n_check, n_s), dtype=np.float64),
+        np.array(shape=(n_s, n_equivalent), dtype=np.float64),
+        np.array(shape=(n_check, n_s), dtype=np.float64),
+        np.array(shape=(n_s, n_check), dtype=np.float64)
     )
         Tuple of downward-check-to-equivalent Gram matrix inverse, and the
-        upward-check-to-equivalent Gram matrix inverse.
+        upward-check-to-equivalent Gram matrix inverse, returned in two
+        components.
     """
 
     print("Computing Inverse of Check To Equivalent Gram Matrix")
 
-    equivalent_surface = surface.compute_surface(config['order_equivalent'])
+    dtype = NUMPY[config['precision']]
+    alpha_inner = config['alpha_inner']
+    alpha_outer = config['alpha_outer']
+    level = 0
+
+    equivalent_surface = surface.compute_surface(config['order_equivalent'], dtype)
+    check_surface = surface.compute_surface(config['order_check'], dtype)
+
     upward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_inner'])
+        radius=r0,
+        level=level,
+        center=x0,
+        alpha=alpha_inner
     )
 
-    check_surface = surface.compute_surface(config['order_check'])
     upward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_outer'])
+        radius=r0,
+        level=level,
+        center=x0,
+        alpha=alpha_outer
     )
 
-    equivalent_surface = surface.compute_surface(config['order_equivalent'])
     downward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_outer'])
+        radius=r0,
+        level=level,
+        center=x0,
+        alpha=alpha_outer
     )
 
-    check_surface = surface.compute_surface(config['order_check'])
     downward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=np.float32(r0),
-        level=np.int32(0),
-        center=x0.astype(np.float32),
-        alpha=np.float32(config['alpha_inner'])
+        radius=r0,
+        level=level,
+        center=x0,
+        alpha=alpha_inner
     )
 
     uc2e = dense_gram_matrix(
@@ -419,21 +545,25 @@ def compute_m2m_and_l2l(
         Config object, loaded from config.json.
     db : hdf5.File
         HDF5 file handle containing all experimental data.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=np.float32)
+    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=float)
         Discretised equivalent surface.
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
+    check_surface : np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
     dense_gram_matrix : Numba JIT function handle
         Function to calculate dense gram matrix on CPU.
     kernel_scale : Numba JIT function handle
         Function to calculate the scale of the kernel for a given level.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=np.float64)
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=np.float64)
-    parent_center : np.array(shape=(3,), dtype=np.float64)
+    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=float)
+    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=float)
+    parent_center : np.array(shape=(3,), dtype=float)
         Operators are calculated wrt to root node, so corresponds to x0.
-    parent_radius : np.float64
+    parent_radius : float
         Operators are calculated wrt to root node, so corresponds to r0.
     """
+
+    dtype = NUMPY[config['precision']]
+    alpha_inner = config['alpha_inner']
+    alpha_outer = config['alpha_outer']
 
     parent_level = 0
     child_level = 1
@@ -445,25 +575,25 @@ def compute_m2m_and_l2l(
 
     parent_upward_check_surface = surface.scale_surface(
         surf=check_surface,
-        radius=np.float32(parent_radius),
-        level=np.int32(parent_level),
-        center=parent_center.astype(np.float32),
-        alpha=np.float32(config['alpha_outer'])
+        radius=parent_radius,
+        level=parent_level,
+        center=parent_center,
+        alpha=alpha_outer
     )
 
     parent_downward_equivalent_surface = surface.scale_surface(
         surf=equivalent_surface,
-        radius=np.float32(parent_radius),
-        level=np.int32(parent_level),
-        center=parent_center.astype(np.float32),
-        alpha=np.float32(config['alpha_outer'])
+        radius=parent_radius,
+        level=parent_level,
+        center=parent_center,
+        alpha=alpha_outer
     )
 
     m2m = []
     l2l = []
 
     # Calculate scale
-    scale = kernel_scale(child_level)
+    scale = dtype(kernel_scale(child_level))
 
     print("Computing M2M & L2L Operators")
 
@@ -473,18 +603,18 @@ def compute_m2m_and_l2l(
 
         child_upward_equivalent_surface = surface.scale_surface(
             surf=equivalent_surface,
-            radius=np.float32(parent_radius),
-            level=np.int32(child_level),
-            center=child_center.astype(np.float32),
-            alpha=np.float32(config['alpha_inner'])
+            radius=parent_radius,
+            level=child_level,
+            center=child_center,
+            alpha=alpha_inner
         )
 
         child_downward_check_surface = surface.scale_surface(
             surf=check_surface,
-            radius=np.float32(parent_radius),
-            level=np.int32(child_level),
-            center=child_center.astype(np.float32),
-            alpha=np.float32(config['alpha_inner'])
+            radius=parent_radius,
+            level=child_level,
+            center=child_center,
+            alpha=alpha_inner
         )
 
         pc2ce = dense_gram_matrix(
@@ -532,9 +662,9 @@ def compute_m2l(
         Function to apply gram matrix implicitly to a given RHS.
     k : np.int64
         Target SVD compression rank of M2L matrix.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=np.float64)
+    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=float)
         Discretised equivalent surface.
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float64)
+    check_surface : np.array(shape=(n_check, 3), dtype=float)
         Discretised check surface.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
         Physical center of octree root node.
@@ -543,6 +673,10 @@ def compute_m2l(
     depth : np.int64
         Depth of octree.
     """
+
+    alpha_inner = config['alpha_inner']
+    dtype = NUMPY[config['precision']]
+    dense_gram_matrix = KERNELS[config['kernel']]['dense_gram']
 
     if 'm2l' in db.keys():
         del db['m2l']
@@ -565,14 +699,14 @@ def compute_m2l(
             group.create_group(str_level)
 
         u, s, vt, hashes = compress_m2l_gram_matrix(
-            level, x0, r0, depth, config['alpha_inner'], check_surface,
-            equivalent_surface, k
+            dense_gram_matrix, level, x0, r0, depth, alpha_inner, check_surface,
+            equivalent_surface, k, dtype
         )
 
         db['m2l'][str_level]['u'] = u
         db['m2l'][str_level]['s'] = s
         db['m2l'][str_level]['vt'] = vt
-        db['m2l'][str_level]['hashes'] = hashes.astype(np.int64)
+        db['m2l'][str_level]['hashes'] = hashes
 
         progress += 1
 
