@@ -4,7 +4,7 @@ Test linear algebra routines
 import numpy as np
 import pytest
 
-from fmm.linalg import pinv, pinv2
+from fmm.linalg import pinv, pinv2, EPS
 
 
 @pytest.mark.parametrize(
@@ -24,8 +24,15 @@ def test_pinv(dtype):
     id = x @ result
     expected = np.diag(np.ones(m))
 
+    err = np.mean(id - expected)
+
+    # Test shape
     assert id.shape == expected.shape
-    assert np.allclose(id, expected, rtol=0, atol=1e-3)
+
+    # Test that error is smaller than a constant factor of machine epsilon
+    assert (err - EPS[dtype]) < 4*EPS[dtype]
+
+    # Test casting
     assert isinstance(result[0, 0], dtype)
 
 
@@ -48,6 +55,13 @@ def test_pinv2(dtype):
     id = x @ result
     expected = np.diag(np.ones(m))
 
+    err = np.mean(id - expected)
+
+    # Test shape
     assert id.shape == expected.shape
-    assert np.allclose(id, expected, rtol=0, atol=1e-5)
+
+    # Test that error is smaller than a constant factor of machine epsilon
+    assert (err - EPS[dtype]) < 4*EPS[dtype]
+
+    # Test casting
     assert isinstance(result[0, 0], dtype)
