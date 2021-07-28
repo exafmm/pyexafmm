@@ -132,25 +132,25 @@ e.run()
 # a given leaf
 leaf = e.leaves[42]
 
-## Dictionary mapping leaf key to a pointer defining alignment
+# Dictionary mapping leaf key to a pointer defining alignment
 leaf_idx = e.key_to_leaf_index[leaf]
 
-## Targets at leaf
+# Targets at leaf
 leaf_targets = e.targets[
     e.target_index_pointer[leaf_idx]:e.target_index_pointer[leaf_idx+1]
 ]
 
-## Sources at leaf
+# Sources at leaf
 leaf_sources = e.sources[
     e.source_index_pointer[leaf_idx]:e.source_index_pointer[leaf_idx+1]
 ]
 
-## Source densities at leaf
+# Source densities at leaf
 leaf_source_densities = e.sources[
     e.source_index_pointer[leaf_idx]:e.source_index_pointer[leaf_idx+1]
 ]
 
-## 4-vectors of target potentials/potential gradients aligned with 'leaf_targets'
+# 4-vectors of target potentials/potential gradients aligned with 'leaf_targets'
 leaf_potentials = e.target_potentials[
     e.target_index_pointer[leaf_idx]:e.target_index_pointer[leaf_idx+1]
 ]
@@ -158,16 +158,16 @@ leaf_potentials = e.target_potentials[
 # Access multipole/local expansions at a given tree node
 key = e.complete[42]
 
-## Dictionary mapping a given key to a pointer defining alignment
+# Dictionary mapping a given key to a pointer defining alignment
 key_idx = e.key_to_index[key]
 
-## Multipole expansions defined by equivalent surface
+# Multipole expansions defined by equivalent surface
 multipole_index = key_index*e.nequivalent_points
 multipole_expansion = e.multipole_expansions[
     multipole_index:multipole_index+e.nequivalent_points
 ]
 
-## Local expansions defined by check surface
+# Local expansions defined by check surface
 local_index = key_index*e.ncheck_points
 local_expansion = e.local_expansions[
     local_index:local_index+e.ncheck_points
