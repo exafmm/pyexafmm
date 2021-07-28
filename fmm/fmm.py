@@ -231,7 +231,6 @@ class Fmm:
                 )
 
             for key in keys:
-
                 # Translate local expansion from the node's parent
                 self.backend['l2l'](
                     key=key,
