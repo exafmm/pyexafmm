@@ -65,7 +65,6 @@ def prepare_p2m_data(
     (np.array(float), np.array(float))
         Tuple of scales and check potentials (ordered by leaf index) respectively.
     """
-
     scales = np.zeros(shape=nleaves, dtype=dtype)
     check_potentials = np.zeros(shape=(nleaves*ncheck_points), dtype=dtype)
 
@@ -146,16 +145,15 @@ def p2m_core(
     check_potentials : np.array(shape=(nleaves*ncheck_points), dtype=float)
         Check potentials calculated in `prepare_p2p_data` function.
     """
+    for i in numba.prange(nleaves):
 
-    for thread_idx in numba.prange(nleaves):
+        scale = scales[i]
 
-        scale = scales[thread_idx]
-
-        check_lidx = thread_idx*ncheck_points
+        check_lidx = i*ncheck_points
         check_ridx = check_lidx+ncheck_points
         check_potential = check_potentials[check_lidx:check_ridx]
 
-        leaf = leaves[thread_idx]
+        leaf = leaves[i]
         lidx = key_to_index[leaf]*nequivalent_points
         ridx = lidx+nequivalent_points
 
@@ -181,7 +179,8 @@ def p2m(
         uc2e_inv_a,
         uc2e_inv_b,
         p2p_function,
-        scale_function
+        scale_function,
+        dtype
     ):
     """
     P2M operator. Compute the multipole expansion from the sources at each
@@ -225,10 +224,9 @@ def p2m(
         Serial P2P function handle for this kernel.
     scale_function : function
         Scale function handle for this kernel.
+    dtype : type
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
     """
-
-    # Configure datatype from sources
-    dtype = sources.dtype.type
 
     scales, check_potentials = prepare_p2m_data(
         leaves=leaves,
@@ -293,7 +291,6 @@ def m2m(
     nequivalent_points : int
         Number of quadrature points on equivalent_surface.
     """
-
     nkeys = len(keys)
 
     for i in range(nkeys):
@@ -446,8 +443,8 @@ def m2l(
     scale : float
         Kernel scale for keys at this level.
     """
-    # Loop over all keys at given level
     nkeys = len(keys)
+
     for i in numba.prange(nkeys):
         key = keys[i]
 
@@ -520,6 +517,7 @@ def l2l(
 @numba.njit(cache=True, parallel=True)
 def s2l(
         leaves,
+        nleaves,
         sources,
         source_densities,
         source_index_pointer,
@@ -539,61 +537,67 @@ def s2l(
         dtype
     ):
     """
-    S2L operator. For source nodes in a target node's X list, the multipole
-        expansion of the source node doesn't apply, as the target node lies
-        within it's upward check surface, therefore the sources are used to
-        compute the contribution to the local expansion of the target node
-        directly.
+    S2L operator, parallelized simply over leaves.
+
+    Notes:
+    ------
+    Parallelization of the S2L operator doesn't maximize cache re-use
+    (c.f. P2M, L2T) This decision is taken as X lists are usually small, with
+    relatively few nodes having X lists either. This makes the savings due to
+    cache re-use competitive with the cost of array allocation.
 
     Parameters:
     -----------
-    leaves : np.array(dtype=np.int64)
-        Leaf node keys.
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
+    nleaves : int
+        Number of leaves.
     sources : np.array(shape=(nsources, 3), dtype=float)
-        Source coordinates.
-    source_densities : np.array(shape=(nsources, 1), dtype=float)
-        Charge densities at source points.
-    source_index_pointer : np.array(dtype=int)
+        All source coordinates.
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
+    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning sources by leaf.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
     x_lists : np.array(shape=(ncomplete, nx_list), dtype=np.int64)
-    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all local expansions.
+	    All X lists for nodes in octree.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Local expansions, aligned by global index from `key_to_index`.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
-    alpha_inner: float
-        Relative size of inner surface
-    check_surface : np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
+    alpha_inner : float
+        Relative size of inner surface.`
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
     nequivalent_points : int
-    dc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=float)
-    dc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=float)
+        Number of quadrature points on equivalent_surface.
+    dc2e_inv_a : np.array(dtype=float)
+        First component of inverse of downward check to equivalent Gram matrix.
+    dc2e_inv_b : np.array(dtype=float)
+        Second component of inverse of downward check to equivalent Gram matrix.
     scale_function : function
-        Function handle for kernel scaling.
+        Scale function handle for this kernel.
     p2p_function : function
-        Function handle for kernel P2P.
+        Serial P2P function handle for this kernel.
     dtype : type
-        np.float32 or np.float64
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
     """
-
     nleaves = len(leaves)
 
     for i in numba.prange(nleaves):
 
-        key = leaves[i]
+        # Pick out leaf
+        leaf = leaves[i]
 
-        level = morton.find_level(key)
+        # Calculate downward check surface
+        level = morton.find_level(leaf)
         scale = dtype(scale_function(level))
-        center = morton.find_physical_center_from_key(key, x0, r0)
-
-        key_idx = key_to_index[key]
-        key_lidx = key_idx*nequivalent_points
-        key_ridx = key_lidx+nequivalent_points
-
-        x_list = x_lists[key_idx]
-        x_list = x_list[x_list != -1]
+        center = morton.find_physical_center_from_key(leaf, x0, r0)
 
         downward_check_surface = surface.scale_surface(
             surf=check_surface,
@@ -603,6 +607,15 @@ def s2l(
             alpha=alpha_inner
         )
 
+        # Pick out X list
+        key_idx = key_to_index[leaf]
+        key_lidx = key_idx*nequivalent_points
+        key_ridx = key_lidx+nequivalent_points
+
+        x_list = x_lists[key_idx]
+        x_list = x_list[x_list != -1]
+
+        # Apply S2L operator over X list
         for source in x_list:
 
             source_index = key_to_leaf_index[source]
@@ -621,6 +634,7 @@ def s2l(
 @numba.njit(cache=True, parallel=True)
 def m2t(
         leaves,
+        nleaves,
         w_lists,
         targets,
         target_index_pointer,
@@ -637,41 +651,50 @@ def m2t(
         gradient_function
     ):
     """
-    M2T operator. M2L translations aren't applicable, as the source nodes in
-        the W list are not outside of the downward equivalent surface of the
-        target node.
+    M2T operator parallelized over leaves.
+
+    Notes:
+    ------
+    The potential size of W lists make pre-allocation (c.f. L2T, near_field*)
+    very expensive for the M2T operator, hence we opt for simple parallelization
+    over leaves.
 
     Parameters:
     -----------
-    leaves : np.array(dtype=np.int64)
-    w_lists : np.array(shape=(ncomplete, nv_list), dtype=np.int64)
-    target_index_pointer : np.array(dtype=int)
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
+    nleaves : int
+        Number of leaves.
+    w_lists : np.array(shape=(ncomplete, nw_list), dtype=np.int64)
+        All W lists for nodes in octree.
+    targets : np.array(shape=(ntargets, 3), dtype=float)
+        All target coordinates.
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to complete index.
-    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
-    target_coordinates : np.array(shape=(ntargets, 3), dtype=float)
-        Target coordinates of particles in target node.
-    targets_potentials : np.array(shape=(ntargets,), dtype=float)
-        Potentials at all target points, due to all source points.
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all multipole expansions.
+    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
+        Target potentials (component 0), and x, y, and z components of
+        potential gradient (components 1, 2, 3 resp.).
+    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Multipole expansions, aligned by global index from `key_to_index`.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
     alpha_inner : float
-        Relative size of inner surface
-    equivalent_surface : np.array(shape=(n_equivalent, 3), dtype=float)
+        Relative size of inner surface.
+    equivalent_surface : np.array(shape=(nequivalent_points, 3), dtype=float)
+	    Discretized equivalent surface.
     nequivalent_points : int
-        Number of points discretising equivalent surface.
+	    Number of quadrature points on equivalent_surface.
     p2p_function : function
-    gradient_function : function
-        Function handle for kernel gradient P2P.
+	    Serial P2P function handle for this kernel.
+    grad_function : function
+        Serial gradient function handle for this kernel.
     """
-
-    nleaves = len(leaves)
-
     for i in numba.prange(nleaves):
         target_key = leaves[i]
         global_idx = key_to_index[target_key]

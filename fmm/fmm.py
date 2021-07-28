@@ -166,7 +166,8 @@ class Fmm:
                 uc2e_inv_a=self.uc2e_inv_a,
                 uc2e_inv_b=self.uc2e_inv_b,
                 p2p_function=self.p2p_function,
-                scale_function=self.scale_function
+                scale_function=self.scale_function,
+                dtype=self.numpy_dtype
             )
 
         # Post-order traversal
@@ -244,6 +245,7 @@ class Fmm:
         # X List interactions
         self.backend['s2l'](
             leaves=self.leaves,
+            nleaves=self.nleaves,
             sources=self.sources,
             source_densities=self.source_densities,
             source_index_pointer=self.source_index_pointer,
@@ -266,6 +268,7 @@ class Fmm:
         # W List interactions
         self.backend['m2t'](
             leaves=self.leaves,
+            nleaves=self.nleaves,
             w_lists=self.w_lists,
             targets=self.targets,
             target_index_pointer=self.target_index_pointer,
