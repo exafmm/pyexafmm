@@ -741,6 +741,7 @@ def m2t(
 @numba.njit(cache=True)
 def prepare_l2t_data(
         leaves,
+        nleaves,
         targets,
         target_index_pointer,
         equivalent_surface,
@@ -751,19 +752,41 @@ def prepare_l2t_data(
         key_to_index,
         key_to_leaf_index,
         local_expansions,
+        dtype,
     ):
     """
-    Prepare L2T data to maximise cache re-use.
+    Prepare L2T data to maximise cache re-use by allocating aligned arrays
+    aligning source and target coordinates.
 
     Parameters:
     -----------
-    leaves
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
+    nleaves : int
+        Number of leaves.
+    targets : np.array(shape=(ntargets, 3), dtype=float)
+        All target coordinates.
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
+    equivalent_surface : np.array(shape=(nequivalent_points, 3), dtype=float)
+        Discretized equivalent surface.
+    nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
+    x0 : np.array(shape=(1, 3), dtype=np.float64)
+        Center of octree root node.
+    r0 : np.float64
+        Half side length of octree root node.
+    alpha_outer : float
+        Relative size of outer surface.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Local expansions, aligned by global index from `key_to_index`.
+    dtype : type
+	    Corresponds to precision of experiment ∈ {np.float32, np.float64}.
     """
-
-    nleaves = len(leaves)
-
-    dtype = targets.dtype.type
-
     local_sources = np.zeros((nequivalent_points*nleaves, 3), dtype=dtype)
     local_source_densities = np.zeros((nequivalent_points*nleaves), dtype=dtype)
     local_targets = np.zeros((nequivalent_points*nleaves, 3), dtype=dtype)
@@ -822,6 +845,7 @@ def prepare_l2t_data(
 @numba.njit(cache=True)
 def l2t(
         leaves,
+        nleaves,
         key_to_index,
         key_to_leaf_index,
         targets,
@@ -833,11 +857,47 @@ def l2t(
         alpha_outer,
         equivalent_surface,
         nequivalent_points,
-        p2p_parallel_function
+        p2p_parallel_function,
+        dtype
     ):
-
+    """
+    Parameters:
+    -----------
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
+    nleaves : int
+        Number of leaves.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    targets : np.array(shape=(ntargets, 3), dtype=float)
+        All target coordinates.
+    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
+        Target potentials (component 0), and x, y, and z components of
+        potential gradient (components 1, 2, 3 resp.).
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Local expansions, aligned by global index from `key_to_index`.
+    x0 : np.array(shape=(1, 3), dtype=np.float64)
+        Center of octree root node.
+    r0 : np.float64
+        Half side length of octree root node.
+    alpha_outer : float
+        Relative size of outer surface.
+    equivalent_surface : np.array(shape=(nequivalent_points, 3), dtype=float)
+        Discretized equivalent surface.
+    nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
+    p2p_parallel_function : function
+	    Parallel P2P function handle for this kernel.
+    dtype : type
+	    Corresponds to precision of experiment ∈ {np.float32, np.float64}.
+    """
     local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_l2t_data(
         leaves,
+        nleaves,
         targets,
         target_index_pointer,
         equivalent_surface,
@@ -847,7 +907,8 @@ def l2t(
         alpha_outer,
         key_to_index,
         key_to_leaf_index,
-        local_expansions
+        local_expansions,
+        dtype
     )
 
     target_potentials_vec = p2p_parallel_function(
@@ -857,8 +918,6 @@ def l2t(
         source_index_pointer=local_source_index_pointer,
         target_index_pointer=local_target_index_pointer
     )
-
-    nleaves = len(local_target_index_pointer) - 1
 
     for i in range(nleaves):
         res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
@@ -870,6 +929,7 @@ def l2t(
 @numba.njit(cache=True)
 def prepare_u_list_data(
         leaves,
+        nleaves,
         targets,
         target_index_pointer,
         sources,
@@ -882,29 +942,35 @@ def prepare_u_list_data(
         dtype
     ):
     """
-    Create batched (in terms of index pointer) sources and targets in order to
-        run the P2P computation in parallel over all targets at the leaf level,
-        and all sources in their U lists.
+    Prepare U list data to maximise cache re-use by allocating aligned arrays
+    aligning source and target coordinates.
 
     Parameters:
     -----------
-    leaves : np.array(shape=nleaves, dtype=np.int64)
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+	    Octree leaves.
+    nleaves : int
+    	Number of leaves.
     targets : np.array(shape=(ntargets, 3), dtype=float)
         All target coordinates.
-    target_index_pointer : np.array(int)
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
     sources : np.array(shape=(nsources, 3), dtype=float)
         All source coordinates.
-    source_densities : np.array(shape=nsources, dtype=float)
-    source_index_pointer : np.array(dtype=int)
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
+    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning sources by leaf.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to complete index.
-    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
-    u_lists : np.array(shape=(n_u_list, ncomplete), dtype=np.int64)
+    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
+        All U lists for nodes in octree.
     max_points : int
-        Max points per node.
+        Max points allowed in a node.
     dtype : type
-        np.float32 or np.float64
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
 
     Returns:
     --------
@@ -912,18 +978,18 @@ def prepare_u_list_data(
     and target index pointers respectively.
     """
 
-    local_sources = np.zeros((max_points*26*len(leaves), 3), dtype=dtype)
-    local_source_densities = np.zeros((max_points*26*len(leaves)), dtype=dtype)
-    local_targets = np.zeros((max_points*len(leaves), 3), dtype=dtype)
-    local_source_index_pointer = np.zeros(len(leaves)+1, np.int64)
-    local_target_index_pointer = np.zeros(len(leaves)+1, np.int64)
+    local_sources = np.zeros((max_points*26*nleaves, 3), dtype=dtype)
+    local_source_densities = np.zeros((max_points*26*nleaves), dtype=dtype)
+    local_targets = np.zeros((max_points*nleaves, 3), dtype=dtype)
+    local_source_index_pointer = np.zeros(nleaves+1, np.int64)
+    local_target_index_pointer = np.zeros(nleaves+1, np.int64)
 
     source_ptr = 0
     target_ptr = 0
     local_source_index_pointer[0] = source_ptr
     local_target_index_pointer[0] = target_ptr
 
-    for i in range(len(leaves)):
+    for i in range(nleaves):
         target = leaves[i]
         target_leaf_index = key_to_leaf_index[target]
         target_index = key_to_index[target]
@@ -975,8 +1041,8 @@ def prepare_u_list_data(
 
 @numba.njit(cache=True)
 def near_field_u_list(
-        u_lists,
         leaves,
+        nleaves,
         targets,
         target_index_pointer,
         sources,
@@ -984,40 +1050,51 @@ def near_field_u_list(
         source_index_pointer,
         key_to_index,
         key_to_leaf_index,
+        u_lists,
         max_points,
         target_potentials,
         p2p_parallel_function,
         dtype
     ):
     """
-    Evaluate all near field particles for source nodes within a given target
-        node's U list directly.
+    Evaluate all near fields particles, corresponding to members of the U list,
+    for all leaves.
 
     Parameters:
     -----------
-    u_lists : np.array(shape=(n_u_list, ncomplete), dtype=np.int64)
-    leaves : np.array(shape=nleaves, dtype=np.int64)
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+	    Octree leaves.
+    nleaves : int
+    	Number of leaves.
     targets : np.array(shape=(ntargets, 3), dtype=float)
         All target coordinates.
-    target_index_pointer : np.array(int)
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
     sources : np.array(shape=(nsources, 3), dtype=float)
         All source coordinates.
-    source_densities : np.array(shape=nsources, dtype=float)
-    source_index_pointer : np.array(dtype=int)
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
+    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning sources by leaf.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to complete index.
-    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
+    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
+        All U lists for nodes in octree.
     max_points : int
-        Max points per node.
-    targets_potentials : np.array(shape=(ntargets,), dtype=float)
-        Potentials at all target points, due to all source points.
+        Max points allowed in a node.
+    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
+        Target potentials (component 0), and x, y, and z components of
+        potential gradient (components 1, 2, 3 resp.).
     p2p_parallel_function : function
+	    Parallel P2P function handle for this kernel.
     dtype : type
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
     """
-
     local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_u_list_data(
             leaves=leaves,
+            nleaves=nleaves,
             targets=targets,
             target_index_pointer=target_index_pointer,
             sources=sources,
@@ -1049,19 +1126,53 @@ def near_field_u_list(
 
 @numba.njit(cache=True)
 def prepare_node_data(
-    leaves,
-    key_to_leaf_index,
-    targets,
-    target_index_pointer,
-    sources,
-    source_densities,
-    source_index_pointer,
-    max_points
-):
-    nleaves = len(leaves)
+        leaves,
+        nleaves,
+        key_to_leaf_index,
+        targets,
+        target_index_pointer,
+        sources,
+        source_densities,
+        source_index_pointer,
+        max_points,
+        dtype
+    ):
+    """
+    Prepare source and target data within each node in order to maximize cache
+    re-use.
 
-    dtype = sources.dtype.type
+    Notes:
+    ------
+    Uses same strategy as over U lists.
 
+    Parameters:
+    -----------
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+	    Octree leaves.
+    nleaves : int
+    	Number of leaves.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    targets : np.array(shape=(ntargets, 3), dtype=float)
+        All target coordinates.
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
+    sources : np.array(shape=(nsources, 3), dtype=float)
+        All source coordinates.
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
+    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning sources by leaf.
+    max_points : int
+        Max points allowed in a node.
+    dtype : type
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
+
+    Returns:
+    --------
+    5-tuple containing the re-batched sources, targets, source densities, source index pointers
+    and target index pointers respectively.
+    """
     local_sources = np.zeros((max_points*nleaves, 3), dtype=dtype)
     local_source_densities = np.zeros((max_points*nleaves), dtype=dtype)
     local_targets = np.zeros((max_points*nleaves, 3), dtype=dtype)
@@ -1111,20 +1222,8 @@ def prepare_node_data(
 
 @numba.njit(cache=True)
 def near_field_node(
-    leaves,
-    key_to_leaf_index,
-    targets,
-    target_index_pointer,
-    sources,
-    source_densities,
-    source_index_pointer,
-    max_points,
-    target_potentials,
-    p2p_parallel_function,
-):
-
-    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_node_data(
         leaves,
+        nleaves,
         key_to_leaf_index,
         targets,
         target_index_pointer,
@@ -1132,6 +1231,53 @@ def near_field_node(
         source_densities,
         source_index_pointer,
         max_points,
+        target_potentials,
+        p2p_parallel_function,
+        dtype
+    ):
+    """
+    Compute near field interactions for sources and targets within each node.
+
+    Parameters:
+    -----------
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+	    Octree leaves.
+    nleaves : int
+    	Number of leaves.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    targets : np.array(shape=(ntargets, 3), dtype=float)
+        All target coordinates.
+    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning targets by leaf.
+    sources : np.array(shape=(nsources, 3), dtype=float)
+        All source coordinates.
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
+    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+        Index pointer aligning sources by leaf.
+    max_points : int
+        Max points allowed in a node.
+    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
+        Target potentials (component 0), and x, y, and z components of
+        potential gradient (components 1, 2, 3 resp.).
+    p2p_parallel_function : function
+	    Parallel P2P function handle for this kernel.
+    dtype : type
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
+    """
+
+    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_node_data(
+        leaves,
+        nleaves,
+        key_to_leaf_index,
+        targets,
+        target_index_pointer,
+        sources,
+        source_densities,
+        source_index_pointer,
+        max_points,
+        dtype
     )
 
     target_potentials_vec = p2p_parallel_function(

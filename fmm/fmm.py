@@ -75,6 +75,7 @@ class Fmm:
         self.alpha_inner = self.config['alpha_inner']
 
         ## Load linear, and complete octrees alongside their parameters
+        self.max_points = self.config["max_points"]
         self.x0 = self.db["octree"]["x0"][...]
         self.r0 = self.db["octree"]["r0"][...][0]
         self.depth = self.db["octree"]["depth"][...][0]
@@ -282,12 +283,13 @@ class Fmm:
             equivalent_surface=self.equivalent_surface,
             nequivalent_points=self.nequivalent_points,
             p2p_function=self.p2p_function,
-            gradient_function=self.gradient_function,
+            gradient_function=self.gradient_function
         )
 
         # Evaluate local expansions at targets
         self.backend['l2t'](
             leaves=self.leaves,
+            nleaves=self.nleaves,
             key_to_index=self.key_to_index,
             key_to_leaf_index=self.key_to_leaf_index,
             targets=self.targets,
@@ -300,26 +302,29 @@ class Fmm:
             equivalent_surface=self.equivalent_surface,
             nequivalent_points=self.nequivalent_points,
             p2p_parallel_function=self.p2p_parallel_function,
+            dtype=self.numpy_dtype
         )
 
         # P2P interactions within each leaf
         self.backend['near_field_node'](
             leaves=self.leaves,
+            nleaves=self.nleaves,
             key_to_leaf_index=self.key_to_leaf_index,
             targets=self.targets,
             target_index_pointer=self.target_index_pointer,
             sources=self.sources,
             source_densities=self.source_densities,
             source_index_pointer=self.source_index_pointer,
-            max_points=self.config['max_points'],
+            max_points=self.max_points,
             target_potentials=self.target_potentials,
-            p2p_parallel_function=self.p2p_parallel_function
+            p2p_parallel_function=self.p2p_parallel_function,
+            dtype=self.numpy_dtype
         )
 
         # P2P interactions within U List of each leaf
         self.backend['near_field_u_list'](
-            u_lists=self.u_lists,
             leaves=self.leaves,
+            nleaves=self.nleaves,
             targets=self.targets,
             target_index_pointer=self.target_index_pointer,
             sources=self.sources,
@@ -327,7 +332,8 @@ class Fmm:
             source_index_pointer=self.source_index_pointer,
             key_to_index=self.key_to_index,
             key_to_leaf_index=self.key_to_leaf_index,
-            max_points=self.config['max_points'],
+            u_lists=self.u_lists,
+            max_points=self.max_points,
             target_potentials=self.target_potentials,
             p2p_parallel_function=self.p2p_parallel_function,
             dtype=self.numpy_dtype
