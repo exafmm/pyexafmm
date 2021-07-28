@@ -2,7 +2,6 @@
 Compute operators, accelerated with Numba.
 """
 import numba
-from numba.core.utils import cached_property
 from numba.np.ufunc import parallel
 import numpy as np
 
@@ -479,15 +478,15 @@ def l2l(
     local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
 
 
-@numba.njit(cache=True)
+@numba.njit(cache=True, parallel=True)
 def s2l(
-        key,
+        leaves,
         sources,
         source_densities,
         source_index_pointer,
         key_to_index,
         key_to_leaf_index,
-        x_list,
+        x_lists,
         local_expansions,
         x0,
         r0,
@@ -542,50 +541,54 @@ def s2l(
         np.float32 or np.float64
     """
 
-    level = morton.find_level(key)
-    scale = dtype(scale_function(level))
-    center = morton.find_physical_center_from_key(key, x0, r0)
+    nleaves = len(leaves)
 
-    key_idx = key_to_index[key]
-    key_lidx = key_idx*nequivalent_points
-    key_ridx = key_lidx+nequivalent_points
+    for i in numba.prange(nleaves):
 
-    downward_check_surface = surface.scale_surface(
-        surf=check_surface,
-        radius=r0,
-        level=level,
-        center=center,
-        alpha=alpha_inner
-    )
+        key = leaves[i]
 
-    for source in x_list:
+        level = morton.find_level(key)
+        scale = dtype(scale_function(level))
+        center = morton.find_physical_center_from_key(key, x0, r0)
 
-        source_index = key_to_leaf_index[source]
-        coordinates = sources[source_index_pointer[source_index]:source_index_pointer[source_index+1]]
-        densities = source_densities[source_index_pointer[source_index]:source_index_pointer[source_index+1]]
+        key_idx = key_to_index[key]
+        key_lidx = key_idx*nequivalent_points
+        key_ridx = key_lidx+nequivalent_points
 
-        downward_check_potential = p2p_function(
-            sources=coordinates,
-            targets=downward_check_surface,
-            source_densities=densities
+        x_list = x_lists[key_idx]
+        x_list = x_list[x_list != -1]
+
+        downward_check_surface = surface.scale_surface(
+            surf=check_surface,
+            radius=r0,
+            level=level,
+            center=center,
+            alpha=alpha_inner
         )
 
-        local_expansions[key_lidx:key_ridx] += scale*(dc2e_inv_a @ (dc2e_inv_b @ downward_check_potential))
+        for source in x_list:
+
+            source_index = key_to_leaf_index[source]
+            coordinates = sources[source_index_pointer[source_index]:source_index_pointer[source_index+1]]
+            densities = source_densities[source_index_pointer[source_index]:source_index_pointer[source_index+1]]
+
+            downward_check_potential = p2p_function(
+                sources=coordinates,
+                targets=downward_check_surface,
+                source_densities=densities
+            )
+
+            local_expansions[key_lidx:key_ridx] += scale*(dc2e_inv_a @ (dc2e_inv_b @ downward_check_potential))
 
 
-@numba.njit
-def prepare_m2t_data():
-    pass
-
-
-@numba.njit(cache=True)
+@numba.njit(cache=True, parallel=True)
 def m2t(
-        target_key,
+        leaves,
+        w_lists,
+        targets,
         target_index_pointer,
         key_to_index,
         key_to_leaf_index,
-        w_list,
-        target_coordinates,
         target_potentials,
         multipole_expansions,
         x0,
@@ -632,44 +635,126 @@ def m2t(
         Function handle for kernel gradient P2P.
     """
 
-    for source in w_list:
+    nleaves = len(leaves)
 
-        source_idx = key_to_index[source]
-        source_lidx = source_idx*nequivalent_points
-        source_ridx = source_lidx+nequivalent_points
+    for i in numba.prange(nleaves):
+        target_key = leaves[i]
+        global_idx = key_to_index[target_key]
+        leaf_idx = key_to_leaf_index[target_key]
+        w_list = w_lists[global_idx]
+        w_list = w_list[w_list != -1]
 
-        source_level = morton.find_level(source)
-        source_center = morton.find_physical_center_from_key(source, x0, r0)
+        # Coordinates of targets within leaf node
+        target_coordinates = targets[
+            target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1]
+        ]
 
-        upward_equivalent_surface = surface.scale_surface(
-            surf=equivalent_surface,
-            radius=r0,
-            level=source_level,
-            center=source_center,
-            alpha=alpha_inner
-        )
+        for source in w_list:
+            source_idx = key_to_index[source]
+            source_lidx = source_idx*nequivalent_points
+            source_ridx = source_lidx+nequivalent_points
 
-        target_idx = key_to_leaf_index[target_key]
+            source_level = morton.find_level(source)
+            source_center = morton.find_physical_center_from_key(source, x0, r0)
 
-        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 0] += p2p_function(
-            sources=upward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=multipole_expansions[source_lidx:source_ridx]
-        )
+            upward_equivalent_surface = surface.scale_surface(
+                surf=equivalent_surface,
+                radius=r0,
+                level=source_level,
+                center=source_center,
+                alpha=alpha_inner
+            )
 
-        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 1:] += gradient_function(
-            sources=upward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=multipole_expansions[source_lidx:source_ridx]
-        )
+            target_idx = key_to_leaf_index[target_key]
+
+            target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 0] += p2p_function(
+                sources=upward_equivalent_surface,
+                targets=target_coordinates,
+                source_densities=multipole_expansions[source_lidx:source_ridx]
+            )
+
+            target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 1:] += gradient_function(
+                sources=upward_equivalent_surface,
+                targets=target_coordinates,
+                source_densities=multipole_expansions[source_lidx:source_ridx]
+            )
 
 
 @numba.njit(cache=True)
-def prepare_l2t_data():
-    pass
+def prepare_l2t_data(
+    leaves,
+    targets,
+    target_index_pointer,
+    equivalent_surface,
+    nequivalent_points,
+    x0,
+    r0,
+    alpha_outer,
+    key_to_index,
+    key_to_leaf_index,
+    local_expansions,
+):
+
+    nleaves = len(leaves)
+
+    dtype = targets.dtype.type
+
+    local_sources = np.zeros((nequivalent_points*nleaves, 3), dtype=dtype)
+    local_source_densities = np.zeros((nequivalent_points*nleaves), dtype=dtype)
+    local_targets = np.zeros((nequivalent_points*nleaves, 3), dtype=dtype)
+    local_source_index_pointer = np.zeros(nleaves+1, np.int64)
+    local_target_index_pointer = np.zeros(nleaves+1, np.int64)
+
+    source_ptr = 0
+    target_ptr = 0
+    local_source_index_pointer[0] = source_ptr
+    local_target_index_pointer[0] = target_ptr
+
+    for i in range(nleaves):
+        target = leaves[i]
+        level = morton.find_level(target)
+        center = morton.find_physical_center_from_key(target, x0, r0)
+        target_leaf_index = key_to_leaf_index[target]
+
+        targets_at_node = targets[
+            target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1]
+        ]
+
+        sources_at_node = surface.scale_surface(
+            equivalent_surface,
+            r0,
+            level,
+            center,
+            alpha_outer
+        )
+
+        source_idx = key_to_index[target]
+        source_lidx = source_idx*nequivalent_points
+        source_ridx = source_lidx+nequivalent_points
+
+        source_densities_at_node = local_expansions[source_lidx:source_ridx]
+
+        ntargets_at_node = len(targets_at_node)
+        new_target_ptr = target_ptr+ntargets_at_node
+
+        local_targets[target_ptr:new_target_ptr] = targets_at_node
+        target_ptr = new_target_ptr
+
+        local_target_index_pointer[i+1] = target_ptr
+
+        nsources_at_node = len(sources_at_node)
+        new_source_ptr = source_ptr+nsources_at_node
+
+        local_sources[source_ptr:new_source_ptr] = sources_at_node
+        local_source_densities[source_ptr:new_source_ptr] = source_densities_at_node
+        source_ptr = new_source_ptr
+
+        local_source_index_pointer[i+1] = source_ptr
+
+    return local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer
 
 
-@numba.njit(cache=True, parallel=True)
+@numba.njit(cache=True)
 def l2t(
         leaves,
         key_to_index,
@@ -683,47 +768,38 @@ def l2t(
         alpha_outer,
         equivalent_surface,
         nequivalent_points,
-        p2p_function,
-        gradient_function,
+        p2p_parallel_function
     ):
 
-    nleaves = len(leaves)
+    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_l2t_data(
+        leaves,
+        targets,
+        target_index_pointer,
+        equivalent_surface,
+        nequivalent_points,
+        x0,
+        r0,
+        alpha_outer,
+        key_to_index,
+        key_to_leaf_index,
+        local_expansions
+    )
 
-    for i in numba.prange(nleaves):
+    target_potentials_vec = p2p_parallel_function(
+        sources=local_sources,
+        targets=local_targets,
+        source_densities=local_source_densities,
+        source_index_pointer=local_source_index_pointer,
+        target_index_pointer=local_target_index_pointer
+    )
 
-        key = leaves[i]
-        source_idx = key_to_index[key]
-        source_lidx = source_idx*nequivalent_points
-        source_ridx = source_lidx+nequivalent_points
+    nleaves = len(local_target_index_pointer) - 1
 
-        level = morton.find_level(key)
-        center = morton.find_physical_center_from_key(key, x0, r0)
-
-        downward_equivalent_surface = surface.scale_surface(
-            equivalent_surface,
-            r0,
-            level,
-            center,
-            alpha_outer
-        )
-
-        target_idx = key_to_leaf_index[key]
-
-        target_coordinates = targets[
-            target_index_pointer[target_idx]:target_index_pointer[target_idx+1]
-        ]
-
-        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 0] += p2p_function(
-            sources=downward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=local_expansions[source_lidx:source_ridx]
-        )
-
-        target_potentials[target_index_pointer[target_idx]:target_index_pointer[target_idx+1], 1:] += gradient_function(
-            sources=downward_equivalent_surface,
-            targets=target_coordinates,
-            source_densities=local_expansions[source_lidx:source_ridx]
-        )
+    for i in range(nleaves):
+        res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
+        leaf = leaves[i]
+        leaf_idx = key_to_leaf_index[leaf]
+        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
 
 
 @numba.njit(cache=True)
@@ -1000,7 +1076,6 @@ def near_field_node(
         source_index_pointer=local_source_index_pointer,
         target_index_pointer=local_target_index_pointer
     )
-
 
     nleaves = len(local_target_index_pointer) - 1
 

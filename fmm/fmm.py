@@ -240,62 +240,47 @@ class Fmm:
                 )
 
         # Leaf near-field computations
-        for key in self.leaves:
 
-            global_idx = self.key_to_index[key]
-            leaf_idx = self.key_to_leaf_index[key]
+        # X List interactions
+        self.backend['s2l'](
+            leaves=self.leaves,
+            sources=self.sources,
+            source_densities=self.source_densities,
+            source_index_pointer=self.source_index_pointer,
+            key_to_index=self.key_to_index,
+            key_to_leaf_index=self.key_to_leaf_index,
+            x_lists=self.x_lists,
+            local_expansions=self.local_expansions,
+            x0=self.x0,
+            r0=self.r0,
+            alpha_inner=self.alpha_inner,
+            check_surface=self.check_surface,
+            nequivalent_points=self.nequivalent_points,
+            dc2e_inv_a=self.dc2e_inv_a,
+            dc2e_inv_b=self.dc2e_inv_b,
+            scale_function=self.scale_function,
+            p2p_function=self.p2p_function,
+            dtype=self.numpy_dtype
+        )
 
-            # Coordinates of targets/sources within leaf node
-            target_coordinates = self.targets[
-                self.target_index_pointer[leaf_idx]:self.target_index_pointer[leaf_idx+1]
-            ]
-
-            w_list = self.w_lists[global_idx]
-            w_list = w_list[w_list != -1]
-
-            x_list = self.x_lists[global_idx]
-            x_list = x_list[x_list != -1]
-
-            # X List interactions
-            self.backend['s2l'](
-                key=key,
-                sources=self.sources,
-                source_densities=self.source_densities,
-                source_index_pointer=self.source_index_pointer,
-                key_to_index=self.key_to_index,
-                key_to_leaf_index=self.key_to_leaf_index,
-                x_list=x_list,
-                local_expansions=self.local_expansions,
-                x0=self.x0,
-                r0=self.r0,
-                alpha_inner=self.alpha_inner,
-                check_surface=self.check_surface,
-                nequivalent_points=self.nequivalent_points,
-                dc2e_inv_a=self.dc2e_inv_a,
-                dc2e_inv_b=self.dc2e_inv_b,
-                scale_function=self.scale_function,
-                p2p_function=self.p2p_function,
-                dtype=self.numpy_dtype
-            )
-
-            # W List interactions
-            self.backend['m2t'](
-                target_key=key,
-                target_index_pointer=self.target_index_pointer,
-                key_to_index=self.key_to_index,
-                key_to_leaf_index=self.key_to_leaf_index,
-                w_list=w_list,
-                target_coordinates=target_coordinates,
-                target_potentials=self.target_potentials,
-                multipole_expansions=self.multipole_expansions,
-                x0=self.x0,
-                r0=self.r0,
-                alpha_inner=self.alpha_inner,
-                equivalent_surface=self.equivalent_surface,
-                nequivalent_points=self.nequivalent_points,
-                p2p_function=self.p2p_function,
-                gradient_function=self.gradient_function,
-            )
+        # W List interactions
+        self.backend['m2t'](
+            leaves=self.leaves,
+            w_lists=self.w_lists,
+            targets=self.targets,
+            target_index_pointer=self.target_index_pointer,
+            key_to_index=self.key_to_index,
+            key_to_leaf_index=self.key_to_leaf_index,
+            target_potentials=self.target_potentials,
+            multipole_expansions=self.multipole_expansions,
+            x0=self.x0,
+            r0=self.r0,
+            alpha_inner=self.alpha_inner,
+            equivalent_surface=self.equivalent_surface,
+            nequivalent_points=self.nequivalent_points,
+            p2p_function=self.p2p_function,
+            gradient_function=self.gradient_function,
+        )
 
         # Evaluate local expansions at targets
         self.backend['l2t'](
@@ -311,8 +296,7 @@ class Fmm:
             alpha_outer=self.alpha_outer,
             equivalent_surface=self.equivalent_surface,
             nequivalent_points=self.nequivalent_points,
-            p2p_function=self.p2p_function,
-            gradient_function=self.gradient_function,
+            p2p_parallel_function=self.p2p_parallel_function,
         )
 
         # P2P interactions within each leaf
