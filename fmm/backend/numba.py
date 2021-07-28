@@ -2,7 +2,6 @@
 Compute operators, accelerated with Numba.
 """
 import numba
-from numba.np.ufunc import parallel
 import numpy as np
 
 import adaptoctree.morton as morton
@@ -28,31 +27,38 @@ def prepare_p2m_data(
         dtype,
     ):
     """
-    Create vector of scales, and check potentials, required for the P2M operator.
+    Create aligned vector of scales, and check potentials indexed by leaves.
+        This maximizes cache re-use in the application of the P2M operator.
 
     Parameters:
     -----------
-    leaves : np.array(shape=nleaves, dtype=np.int64)
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
     nleaves : int
+        Number of leaves.
     sources : np.array(shape=(nsources, 3), dtype=float)
-    source_densities : np.array(shape=nsources, dtype=float)
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=float)
+        All source coordinates.
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
+    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
     key_to_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
-    alpha_outer: float
-        Relative size of outer surface
-    check_surface : np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
-    ncheck_points : : int
-        Number of quadrature points on the check surface.
-    p2p_function : function handle
-        Serial P2P function.
-    scale_function : function handle
-        Scaling function for kernel.
+    alpha_outer : float
+        Relative size of outer surface.
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
+    ncheck_points : int
+        Number of quadrature points on check_surface.
+    p2p_function : function
+        Serial P2P function handle for this kernel.
+    scale_function : function
+        Scale function handle for this kernel.
+    dtype : type
+        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
 
     Returns:
     --------
@@ -68,9 +74,9 @@ def prepare_p2m_data(
         leaf = leaves[thread_idx]
 
         # Lookup leaf sources, and leaf source densities
-        idx = key_to_leaf_index[leaf]
-        leaf_sources = sources[source_index_pointer[idx]:source_index_pointer[idx+1]]
-        leaf_source_densities = source_densities[source_index_pointer[idx]:source_index_pointer[idx+1]]
+        leaf_idx = key_to_leaf_index[leaf]
+        leaf_sources = sources[source_index_pointer[leaf_idx]:source_index_pointer[leaf_idx+1]]
+        leaf_source_densities = source_densities[source_index_pointer[leaf_idx]:source_index_pointer[leaf_idx+1]]
 
         # Compute center of leaf box in cartesian coordinates
         leaf_center = morton.find_physical_center_from_key(
@@ -115,34 +121,44 @@ def p2m_core(
         check_potentials
     ):
     """
-    Core loop of P2M operator.
+    Parallelized loop applying P2M operator over all leaves.
 
     Parameters:
     -----------
-    leaves : np.array(nleaves, np.int64)
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
     nleaves : int
+        Number of leaves.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to complete tree index.
+	    Map from key to global index.
     nequivalent_points : int
-        Number of quadrature points on the equivalent surface.
+	    Number of quadrature points on equivalent_surface.
     ncheck_points : int
-        Number of quadrature points on the check surface.
-    uc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=float)
-    uc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=float)
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all multipole expansions.
+        Number of quadrature points on check_surface.
+    uc2e_inv_a : np.array(dtype=float)
+	    First component of inverse of upward check to equivalent Gram matrix.
+    uc2e_inv_b : np.array(dtype=float)
+    	Second component of inverse of upward check to equivalent Gram matrix.
+    scales : np.array(shape=(nleaves), dtype=float)
+        Scales calculated in `prepare_p2m_data` function
+    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Multipole expansions, aligned by global index from `key_to_index`.
+    check_potentials : np.array(shape=(nleaves*ncheck_points), dtype=float)
+        Check potentials calculated in `prepare_p2p_data` function.
     """
 
     for thread_idx in numba.prange(nleaves):
+
+        scale = scales[thread_idx]
+
+        check_lidx = thread_idx*ncheck_points
+        check_ridx = check_lidx+ncheck_points
+        check_potential = check_potentials[check_lidx:check_ridx]
 
         leaf = leaves[thread_idx]
         lidx = key_to_index[leaf]*nequivalent_points
         ridx = lidx+nequivalent_points
 
-        scale = scales[thread_idx]
-
-        check_lidx = thread_idx*ncheck_points
-        check_potential = check_potentials[check_lidx:check_lidx+ncheck_points]
         multipole_expansions[lidx:ridx] += scale*(uc2e_inv_a @ (uc2e_inv_b @ check_potential))
 
 
@@ -173,35 +189,42 @@ def p2m(
 
     Parameters:
     -----------
-    leaves : np.array(shape=nleaves, dtype=np.int64)
-    nleaves : np.int32
+    leaves: np.array(shape=(nleaves), dtype=np.int64)
+        Octree leaves.
+    nleaves : int
+        Number of leaves.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to complete tree index.
-    key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
     sources : np.array(shape=(nsources, 3), dtype=float)
-    source_densities : np.array(shape=nsources, dtype=float)
+        All source coordinates.
+    source_densities : np.array(shape=(nsources), dtype=float)
+        Densities at source coordinates.
     source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-    multipole_expansions : np.array(shape=(shape=(ncomplete*nequivalent_points), dtype=np.float32)
-        Array of all multipole expansions.
-    nequivalent_points : np.int32
-        Number of quadrature points on the equivalent surface.
+        Index pointer aligning sources by leaf.
+    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Multipole expansions, aligned by global index from `key_to_index`.
+    nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
-    alpha_outer: float
-        Relative size of outer surface
-    check_surface : np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
+    alpha_outer : float
+        Relative size of outer surface.
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
     ncheck_points : int
-        Number of quadrature points on the check surface.
-    uc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=float)
-    uc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=float)
-    p2p_function : function handle
-        Serial P2P function.
-    scale_function : function handle
-        Scaling function for kernel.
+        Number of quadrature points on check_surface.
+    uc2e_inv_a : np.array(dtype=float)
+        First component of inverse of upward check to equivalent Gram matrix.
+    uc2e_inv_b : np.array(dtype=float)
+        Second component of inverse of upward check to equivalent Gram matrix.
+    p2p_function : function
+        Serial P2P function handle for this kernel.
+    scale_function : function
+        Scale function handle for this kernel.
     """
 
     # Configure datatype from sources
@@ -247,42 +270,49 @@ def m2m(
         nequivalent_points,
     ):
     """
-    M2M operator. Add the contribution of the multipole expansions of a given
-        source node's children to it's own multipole expansion for all nodes
-        on a given level.
+    M2M operator serially applied over keys in a given level. Parallelization
+    doesn't offer much benefit due to blocking writes to the parent multipole
+    expansion.
+
+    Notes:
+    ------
+    As it's not possible to know group siblings contained in the tree apriori
+    due to the relative cost of searching the tree for siblings, it's not
+    possible to parallelize the operation over groups of siblings.
 
     Parameters:
     -----------
-    keys : np.int64
-        Morton keys of source nodes at this level.
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all multipole expansions.
-    m2m : np.array(shape=(8, n_equivalent, n_equivalent), dtype=float)
-        Unscaled pre-computed M2M operators for all children. Implicitly
-            indexed by order of Morton encoding from
-            adaptoctree.morton.find_children.
+    keys : np.array(shape=(nkeys), dtype=np.int64)
+        All nodes at a given level of the octree.
+    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Multipole expansions, aligned by global index from `key_to_index`.
+    m2m : np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)
+	    Precomputed M2M operators.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
     nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
     """
 
-    for i in range(len(keys)):
-        key = keys[i]
+    nkeys = len(keys)
 
-        parent = morton.find_parent(key)
-        siblings = morton.find_siblings(key)
+    for i in range(nkeys):
+        child = keys[i]
+        parent = morton.find_parent(child)
 
         # Compute operator index
-        operator_idx = np.where(siblings == key)[0]
+        operator_idx = child == morton.find_siblings(child)
 
-        # Get child equivalent density
-        key_idx = key_to_index[key]
+        # Get parent and child expansion indices
+        key_idx = key_to_index[child]
         child_lidx = key_idx*nequivalent_points
         child_ridx = child_lidx+nequivalent_points
 
-        # Add to source data
         parent_idx = key_to_index[parent]
         parent_lidx = parent_idx*nequivalent_points
         parent_ridx = parent_lidx+nequivalent_points
+
+        # Add child contribution to parent multipole expansion
         multipole_expansions[parent_lidx:parent_ridx] += (
             m2m[operator_idx][0] @ multipole_expansions[child_lidx:child_ridx]
         )
@@ -290,7 +320,7 @@ def m2m(
 
 @numba.njit(cache=True, parallel=False)
 def m2l_core(
-        target,
+        key,
         v_list,
         u,
         s,
@@ -305,52 +335,60 @@ def m2l_core(
         scale
 ):
     """
-    Core loop of M2L operator.
+    Application of the M2L operator over the V list of a given node.
 
     Parameters:
     -----------
-    target : np.int64
-    v_list : np.array(dtype=np.int64)
-    u : np.array(dtype=float)
-        Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    s : np.array(dtype=float)
-        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.
-    vt : np.array(dtype=float)
-        Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    dc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=float)
-    dc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=float)
-    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all local expansions.
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all multipole expansions.
-    nequivalent_points: int
-        Number of points discretising the equivalent surface.
-    ncheck_points : int
-        Number of points discretising the check surface.
+    key : np.int64
+	    Operator applied to this key.
+    v_list : np.array(shape=(nv_list), dtype=np.int64)
+	    V list of this key.
+    u : np.array(shape=(ncheck_points, k), dtype=float)
+        Left singular vectors of M2L matrix for all transfer vectors at this level.
+    s : np.array(shape=(k, k), dtype=float)
+        Singular values of M2L matrix for all transfer vectors at this level.
+    vt : np.array(shape=(k, nequivalent_points*316))
+        Right singular values of M2L matrix for all transfer vectors at this level.
+    dc2e_inv_a : np.array(dtype=float)
+        First component of inverse of downward check to equivalent Gram matrix.
+    dc2e_inv_b : np.array(dtype=float)
+        Second component of inverse of downward check to equivalent Gram matrix.
+    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Multipole expansions, aligned by global index from `key_to_index`.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Local expansions, aligned by global index from `key_to_index`.
+    nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    hash_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map between hashes and indices of transfer vectors.
+        Map from key to global index.
+    hash_to_index : numba.typed.Dict.empty(key_type=numba.types.int64, value_type=numba.types.int64)
+        Map between transfer vector hash and index of right singular vector
+        components at a given level.
     scale : float
-        Precomputed kernel scale for this level.
+        Kernel scale for keys at this level.
     """
     nv_list = len(v_list)
 
-    # Index of local expansion
-    lidx = key_to_index[target]*nequivalent_points
+    # Indices of local expansion
+    l_lidx = key_to_index[key]*nequivalent_points
+    l_ridx = l_lidx+nequivalent_points
 
     for i in range(nv_list):
 
         source = v_list[i]
 
-        transfer_vector = morton.find_transfer_vector(target, source)
+        # Locd correct components of compressed M2L matrix
+        transfer_vector = morton.find_transfer_vector(key, source)
         v_idx = hash_to_index[transfer_vector]
         v_lidx = v_idx*nequivalent_points
         v_ridx = v_lidx+nequivalent_points
         vt_sub = np.copy(vt[:, v_lidx:v_ridx])
 
+        # Indices of multipole expansion
         m_lidx = key_to_index[source]*nequivalent_points
         m_ridx = m_lidx+nequivalent_points
-        local_expansions[lidx:lidx+nequivalent_points] += scale*(
+
+        local_expansions[l_lidx:l_ridx] += scale*(
             dc2e_inv_a @ (
                 dc2e_inv_b @ (
                     u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx]))
@@ -361,66 +399,67 @@ def m2l_core(
 
 @numba.njit(cache=True, parallel=True)
 def m2l(
-        targets,
+        keys,
         v_lists,
-        key_to_index,
         u,
         s,
         vt,
         dc2e_inv_a,
         dc2e_inv_b,
-        local_expansions,
         multipole_expansions,
+        local_expansions,
         nequivalent_points,
+        key_to_index,
         hash_to_index,
         scale
     ):
     """
-    M2L operator. Parallelised over all targets in a given level.
+    M2L operator. Parallelized over all keys in a given level.
 
     Parameters:
     -----------
-    targets : np.array(dtype=np.int64)
-    v_lists : np.array(shape=(n_v_list, ncomplete), dtype=np.int64)
+    keys : np.array(shape=(nkeys), dtype=np.int64)
+        All nodes at a given level of the octree.
+    v_lists : np.array(shape=(ncomplete, nv_list), dtype=np.int64)
+	    All V lists for nodes in octree.
+    u : np.array(shape=(ncheck_points, k), dtype=float)
+        Left singular vectors of M2L matrix for all transfer vectors at this level.
+    s : np.array(shape=(k, k), dtype=float)
+        Singular values of M2L matrix for all transfer vectors at this level.
+    vt : np.array(shape=(k, nequivalent_points*316))
+        Right singular values of M2L matrix for all transfer vectors at this level.
+    dc2e_inv_a : np.array(dtype=float)
+        First component of inverse of downward check to equivalent Gram matrix.
+    dc2e_inv_b : np.array(dtype=float)
+        Second component of inverse of downward check to equivalent Gram matrix.
+    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Multipole expansions, aligned by global index from `key_to_index`.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Local expansions, aligned by global index from `key_to_index`.
+    nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-    u : np.array(dtype=float)
-        Compressed left singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    s : np.array(dtype=float)
-        Compressed singular values of SVD of M2L Gram matrix for nodes at this level.`
-    vt : np.array(dtype=float)
-        Compressed right singular vectors of SVD of M2L Gram matrix for nodes at this level.
-    dc2e_inv_a : np.array(shape=(n_equivalent, n_equivalent), dtype=float)
-    dc2e_inv_b : np.array(shape=(n_equivalent, n_check), dtype=float)
-    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all local expansions.
-    multipole_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
-        Array of all multipole expansions.
-    nequivalent_points: int
-        Number of points discretising the equivalent surface.
-    ncheck_points : int
-        Number of points discretising the check surface.
-    hash_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    hash_to_index : numba.typed.Dict.empty(key_type=numba.types.int64, value_type=numba.types.int64)
+        Map between transfer vector hash and index of right singular vector
+        components at a given level.
     scale : float
-        Precomputed kernel scale for this level.
+        Kernel scale for keys at this level.
     """
-    # range over targets on a given level
-    ntargets = len(targets)
-
-    # Call innner loop
-    for i in numba.prange(ntargets):
-
-        # Pick out the target
-        target = targets[i]
+    # Loop over all keys at given level
+    nkeys = len(keys)
+    for i in numba.prange(nkeys):
+        key = keys[i]
 
         # Pick out the v list
-        v_list = v_lists[key_to_index[target]]
+        v_list = v_lists[key_to_index[key]]
 
         # Filter v list
         v_list = v_list[v_list != -1]
         v_list = v_list[v_list != 0]
 
         m2l_core(
-            target=target,
+            key=key,
             v_list=v_list,
             u=u,
             s=s,
@@ -445,20 +484,20 @@ def l2l(
         nequivalent_points
      ):
     """
-    L2L operator. Translate the local expansion of a given node's parent to itself.
+    L2L operator applied to a parent key.
 
     Parameters:
     -----------
     key : np.int64
-        Morton key of source node.
-    local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=nfloat)
-        Array of all local expansions.
-    l2l : np.array(shape=(8, n_check, n_check), dtype=float)
-        Unscaled pre-computed L2L operators for all children. Implicitly
-            indexed by order of Morton encoding from
-            adaptoctree.morton.find_children.
+        Operator applied to this key.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+	    Local expansions, aligned by global index from `key_to_index`.
+    l2l : np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)
+        Precomputed L2L operators.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
     nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
     """
     parent = morton.find_parent(key)
     parent_idx = key_to_index[parent]
@@ -508,18 +547,16 @@ def s2l(
 
     Parameters:
     -----------
-    key : np.int64
-        Morton key of source node.
+    leaves : np.array(dtype=np.int64)
+        Leaf node keys.
     sources : np.array(shape=(nsources, 3), dtype=float)
         Source coordinates.
     source_densities : np.array(shape=(nsources, 1), dtype=float)
         Charge densities at source points.
-    source_index_pointer : np.array(int)
+    source_index_pointer : np.array(dtype=int)
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
     key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    x_list : np.array(shape=(n_x_list, 1), dtype=np.int64)
-        Morton keys of X list members.
+    x_lists : np.array(shape=(ncomplete, nx_list), dtype=np.int64)
     local_expansions : np.array(shape=(ncomplete*nequivalent_points, dtype=float)
         Array of all local expansions.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
@@ -606,15 +643,13 @@ def m2t(
 
     Parameters:
     -----------
-    target_key : np.int64
-        Morton key of source node.
+    leaves : np.array(dtype=np.int64)
+    w_lists : np.array(shape=(ncomplete, nv_list), dtype=np.int64)
     target_index_pointer : np.array(dtype=int)
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to complete index.
     key_to_to_leaf_index : numba.types.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to leaf index.
-    w_list : np.array(shape=(n_v_list, 1), dtype=np.int64)
-        Morton keys of W list members.
     target_coordinates : np.array(shape=(ntargets, 3), dtype=float)
         Target coordinates of particles in target node.
     targets_potentials : np.array(shape=(ntargets,), dtype=float)
@@ -628,9 +663,9 @@ def m2t(
     alpha_inner : float
         Relative size of inner surface
     equivalent_surface : np.array(shape=(n_equivalent, 3), dtype=float)
-        Discretised equivalent surface.
+    nequivalent_points : int
+        Number of points discretising equivalent surface.
     p2p_function : function
-        Function handle for kernel P2P.
     gradient_function : function
         Function handle for kernel gradient P2P.
     """
@@ -682,18 +717,25 @@ def m2t(
 
 @numba.njit(cache=True)
 def prepare_l2t_data(
-    leaves,
-    targets,
-    target_index_pointer,
-    equivalent_surface,
-    nequivalent_points,
-    x0,
-    r0,
-    alpha_outer,
-    key_to_index,
-    key_to_leaf_index,
-    local_expansions,
-):
+        leaves,
+        targets,
+        target_index_pointer,
+        equivalent_surface,
+        nequivalent_points,
+        x0,
+        r0,
+        alpha_outer,
+        key_to_index,
+        key_to_leaf_index,
+        local_expansions,
+    ):
+    """
+    Prepare L2T data to maximise cache re-use.
+
+    Parameters:
+    -----------
+    leaves
+    """
 
     nleaves = len(leaves)
 

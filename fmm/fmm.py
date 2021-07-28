@@ -213,17 +213,17 @@ class Fmm:
                 hash_to_index[hash] = i
 
             self.backend['m2l'](
-                    targets=keys,
+                    keys=keys,
                     v_lists=self.v_lists,
-                    key_to_index=self.key_to_index,
                     u=u,
                     s=s,
                     vt=vt,
                     dc2e_inv_a=self.dc2e_inv_a,
                     dc2e_inv_b=self.dc2e_inv_b,
-                    local_expansions=self.local_expansions,
                     multipole_expansions=self.multipole_expansions,
+                    local_expansions=self.local_expansions,
                     nequivalent_points=self.nequivalent_points,
+                    key_to_index=self.key_to_index,
                     hash_to_index=hash_to_index,
                     scale=scale
                 )
