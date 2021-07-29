@@ -30,7 +30,6 @@ class Fmm:
     >>> e = Fmm('config') # Initialise experiment
     >>> e.run() # Run upward & downward passes together
     >>> e.clear() # Clear containers, to re-run experiment
-
     """
 
     def __init__(self, config_filename=None):

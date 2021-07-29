@@ -1,5 +1,13 @@
 """
-Generate random test data
+Test data generation.
+
+(1) Random Data
+Sources/targets correspond to same set of points, distributed randomly in a
+unit box.
+
+(2) Spherical Data
+Sources/targets correspond to same set of points, distributed randomly on the
+surface of a unit sphere.
 """
 import os
 import pathlib
