@@ -1,5 +1,5 @@
 """
-Precompute and store M2M/L2L/M2L operators for a given points dataset.
+Tree and operator precomputations.
 """
 import os
 import pathlib
@@ -23,11 +23,16 @@ import fmm.surface as surface
 import utils.data as data
 import utils.time
 
+
 HERE = pathlib.Path(os.path.dirname(os.path.abspath(__file__)))
 PARENT = HERE.parent
 WORKING_DIR = pathlib.Path(os.getcwd())
 
 
+# STAGED FOR DEPRECATION
+# Patched version of randomized_svd from sklearn.extmath to handle different
+# precision parameters, as well as different Lapack SVD drivers.
+# Submitting a patch(es) to sklearn: PR #20617
 def rsvd(M, n_components, *, n_oversamples=10, n_iter='auto',
                    power_iteration_normalizer='auto', transpose='auto',
                    flip_sign=True, random_state=0):
@@ -162,31 +167,33 @@ def compress_m2l_gram_matrix(
 
     Parameters:
     -----------
-    level : np.int64
+    dense_gram_matrix: function
+        Gram matrix function handle.
+    level : int
         Octree level at which M2L operators are being calculated.
-    x0 : np.array(shape=(1, 3), dtype=np.float32)
-        Physical center of octree root node.
-    r0 : np.float32
-        Half side length of octree root node.
-    alpha_inner : np.float32
-        Relative size of inner surface
-    check_surface : np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=float)
-        Discretised equivalent surface.
-    k : np.int32
+    x0 : np.array(shape=(1, 3), dtype=np.float64)
+        Center of octree root node.
+    r0 : np.float64
+	    Half side length of octree root node.
+    alpha_inner : float
+        Relative size of inner surface.
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
+    equivalent_surface : np.array(shape=(nequivalent_points, 3), dtype=float)
+        Discretized equivalent surface.
+    k : int
         Target compression rank.
 
     Returns:
     --------
     (
-        np.array((nu, k), np.float32),
-        np.array(ns, dtype=np.float32),
-        np.array((k, k), dtype=np.float32)
+        np.array(shape=(nu, k), float),
+        np.array(shape=(ns), dtype=float),
+        np.array(shape=(k, nvt), dtype=float),
+        np.array(shape=(316), dtype=int)
     )
-        SVD of Gram matrices corresponding to all unique transfer vectors for
-        each level. For a given level, these are indexed by the hash of the
-        transfer vectors.
+        Tuple of SVD components of aggregated M2L matrix at this level, as well
+        as hashes of the transfer vectors to index the components by.
     """
     sources, targets, hashes = tree.find_unique_v_list_interactions(
         level=level, x0=x0, r0=r0, depth=depth
@@ -196,6 +203,8 @@ def compress_m2l_gram_matrix(
     n_sources_per_node = len(equivalent_surface)
     n_sources = len(sources)
 
+    # Create a collated equivalent to check surface for sources/targets
+    # corresponding to unique transfer vectors at this level.
     se2tc = np.zeros((n_targets_per_node, n_sources*n_sources_per_node), dtype)
 
     for idx in range(len(targets)):
@@ -238,6 +247,7 @@ def compress_m2l_gram_matrix(
                 sources=source_equivalent_surface, targets=target_check_surface
             )
 
+    # Run RSVD compression.
     u, s, vt = rsvd(se2tc, k)
 
     return u, s, vt, hashes
@@ -257,13 +267,14 @@ def compute_surfaces(config, db):
     Returns:
     --------
     np.array(shape=(n_equivalent, 3), dtype=float)
-        Discretised equivalent surface.
+        Discretized equivalent surface.
     np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
+        Discretized check surface.
     """
     order_equivalent = config['order_equivalent']
     order_check = config['order_check']
     dtype = NUMPY[config['precision']]
+
     equivalent_surface = surface.compute_surface(order_equivalent, dtype)
     check_surface = surface.compute_surface(order_check, dtype)
 
@@ -333,7 +344,7 @@ def compute_octree(config, db):
     Returns:
     --------
     np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     np.float64
         Half side length of octree root node.
     np.int64
@@ -430,22 +441,24 @@ def compute_inv_c2e(
         Config object, loaded from config.json.
     db : hdf5.File
         HDF5 file handle containing all experimental data.
-    dense_gram_matrix : Numba JIT function handle
-        Function to calculate dense gram matrix on CPU
-    check_surface : np.array(shape=(n_check, 3), dtype=np.float32)
-        Discretised check surface.
+    dense_gram_matrix: function
+        Gram matrix function handle.
+    equivalent_surface : np.array(shape=(nequivalent_points, 3), dtype=float)
+        Discretized equivalent surface.
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
 
     Returns:
     --------
     (
-        np.array(shape=(n_check, n_s), dtype=np.float64),
-        np.array(shape=(n_s, n_equivalent), dtype=np.float64),
-        np.array(shape=(n_check, n_s), dtype=np.float64),
-        np.array(shape=(n_s, n_check), dtype=np.float64)
+        np.array(shape=(ncheck_points, ns), dtype=float),
+        np.array(shape=(ns, nequivalent_points), dtype=float),
+        np.array(shape=(ncheck_points, ns), dtype=float),
+        np.array(shape=(ns, ncheck_points), dtype=float)
     )
         Tuple of downward-check-to-equivalent Gram matrix inverse, and the
         upward-check-to-equivalent Gram matrix inverse, returned in two
@@ -534,30 +547,38 @@ def compute_inv_c2e(
 
 def compute_m2m_and_l2l(
         config, db, equivalent_surface, check_surface, dense_gram_matrix,
-        kernel_scale, uc2e_inv_a, uc2e_inv_b, dc2e_inv_a,
-        dc2e_inv_b, parent_center, parent_radius
+        kernel_scale, uc2e_inv_a, uc2e_inv_b, dc2e_inv_a, dc2e_inv_b,
+        parent_center, parent_radius
     ):
     """
     Compute M2M and L2L operators at level of root node, and its children, and
         save to disk.
 
+    Parameters:
+    -----------
     config : dict
         Config object, loaded from config.json.
     db : hdf5.File
         HDF5 file handle containing all experimental data.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=float)
-        Discretised equivalent surface.
-    check_surface : np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
-    dense_gram_matrix : Numba JIT function handle
-        Function to calculate dense gram matrix on CPU.
-    kernel_scale : Numba JIT function handle
-        Function to calculate the scale of the kernel for a given level.
-    uc2e_inv : np.array(shape=(n_check, n_equivalent), dtype=float)
-    dc2e_inv : np.array(shape=(n_equivalent, n_check), dtype=float)
-    parent_center : np.array(shape=(3,), dtype=float)
+    equivalent_surface : np.array(shape=(nequivalent_points, 3), dtype=float)
+        Discretized equivalent surface.
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
+    dense_gram_matrix: function
+        Gram matrix function handle.
+    kernel_scale : function
+        Scaling function handle.
+    uc2e_inv_a : np.array(dtype=float)
+        First component of inverse of upward check to equivalent Gram matrix.
+    uc2e_inv_b : np.array(dtype=float)
+        Second component of inverse of upward check to equivalent Gram matrix.
+    dc2e_inv_a : np.array(dtype=float)
+        First component of inverse of downward check to equivalent Gram matrix.
+    dc2e_inv_b : np.array(dtype=float)
+        Second component of inverse of downward check to equivalent Gram matrix.
+    parent_center : np.array(shape=(3,), dtype=fnp.float64)
         Operators are calculated wrt to root node, so corresponds to x0.
-    parent_radius : float
+    parent_radius : np.float64
         Operators are calculated wrt to root node, so corresponds to r0.
     """
 
@@ -646,8 +667,7 @@ def compute_m2m_and_l2l(
 
 
 def compute_m2l(
-        config, db, k,  equivalent_surface, check_surface,
-        x0, r0, depth
+        config, db, k, equivalent_surface, check_surface, x0, r0, depth
     ):
     """
     Compute RSVD compressed Gram matrices for M2L operators, and save to disk.
@@ -658,16 +678,14 @@ def compute_m2l(
         Config object, loaded from config.json.
     db : hdf5.File
         HDF5 file handle containing all experimental data.
-    implicit_gram_matrix : CUDA JIT function handle.
-        Function to apply gram matrix implicitly to a given RHS.
-    k : np.int64
-        Target SVD compression rank of M2L matrix.
-    equivalent_surface: np.array(shape=(n_equivalent, 3), dtype=float)
-        Discretised equivalent surface.
-    check_surface : np.array(shape=(n_check, 3), dtype=float)
-        Discretised check surface.
+    k : int
+        Target compression rank.
+    equivalent_surface: np.array(shape=(nequivalent_points, 3), dtype=float)
+        Discretized equivalent surface.
+    check_surface : np.array(shape=(ncheck_points, 3), dtype=float)
+        Discretized check surface.
     x0 : np.array(shape=(1, 3), dtype=np.float64)
-        Physical center of octree root node.
+        Center of octree root node.
     r0 : np.float64
         Half side length of octree root node.
     depth : np.int64

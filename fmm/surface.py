@@ -12,7 +12,7 @@ def compute_surface(order, dtype):
     Parameters:
     -----------
     order : int
-        Order
+        Order, n_coefficients = 6(order-1)^2 + 2
     dtype : type
         np.float32, np.float64
     """
@@ -61,22 +61,21 @@ def scale_surface(surf, radius, level, center, alpha):
 
     Parameters:
     -----------
-    surface : np.array(shape=(n, 3), dtype=float)
-        Original node surface, being shifted/scaled.
+    surf : np.array(shape=(n, 3), dtype=float)
+        Discretized surface.
     radius : float
-        Half side length of the Octree's root node that this surface lives in.
+        Half side length of the octree root node.
     level : int
-        Octree level of the shifted node.
+        Tree level of the scaled node.
     center : np.array(shape=(1, 3), dtype=float)
-        Coordinates of the centre of the shifted node.
+       Centre of the shifted node.
     alpha : float
-        Ratio between side length of shifted/scaled node and original node.
+        Relative size of surface.
 
     Returns:
     --------
     np.array(shape=(n_coeffs, 3), dtype=float)
-        Vector of coordinates of surface points. `n_coeffs` is the number of
-        points that discretise the surface of a node.
+        Scaled and shifted surface.
     """
     n_coeffs = len(surf)
     dtype = surf.dtype.type
