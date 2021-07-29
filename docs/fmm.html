@@ -1,0 +1,490 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>fmm package &mdash; PyExaFMM 6.1.1 documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="fmm.backend package" href="fmm.backend.html" />
+    <link rel="prev" title="fmm" href="modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> PyExaFMM
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">fmm</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">fmm package</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#subpackages">Subpackages</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="fmm.backend.html">fmm.backend package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fmm.test.html">fmm.test package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-fmm.dtype">fmm.dtype module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-fmm.fmm">fmm.fmm module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-fmm.kernel">fmm.kernel module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-fmm.linalg">fmm.linalg module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-fmm.surface">fmm.surface module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-fmm">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">PyExaFMM</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">fmm</a> &raquo;</li>
+        
+      <li>fmm package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/fmm.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="fmm-package">
+<h1>fmm package<a class="headerlink" href="#fmm-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="fmm.backend.html">fmm.backend package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="fmm.backend.html#subpackages">Subpackages</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="fmm.backend.test.html">fmm.backend.test package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="fmm.backend.test.html#module-fmm.backend.test">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.backend.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.backend.html#module-fmm.backend.api">fmm.backend.api module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.backend.html#module-fmm.backend.numba">fmm.backend.numba module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.backend.html#module-fmm.backend">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="fmm.test.html">fmm.test package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="fmm.test.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.test.html#module-fmm.test.test_fmm">fmm.test.test_fmm module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.test.html#module-fmm.test.test_kernel">fmm.test.test_kernel module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.test.html#module-fmm.test.test_linalg">fmm.test.test_linalg module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.test.html#module-fmm.test.test_surface">fmm.test.test_surface module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fmm.test.html#module-fmm.test">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-fmm.dtype">
+<span id="fmm-dtype-module"></span><h2>fmm.dtype module<a class="headerlink" href="#module-fmm.dtype" title="Permalink to this headline">¶</a></h2>
+<p>Supported datatypes.</p>
+</div>
+<div class="section" id="module-fmm.fmm">
+<span id="fmm-fmm-module"></span><h2>fmm.fmm module<a class="headerlink" href="#module-fmm.fmm" title="Permalink to this headline">¶</a></h2>
+<p>The Fmm object acts as the API for interacting the PyExaFMM.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="fmm.fmm.Fmm">
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">fmm.fmm.</span></span><span class="sig-name descname"><span class="pre">Fmm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.fmm.Fmm" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>FMM class. Configure with pre-computed operators and octree.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">Fmm</span><span class="p">(</span><span class="s1">&#39;config&#39;</span><span class="p">)</span> <span class="c1"># Initialise experiment</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">run</span><span class="p">()</span> <span class="c1"># Run upward &amp; downward passes together</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1"># Clear containers, to re-run experiment</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="fmm.fmm.Fmm.clear">
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fmm.fmm.Fmm.clear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clear containers</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fmm.fmm.Fmm.downward_pass">
+<span class="sig-name descname"><span class="pre">downward_pass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fmm.fmm.Fmm.downward_pass" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Pre-order traversal of tree. Compute local expansions for all nodes,</dt><dd><p>and evaluate these at target points.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fmm.fmm.Fmm.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fmm.fmm.Fmm.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run full algorithm</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fmm.fmm.Fmm.upward_pass">
+<span class="sig-name descname"><span class="pre">upward_pass</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fmm.fmm.Fmm.upward_pass" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Post-order traversal of tree, compute multipole expansions for all</dt><dd><p>nodes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-fmm.kernel">
+<span id="fmm-kernel-module"></span><h2>fmm.kernel module<a class="headerlink" href="#module-fmm.kernel" title="Permalink to this headline">¶</a></h2>
+<p>Kernels</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_grad_cpu">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_grad_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">c</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_inv_4pi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zero</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_grad_cpu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numba Laplace kernel gradient.</p>
+<p>x : np.array(shape=(3), dtype=float)
+y : np.array(shape=(3), dtype=float)
+c : int</p>
+<blockquote>
+<div><p>Component to consider, c ∈ {0, 1, 2}.</p>
+</div></blockquote>
+<p>float</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_gradient">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_gradient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_gradient" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numba P2P operator for gradient of Laplace kernel.</p>
+<p>sources : np.array(shape=(n, 3), dtype=float)
+targets : np.array(shape=(m, 3), dtype=float)
+source_densities : np.array(shape=(m), dtype=float)</p>
+<dl class="simple">
+<dt>np.array(shape=(m, 3), dtype=float)</dt><dd><p>Target potential gradients.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_gram_matrix_parallel">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_gram_matrix_parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_gram_matrix_parallel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dense Numba P2P operator for Laplace kernel.</p>
+<p>sources : np.array(shape=(n, 3), dtype=float)
+targets : np.array(shape=(m, 3), dtype=float)</p>
+<dl class="simple">
+<dt>np.array(shape=(m, n), dtype=float)</dt><dd><p>The Gram matrix.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_gram_matrix_serial">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_gram_matrix_serial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_gram_matrix_serial" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dense Numba P2P operator for Laplace kernel.</p>
+<p>sources : np.array(shape=(n, 3), dtype=float)
+targets : np.array(shape=(m, 3), dtype=float)</p>
+<dl class="simple">
+<dt>np.array(shape=(m, n), dtype=float)</dt><dd><p>The Gram matrix.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_kernel_cpu">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_kernel_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m_inv_4pi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zero</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_kernel_cpu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numba Laplace CPU kernel.</p>
+<dl class="simple">
+<dt>x<span class="classifier">np.array(shape=(3), dtype=float)</span></dt><dd><p>Source coordinate.</p>
+</dd>
+<dt>y<span class="classifier">np.array(shape=(3), dtype=float)</span></dt><dd><p>Target coordinate.</p>
+</dd>
+</dl>
+<p>float</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_p2p_parallel">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_p2p_parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_p2p_parallel" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Parallelised P2P function, which relies on source/target data being described</dt><dd><p>by index pointers such that they are arranged by interaction. i.e. targets
+and all sources required for P2P evaluation have the same pointer. This
+is needed to maximise cache re-use, and reduce accesses to memory during
+the parallel evaluation. This function calculates potentials and gradients.</p>
+</dd>
+</dl>
+<p>sources: np.array((nsources, 3), dtype=float)
+targets : np.array((ntargets, 3), dtype=float)
+source_densities : np.array((nsources, 3), dtype=float)
+source_index_pointer: np.array(nnodes+1, dtype=int)</p>
+<blockquote>
+<div><p>Created using the backend.prepare_u_list_data function.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>target_index_pointer: np.array(nnodes+1, dtype=int)</dt><dd><p>Created using the backend.prepare_u_list_data function.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_p2p_serial">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_p2p_serial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_p2p_serial" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numba P2P operator for Laplace kernel.</p>
+<p>sources : np.array(shape=(n, 3), dtype=float)
+targets : np.array(shape=(m, 3), dtype=float)
+source_densities : np.array(shape=(m,), dtype=float)</p>
+<dl class="simple">
+<dt>np.array(shape=(m), dtype=float)</dt><dd><p>Target potential densities.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.kernel.laplace_scale">
+<span class="sig-prename descclassname"><span class="pre">fmm.kernel.</span></span><span class="sig-name descname"><span class="pre">laplace_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.kernel.laplace_scale" title="Permalink to this definition">¶</a></dt>
+<dd><p>Level scale for the Laplace kernel.</p>
+<p>level : int</p>
+<p>float</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-fmm.linalg">
+<span id="fmm-linalg-module"></span><h2>fmm.linalg module<a class="headerlink" href="#module-fmm.linalg" title="Permalink to this headline">¶</a></h2>
+<p>Linear algebra utilities</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.linalg.pinv">
+<span class="sig-prename descclassname"><span class="pre">fmm.linalg.</span></span><span class="sig-name descname"><span class="pre">pinv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.linalg.pinv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Moore-Penrose Pseudo-Inverse calculation via SVD.</p>
+<p>a : np.array(shape=(m, n), dtype=float)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.linalg.pinv2">
+<span class="sig-prename descclassname"><span class="pre">fmm.linalg.</span></span><span class="sig-name descname"><span class="pre">pinv2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.linalg.pinv2" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Moore-Penrose Pseudo-Inverse calculation via SVD. Return SVD result in two</dt><dd><p>components, as in Malhotra et. al. (2015).</p>
+</dd>
+</dl>
+<p>a : np.array(shape=(m, n), dtype=float)</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-fmm.surface">
+<span id="fmm-surface-module"></span><h2>fmm.surface module<a class="headerlink" href="#module-fmm.surface" title="Permalink to this headline">¶</a></h2>
+<p>Surface creation utilities</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.surface.compute_surface">
+<span class="sig-prename descclassname"><span class="pre">fmm.surface.</span></span><span class="sig-name descname"><span class="pre">compute_surface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">order</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.surface.compute_surface" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute surface to a specified order.</p>
+<dl class="simple">
+<dt>order<span class="classifier">int</span></dt><dd><p>Order, n_coefficients = 6(order-1)^2 + 2</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>np.float32, np.float64</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.surface.scale_surface">
+<span class="sig-prename descclassname"><span class="pre">fmm.surface.</span></span><span class="sig-name descname"><span class="pre">scale_surface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">surf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">radius</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.surface.scale_surface" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Shift and scale a given surface to a new center, and radius relative to the</dt><dd><p>original surface.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>surf<span class="classifier">np.array(shape=(n, 3), dtype=float)</span></dt><dd><p>Discretized surface.</p>
+</dd>
+<dt>radius<span class="classifier">float</span></dt><dd><p>Half side length of the octree root node.</p>
+</dd>
+<dt>level<span class="classifier">int</span></dt><dd><p>Tree level of the scaled node.</p>
+</dd>
+<dt>center<span class="classifier">np.array(shape=(1, 3), dtype=float)</span></dt><dd><p>Centre of the shifted node.</p>
+</dd>
+<dt>alpha<span class="classifier">float</span></dt><dd><p>Relative size of surface.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>np.array(shape=(n_coeffs, 3), dtype=float)</dt><dd><p>Scaled and shifted surface.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-fmm">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-fmm" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="fmm.backend.html" class="btn btn-neutral float-right" title="fmm.backend package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="modules.html" class="btn btn-neutral float-left" title="fmm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Srinath Kailasa.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,795 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>fmm.backend package &mdash; PyExaFMM 6.1.1 documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="fmm.backend.test package" href="fmm.backend.test.html" />
+    <link rel="prev" title="fmm package" href="fmm.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> PyExaFMM
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">fmm</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fmm.html">fmm package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="fmm.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fmm.backend package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fmm.test.html">fmm.test package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#module-fmm.dtype">fmm.dtype module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#module-fmm.fmm">fmm.fmm module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#module-fmm.kernel">fmm.kernel module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#module-fmm.linalg">fmm.linalg module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#module-fmm.surface">fmm.surface module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fmm.html#module-fmm">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">PyExaFMM</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="modules.html">fmm</a> &raquo;</li>
+        
+          <li><a href="fmm.html">fmm package</a> &raquo;</li>
+        
+      <li>fmm.backend package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/fmm.backend.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="fmm-backend-package">
+<h1>fmm.backend package<a class="headerlink" href="#fmm-backend-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="fmm.backend.test.html">fmm.backend.test package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="fmm.backend.test.html#module-fmm.backend.test">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-fmm.backend.api">
+<span id="fmm-backend-api-module"></span><h2>fmm.backend.api module<a class="headerlink" href="#module-fmm.backend.api" title="Permalink to this headline">¶</a></h2>
+<p>Interface for compute backends.</p>
+</div>
+<div class="section" id="module-fmm.backend.numba">
+<span id="fmm-backend-numba-module"></span><h2>fmm.backend.numba module<a class="headerlink" href="#module-fmm.backend.numba" title="Permalink to this headline">¶</a></h2>
+<p>Compute operators, accelerated with Numba.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.l2l">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">l2l</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l2l</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.l2l" title="Permalink to this definition">¶</a></dt>
+<dd><p>L2L operator applied to a parent key.</p>
+<dl class="simple">
+<dt>key<span class="classifier">np.int64</span></dt><dd><p>Operator applied to this key.</p>
+</dd>
+<dt>local_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Local expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>l2l<span class="classifier">np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)</span></dt><dd><p>Precomputed L2L operators.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.l2t">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">l2t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_potentials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_outer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">equivalent_surface</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_parallel_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.l2t" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_potentials<span class="classifier">np.array(shape=(ntargets, 4), dtype=float)</span></dt><dd><p>Target potentials (component 0), and x, y, and z components of
+potential gradient (components 1, 2, 3 resp.).</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>local_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Local expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>x0<span class="classifier">np.array(shape=(1, 3), dtype=np.float64)</span></dt><dd><p>Center of octree root node.</p>
+</dd>
+<dt>r0<span class="classifier">np.float64</span></dt><dd><p>Half side length of octree root node.</p>
+</dd>
+<dt>alpha_outer<span class="classifier">float</span></dt><dd><p>Relative size of outer surface.</p>
+</dd>
+<dt>equivalent_surface<span class="classifier">np.array(shape=(nequivalent_points, 3), dtype=float)</span></dt><dd><p>Discretized equivalent surface.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>p2p_parallel_function<span class="classifier">function</span></dt><dd><p>Parallel P2P function handle for this kernel.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.m2l">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">m2l</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v_lists</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dc2e_inv_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dc2e_inv_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multipole_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hash_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.m2l" title="Permalink to this definition">¶</a></dt>
+<dd><p>M2L operator. Parallelized over all keys in a given level.</p>
+<dl class="simple">
+<dt>keys<span class="classifier">np.array(shape=(nkeys), dtype=np.int64)</span></dt><dd><p>All nodes at a given level of the octree.</p>
+</dd>
+<dt>v_lists<span class="classifier">np.array(shape=(ncomplete, nv_list), dtype=np.int64)</span></dt><dd><p>All V lists for nodes in octree.</p>
+</dd>
+<dt>u<span class="classifier">np.array(shape=(ncheck_points, k), dtype=float)</span></dt><dd><p>Left singular vectors of M2L matrix for all transfer vectors at this level.</p>
+</dd>
+<dt>s<span class="classifier">np.array(shape=(k, k), dtype=float)</span></dt><dd><p>Singular values of M2L matrix for all transfer vectors at this level.</p>
+</dd>
+<dt>vt<span class="classifier">np.array(shape=(k, nequivalent_points*316))</span></dt><dd><p>Right singular values of M2L matrix for all transfer vectors at this level.</p>
+</dd>
+<dt>dc2e_inv_a<span class="classifier">np.array(dtype=float)</span></dt><dd><p>First component of inverse of downward check to equivalent Gram matrix.</p>
+</dd>
+<dt>dc2e_inv_b<span class="classifier">np.array(dtype=float)</span></dt><dd><p>Second component of inverse of downward check to equivalent Gram matrix.</p>
+</dd>
+<dt>multipole_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Multipole expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>local_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Local expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>hash_to_index<span class="classifier">numba.typed.Dict.empty(key_type=numba.types.int64, value_type=numba.types.int64)</span></dt><dd><p>Map between transfer vector hash and index of right singular vector
+components at a given level.</p>
+</dd>
+<dt>scale<span class="classifier">float</span></dt><dd><p>Kernel scale for keys at this level.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.m2l_core">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">m2l_core</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">v_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dc2e_inv_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dc2e_inv_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multipole_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hash_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.m2l_core" title="Permalink to this definition">¶</a></dt>
+<dd><p>Application of the M2L operator over the V list of a given node.</p>
+<dl class="simple">
+<dt>key<span class="classifier">np.int64</span></dt><dd><p>Operator applied to this key.</p>
+</dd>
+<dt>v_list<span class="classifier">np.array(shape=(nv_list), dtype=np.int64)</span></dt><dd><p>V list of this key.</p>
+</dd>
+<dt>u<span class="classifier">np.array(shape=(ncheck_points, k), dtype=float)</span></dt><dd><p>Left singular vectors of M2L matrix for all transfer vectors at this level.</p>
+</dd>
+<dt>s<span class="classifier">np.array(shape=(k, k), dtype=float)</span></dt><dd><p>Singular values of M2L matrix for all transfer vectors at this level.</p>
+</dd>
+<dt>vt<span class="classifier">np.array(shape=(k, nequivalent_points*316))</span></dt><dd><p>Right singular values of M2L matrix for all transfer vectors at this level.</p>
+</dd>
+<dt>dc2e_inv_a<span class="classifier">np.array(dtype=float)</span></dt><dd><p>First component of inverse of downward check to equivalent Gram matrix.</p>
+</dd>
+<dt>dc2e_inv_b<span class="classifier">np.array(dtype=float)</span></dt><dd><p>Second component of inverse of downward check to equivalent Gram matrix.</p>
+</dd>
+<dt>multipole_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Multipole expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>local_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Local expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>hash_to_index<span class="classifier">numba.typed.Dict.empty(key_type=numba.types.int64, value_type=numba.types.int64)</span></dt><dd><p>Map between transfer vector hash and index of right singular vector
+components at a given level.</p>
+</dd>
+<dt>scale<span class="classifier">float</span></dt><dd><p>Kernel scale for keys at this level.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.m2m">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">m2m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multipole_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">m2m</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.m2m" title="Permalink to this definition">¶</a></dt>
+<dd><p>M2M operator serially applied over keys in a given level. Parallelization
+doesn’t offer much benefit due to blocking writes to the parent multipole
+expansion.</p>
+<p>As it’s not possible to know group siblings contained in the tree apriori
+due to the relative cost of searching the tree for siblings, it’s not
+possible to parallelize the operation over groups of siblings.</p>
+<dl class="simple">
+<dt>keys<span class="classifier">np.array(shape=(nkeys), dtype=np.int64)</span></dt><dd><p>All nodes at a given level of the octree.</p>
+</dd>
+<dt>multipole_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Multipole expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>m2m<span class="classifier">np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)</span></dt><dd><p>Precomputed M2M operators.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.m2t">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">m2t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">w_lists</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_potentials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multipole_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_inner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">equivalent_surface</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gradient_function</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.m2t" title="Permalink to this definition">¶</a></dt>
+<dd><p>M2T operator parallelized over leaves.</p>
+<p>The potential size of W lists make pre-allocation (c.f. L2T, near_field*)
+very expensive for the M2T operator, hence we opt for simple parallelization
+over leaves.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>w_lists<span class="classifier">np.array(shape=(ncomplete, nw_list), dtype=np.int64)</span></dt><dd><p>All W lists for nodes in octree.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>target_potentials<span class="classifier">np.array(shape=(ntargets, 4), dtype=float)</span></dt><dd><p>Target potentials (component 0), and x, y, and z components of
+potential gradient (components 1, 2, 3 resp.).</p>
+</dd>
+<dt>multipole_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Multipole expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>x0<span class="classifier">np.array(shape=(1, 3), dtype=np.float64)</span></dt><dd><p>Center of octree root node.</p>
+</dd>
+<dt>r0<span class="classifier">np.float64</span></dt><dd><p>Half side length of octree root node.</p>
+</dd>
+<dt>alpha_inner<span class="classifier">float</span></dt><dd><p>Relative size of inner surface.</p>
+</dd>
+<dt>equivalent_surface<span class="classifier">np.array(shape=(nequivalent_points, 3), dtype=float)</span></dt><dd><p>Discretized equivalent surface.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>p2p_function<span class="classifier">function</span></dt><dd><p>Serial P2P function handle for this kernel.</p>
+</dd>
+<dt>grad_function<span class="classifier">function</span></dt><dd><p>Serial gradient function handle for this kernel.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.near_field_node">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">near_field_node</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_potentials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_parallel_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.near_field_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute near field interactions for sources and targets within each node.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+<dt>source_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning sources by leaf.</p>
+</dd>
+<dt>max_points<span class="classifier">int</span></dt><dd><p>Max points allowed in a node.</p>
+</dd>
+<dt>target_potentials<span class="classifier">np.array(shape=(ntargets, 4), dtype=float)</span></dt><dd><p>Target potentials (component 0), and x, y, and z components of
+potential gradient (components 1, 2, 3 resp.).</p>
+</dd>
+<dt>p2p_parallel_function<span class="classifier">function</span></dt><dd><p>Parallel P2P function handle for this kernel.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.near_field_u_list">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">near_field_u_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_lists</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_potentials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_parallel_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.near_field_u_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Evaluate all near fields particles, corresponding to members of the U list,
+for all leaves.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+<dt>source_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning sources by leaf.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>u_lists<span class="classifier">np.array(shape=(ncomplete, nu_list), dtype=np.int64)</span></dt><dd><p>All U lists for nodes in octree.</p>
+</dd>
+<dt>max_points<span class="classifier">int</span></dt><dd><p>Max points allowed in a node.</p>
+</dd>
+<dt>target_potentials<span class="classifier">np.array(shape=(ntargets, 4), dtype=float)</span></dt><dd><p>Target potentials (component 0), and x, y, and z components of
+potential gradient (components 1, 2, 3 resp.).</p>
+</dd>
+<dt>p2p_parallel_function<span class="classifier">function</span></dt><dd><p>Parallel P2P function handle for this kernel.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.p2m">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">p2m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multipole_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_outer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_surface</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncheck_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uc2e_inv_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uc2e_inv_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.p2m" title="Permalink to this definition">¶</a></dt>
+<dd><p>P2M operator. Compute the multipole expansion from the sources at each
+leaf node.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+<dt>source_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning sources by leaf.</p>
+</dd>
+<dt>multipole_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Multipole expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>x0<span class="classifier">np.array(shape=(1, 3), dtype=np.float64)</span></dt><dd><p>Center of octree root node.</p>
+</dd>
+<dt>r0<span class="classifier">np.float64</span></dt><dd><p>Half side length of octree root node.</p>
+</dd>
+<dt>alpha_outer<span class="classifier">float</span></dt><dd><p>Relative size of outer surface.</p>
+</dd>
+<dt>check_surface<span class="classifier">np.array(shape=(ncheck_points, 3), dtype=float)</span></dt><dd><p>Discretized check surface.</p>
+</dd>
+<dt>ncheck_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on check_surface.</p>
+</dd>
+<dt>uc2e_inv_a<span class="classifier">np.array(dtype=float)</span></dt><dd><p>First component of inverse of upward check to equivalent Gram matrix.</p>
+</dd>
+<dt>uc2e_inv_b<span class="classifier">np.array(dtype=float)</span></dt><dd><p>Second component of inverse of upward check to equivalent Gram matrix.</p>
+</dd>
+<dt>p2p_function<span class="classifier">function</span></dt><dd><p>Serial P2P function handle for this kernel.</p>
+</dd>
+<dt>scale_function<span class="classifier">function</span></dt><dd><p>Scale function handle for this kernel.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.p2m_core">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">p2m_core</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncheck_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uc2e_inv_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uc2e_inv_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scales</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">multipole_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_potentials</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.p2m_core" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parallelized loop applying P2M operator over all leaves.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>ncheck_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on check_surface.</p>
+</dd>
+<dt>uc2e_inv_a<span class="classifier">np.array(dtype=float)</span></dt><dd><p>First component of inverse of upward check to equivalent Gram matrix.</p>
+</dd>
+<dt>uc2e_inv_b<span class="classifier">np.array(dtype=float)</span></dt><dd><p>Second component of inverse of upward check to equivalent Gram matrix.</p>
+</dd>
+<dt>scales<span class="classifier">np.array(shape=(nleaves), dtype=float)</span></dt><dd><p>Scales calculated in <cite>prepare_p2m_data</cite> function</p>
+</dd>
+<dt>multipole_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Multipole expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>check_potentials<span class="classifier">np.array(shape=(nleaves*ncheck_points), dtype=float)</span></dt><dd><p>Check potentials calculated in <cite>prepare_p2p_data</cite> function.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.prepare_l2t_data">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">prepare_l2t_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">equivalent_surface</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_outer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.prepare_l2t_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare L2T data to maximise cache re-use by allocating aligned arrays
+aligning source and target coordinates.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>equivalent_surface<span class="classifier">np.array(shape=(nequivalent_points, 3), dtype=float)</span></dt><dd><p>Discretized equivalent surface.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>x0<span class="classifier">np.array(shape=(1, 3), dtype=np.float64)</span></dt><dd><p>Center of octree root node.</p>
+</dd>
+<dt>r0<span class="classifier">np.float64</span></dt><dd><p>Half side length of octree root node.</p>
+</dd>
+<dt>alpha_outer<span class="classifier">float</span></dt><dd><p>Relative size of outer surface.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>local_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Local expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.prepare_node_data">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">prepare_node_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.prepare_node_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare source and target data within each node in order to maximize cache
+re-use.</p>
+<p>Uses same strategy as over U lists.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+<dt>source_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning sources by leaf.</p>
+</dd>
+<dt>max_points<span class="classifier">int</span></dt><dd><p>Max points allowed in a node.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+<p>5-tuple containing the re-batched sources, targets, source densities, source index pointers
+and target index pointers respectively.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.prepare_p2m_data">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">prepare_p2m_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_outer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_surface</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncheck_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.prepare_p2m_data" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="simple">
+<dt>Create aligned vector of scales, and check potentials indexed by leaves.</dt><dd><p>This maximizes cache re-use in the application of the P2M operator.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+</dl>
+<p>source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
+key_to_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)</p>
+<blockquote>
+<div><p>Map from key to leaf index.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>x0<span class="classifier">np.array(shape=(1, 3), dtype=np.float64)</span></dt><dd><p>Center of octree root node.</p>
+</dd>
+<dt>r0<span class="classifier">np.float64</span></dt><dd><p>Half side length of octree root node.</p>
+</dd>
+<dt>alpha_outer<span class="classifier">float</span></dt><dd><p>Relative size of outer surface.</p>
+</dd>
+<dt>check_surface<span class="classifier">np.array(shape=(ncheck_points, 3), dtype=float)</span></dt><dd><p>Discretized check surface.</p>
+</dd>
+<dt>ncheck_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on check_surface.</p>
+</dd>
+<dt>p2p_function<span class="classifier">function</span></dt><dd><p>Serial P2P function handle for this kernel.</p>
+</dd>
+<dt>scale_function<span class="classifier">function</span></dt><dd><p>Scale function handle for this kernel.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>(np.array(float), np.array(float))</dt><dd><p>Tuple of scales and check potentials (ordered by leaf index) respectively.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.prepare_u_list_data">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">prepare_u_list_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_lists</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.prepare_u_list_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prepare U list data to maximise cache re-use by allocating aligned arrays
+aligning source and target coordinates.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>targets<span class="classifier">np.array(shape=(ntargets, 3), dtype=float)</span></dt><dd><p>All target coordinates.</p>
+</dd>
+<dt>target_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning targets by leaf.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+<dt>source_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning sources by leaf.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>u_lists<span class="classifier">np.array(shape=(ncomplete, nu_list), dtype=np.int64)</span></dt><dd><p>All U lists for nodes in octree.</p>
+</dd>
+<dt>max_points<span class="classifier">int</span></dt><dd><p>Max points allowed in a node.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+<p>5-tuple containing the re-batched sources, targets, source densities, source index pointers
+and target index pointers respectively.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fmm.backend.numba.s2l">
+<span class="sig-prename descclassname"><span class="pre">fmm.backend.numba.</span></span><span class="sig-name descname"><span class="pre">s2l</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nleaves</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_densities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index_pointer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_to_leaf_index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_lists</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_expansions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_inner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_surface</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nequivalent_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dc2e_inv_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dc2e_inv_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p2p_function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fmm.backend.numba.s2l" title="Permalink to this definition">¶</a></dt>
+<dd><p>S2L operator, parallelized simply over leaves.</p>
+<p>Parallelization of the S2L operator doesn’t maximize cache re-use
+(c.f. P2M, L2T) This decision is taken as X lists are usually small, with
+relatively few nodes having X lists either. This makes the savings due to
+cache re-use competitive with the cost of array allocation.</p>
+<dl class="simple">
+<dt>leaves: np.array(shape=(nleaves), dtype=np.int64)</dt><dd><p>Octree leaves.</p>
+</dd>
+<dt>nleaves<span class="classifier">int</span></dt><dd><p>Number of leaves.</p>
+</dd>
+<dt>sources<span class="classifier">np.array(shape=(nsources, 3), dtype=float)</span></dt><dd><p>All source coordinates.</p>
+</dd>
+<dt>source_densities<span class="classifier">np.array(shape=(nsources), dtype=float)</span></dt><dd><p>Densities at source coordinates.</p>
+</dd>
+<dt>source_index_pointer<span class="classifier">np.array(shape=(nleaves+1), dtype=int)</span></dt><dd><p>Index pointer aligning sources by leaf.</p>
+</dd>
+<dt>key_to_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to global index.</p>
+</dd>
+<dt>key_to_leaf_index<span class="classifier">numba.typed.Dict(key_type=np.int64, value_type=np.int64)</span></dt><dd><p>Map from key to leaf index.</p>
+</dd>
+<dt>x_lists<span class="classifier">np.array(shape=(ncomplete, nx_list), dtype=np.int64)</span></dt><dd><p>All X lists for nodes in octree.</p>
+</dd>
+<dt>local_expansions<span class="classifier">np.array(shape=(nequivalent_points*ncomplete), dtype=float)</span></dt><dd><p>Local expansions, aligned by global index from <cite>key_to_index</cite>.</p>
+</dd>
+<dt>x0<span class="classifier">np.array(shape=(1, 3), dtype=np.float64)</span></dt><dd><p>Center of octree root node.</p>
+</dd>
+<dt>r0<span class="classifier">np.float64</span></dt><dd><p>Half side length of octree root node.</p>
+</dd>
+<dt>alpha_inner<span class="classifier">float</span></dt><dd><p>Relative size of inner surface.`</p>
+</dd>
+<dt>check_surface<span class="classifier">np.array(shape=(ncheck_points, 3), dtype=float)</span></dt><dd><p>Discretized check surface.</p>
+</dd>
+<dt>nequivalent_points<span class="classifier">int</span></dt><dd><p>Number of quadrature points on equivalent_surface.</p>
+</dd>
+<dt>dc2e_inv_a<span class="classifier">np.array(dtype=float)</span></dt><dd><p>First component of inverse of downward check to equivalent Gram matrix.</p>
+</dd>
+<dt>dc2e_inv_b<span class="classifier">np.array(dtype=float)</span></dt><dd><p>Second component of inverse of downward check to equivalent Gram matrix.</p>
+</dd>
+<dt>scale_function<span class="classifier">function</span></dt><dd><p>Scale function handle for this kernel.</p>
+</dd>
+<dt>p2p_function<span class="classifier">function</span></dt><dd><p>Serial P2P function handle for this kernel.</p>
+</dd>
+<dt>dtype<span class="classifier">type</span></dt><dd><p>Corresponds to precision of experiment ∈ {np.float32, np.float64}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-fmm.backend">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-fmm.backend" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="fmm.backend.test.html" class="btn btn-neutral float-right" title="fmm.backend.test package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="fmm.html" class="btn btn-neutral float-left" title="fmm package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Srinath Kailasa.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
