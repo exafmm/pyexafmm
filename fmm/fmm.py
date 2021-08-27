@@ -3,6 +3,7 @@ The Fmm object acts as the API for interacting the PyExaFMM.
 """
 import os
 import pathlib
+from time import time
 
 import h5py
 import numba
@@ -32,7 +33,7 @@ class Fmm:
     >>> e.clear() # Clear containers, to re-run experiment
     """
 
-    def __init__(self, config_filename=None):
+    def __init__(self, config_filename=None, verbose=False):
         """
         The Fmm object is instantiated with a config JSON. This specifies the
         HDF5 database used in operator and tree precomputations.
@@ -45,6 +46,8 @@ class Fmm:
         Parameters:
         -----------
         config_filename : str
+        verbose : bool
+            Optionally print operator runtimes to stdout.
         """
         # Load experiment database
         if config_filename is not None:
@@ -56,6 +59,13 @@ class Fmm:
 
         db_filepath = WORKING_DIR / f"{self.config['experiment']}.hdf5"
         self.db = h5py.File(db_filepath, "r")
+
+        ## Operator runtimes
+        operator_names = [
+            'P2M', 'M2M', 'L2L', 'M2L', 'L2T', 'M2T', 'S2L', 'P2P'
+        ]
+        self.verbose = verbose
+        self.times = {name: None for name in operator_names}
 
         ## Configure experiment precision
         self.numpy_dtype = NUMPY[self.config["precision"]]
@@ -117,7 +127,7 @@ class Fmm:
         self.gradient_function = KERNELS[kernel]["gradient"]
         self.backend = BACKEND[self.config["backend"]]
 
-        # Containers for results
+        ## Containers for results
         self.multipole_expansions = np.zeros(
                 self.nequivalent_points*self.ncomplete,
                 dtype=self.numpy_dtype
@@ -148,6 +158,7 @@ class Fmm:
             nodes.
         """
         # Form multipole expansions for all leaf nodes
+        p2m_start = time()
         self.backend['p2m'](
                 leaves=self.leaves,
                 nleaves=self.nleaves,
@@ -169,7 +180,9 @@ class Fmm:
                 scale_function=self.scale_function,
                 dtype=self.numpy_dtype
             )
+        self.times['P2M'] = time()-p2m_start
 
+        m2m_start = time()
         # Post-order traversal
         for level in range(self.depth, 0, -1):
             keys = self.complete[self.complete_levels == level]
@@ -181,6 +194,7 @@ class Fmm:
                 m2m=self.m2m,
                 key_to_index=self.key_to_index
             )
+        self.times['M2M'] = time()-m2m_start
 
     def downward_pass(self):
         """
@@ -189,7 +203,12 @@ class Fmm:
         """
 
         # Pre-order traversal
+        m2l_total = 0
+        l2l_total = 0
+
         for level in range(2, self.depth + 1):
+
+            m2l_start = time()
 
             # Keys at this level
             keys = self.complete[self.complete_levels == level]
@@ -229,6 +248,9 @@ class Fmm:
                     scale=scale
                 )
 
+            m2l_total += time()-m2l_start
+
+            l2l_start = time()
             for key in keys:
                 # Translate local expansion from the node's parent
                 self.backend['l2l'](
@@ -238,9 +260,14 @@ class Fmm:
                     key_to_index=self.key_to_index,
                     nequivalent_points=self.nequivalent_points
                 )
+            l2l_total += time()-l2l_start
+
+        self.times['M2L'] = m2l_total
+        self.times['L2L'] = l2l_total
 
         # Leaf near-field computations
 
+        s2l_start = time()
         # X List interactions
         self.backend['s2l'](
             leaves=self.leaves,
@@ -263,8 +290,10 @@ class Fmm:
             p2p_function=self.p2p_function,
             dtype=self.numpy_dtype
         )
+        self.times['S2L'] = time()-s2l_start
 
         # W List interactions
+        m2t_start = time()
         self.backend['m2t'](
             leaves=self.leaves,
             nleaves=self.nleaves,
@@ -283,8 +312,10 @@ class Fmm:
             p2p_function=self.p2p_function,
             gradient_function=self.gradient_function
         )
+        self.times['M2T'] = time()-m2t_start
 
         # Evaluate local expansions at targets
+        l2t_start = time()
         self.backend['l2t'](
             leaves=self.leaves,
             nleaves=self.nleaves,
@@ -302,7 +333,9 @@ class Fmm:
             p2p_parallel_function=self.p2p_parallel_function,
             dtype=self.numpy_dtype
         )
+        self.times['L2T'] = time()-l2t_start
 
+        p2p_start = time()
         # P2P interactions within each leaf
         self.backend['near_field_node'](
             leaves=self.leaves,
@@ -336,11 +369,16 @@ class Fmm:
             p2p_parallel_function=self.p2p_parallel_function,
             dtype=self.numpy_dtype
         )
+        self.times['P2P'] = time()-p2p_start
 
     def run(self):
         """Run full algorithm"""
         self.upward_pass()
         self.downward_pass()
+
+        if self.verbose:
+            for k, v in self.times.items():
+                print(f"{k}: {v}")
 
     def clear(self):
         """Clear containers"""
