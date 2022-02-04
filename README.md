@@ -93,10 +93,10 @@ The CLI workflow is as follows,
 
 ```bash
 # Generate test data (optional)
-fmm generate-test-data -c config.json
+fmm generate-test-data -c config
 
 # Run operator and tree pre-computations
-fmm compute-operators -c config.json
+fmm compute-operators -c config
 ```
 
 Once this is done, you'll be left with a `.hdf5` database of precomputed parametrization, with the same name as your specified `experiment` parameter from your `config.json`. If you've used your own data, then the operator pre-computations will be written into the same HDF5 file.
