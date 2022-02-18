@@ -251,15 +251,15 @@ class Fmm:
             m2l_total += time()-m2l_start
 
             l2l_start = time()
-            for key in keys:
-                # Translate local expansion from the node's parent
-                self.backend['l2l'](
-                    key=key,
-                    local_expansions=self.local_expansions,
-                    l2l=self.l2l,
-                    key_to_index=self.key_to_index,
-                    nequivalent_points=self.nequivalent_points
-                )
+
+            self.backend['l2l'](
+                keys=keys,
+                local_expansions=self.local_expansions,
+                l2l=self.l2l,
+                key_to_index=self.key_to_index,
+                nequivalent_points=self.nequivalent_points
+            )
+
             l2l_total += time()-l2l_start
 
         self.times['M2L'] = m2l_total

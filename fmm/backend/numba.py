@@ -293,7 +293,7 @@ def m2m(
     """
     nkeys = len(keys)
 
-    for i in range(nkeys):
+    for i in numba.prange(nkeys):
         child = keys[i]
         parent = morton.find_parent(child)
 
@@ -473,7 +473,7 @@ def m2l(
 
 
 @numba.njit(cache=True)
-def l2l(
+def l2l_core(
         key,
         local_expansions,
         l2l,
@@ -512,6 +512,20 @@ def l2l(
 
     # Compute contribution to local expansion of child from parent
     local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
+
+
+@numba.njit(cache=True, parallel=True)
+def l2l(
+    keys,
+    local_expansions,
+    l2l,
+    key_to_index,
+    nequivalent_points
+):
+    nkeys = len(keys)
+    for i in numba.prange(nkeys):
+        key = keys[i]
+        l2l_core(key, local_expansions, l2l, key_to_index, nequivalent_points)
 
 
 @numba.njit(cache=True, parallel=True)
