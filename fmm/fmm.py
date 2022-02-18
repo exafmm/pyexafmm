@@ -336,39 +336,22 @@ class Fmm:
         self.times['L2T'] = time()-l2t_start
 
         p2p_start = time()
-        # P2P interactions within each leaf
-        self.backend['near_field_node'](
-            leaves=self.leaves,
-            nleaves=self.nleaves,
-            key_to_leaf_index=self.key_to_leaf_index,
-            targets=self.targets,
-            target_index_pointer=self.target_index_pointer,
-            sources=self.sources,
-            source_densities=self.source_densities,
-            source_index_pointer=self.source_index_pointer,
-            max_points=self.max_points,
-            target_potentials=self.target_potentials,
-            p2p_parallel_function=self.p2p_parallel_function,
-            dtype=self.numpy_dtype
-        )
 
-        # P2P interactions within U List of each leaf
-        self.backend['near_field_u_list'](
-            leaves=self.leaves,
-            nleaves=self.nleaves,
-            targets=self.targets,
-            target_index_pointer=self.target_index_pointer,
-            sources=self.sources,
-            source_densities=self.source_densities,
-            source_index_pointer=self.source_index_pointer,
-            key_to_index=self.key_to_index,
-            key_to_leaf_index=self.key_to_leaf_index,
-            u_lists=self.u_lists,
-            max_points=self.max_points,
-            target_potentials=self.target_potentials,
-            p2p_parallel_function=self.p2p_parallel_function,
-            dtype=self.numpy_dtype
-        )
+        self.backend['near_field'](
+            self.leaves,
+            self.nleaves,
+            self.key_to_leaf_index,
+            self.key_to_index,
+            self.targets,
+            self.u_lists,
+            self.target_index_pointer,
+            self.sources,
+            self.source_densities,
+            self.source_index_pointer,
+            self.target_potentials,
+            self.p2p_function,
+            self.gradient_function,
+            )
         self.times['P2P'] = time()-p2p_start
 
     def run(self):

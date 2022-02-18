@@ -12,7 +12,6 @@ BACKEND = {
         "s2l": numba_backend.s2l,
         "l2t": numba_backend.l2t,
         "m2t": numba_backend.m2t,
-        "near_field_u_list": numba_backend.near_field_u_list,
-        "near_field_node": numba_backend.near_field_node,
+        "near_field": numba_backend.near_field,
     }
 }

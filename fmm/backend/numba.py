@@ -926,33 +926,37 @@ def l2t(
         target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
 
 
-@numba.njit(cache=True)
-def prepare_u_list_data(
-        leaves,
-        nleaves,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        key_to_index,
-        key_to_leaf_index,
-        u_lists,
-        max_points,
-        dtype
-    ):
+@numba.njit(cache=True, parallel=True)
+def near_field(
+    leaves,
+    nleaves,
+    key_to_leaf_index,
+    key_to_index,
+    targets,
+    u_lists,
+    target_index_pointer,
+    sources,
+    source_densities,
+    source_index_pointer,
+    target_potentials,
+    p2p_function,
+    p2p_gradient_function
+):
     """
-    Prepare U list data to maximise cache re-use by allocating aligned arrays
-    aligning source and target coordinates.
-
     Parameters:
     -----------
     leaves: np.array(shape=(nleaves), dtype=np.int64)
 	    Octree leaves.
     nleaves : int
     	Number of leaves.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
     targets : np.array(shape=(ntargets, 3), dtype=float)
         All target coordinates.
+    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
+        All U lists for nodes in octree.
     target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
         Index pointer aligning targets by leaf.
     sources : np.array(shape=(nsources, 3), dtype=float)
@@ -961,237 +965,41 @@ def prepare_u_list_data(
         Densities at source coordinates.
     source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
         Index pointer aligning sources by leaf.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
-        All U lists for nodes in octree.
-    max_points : int
-        Max points allowed in a node.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-
-    Returns:
-    --------
-    5-tuple containing the re-batched sources, targets, source densities, source index pointers
-    and target index pointers respectively.
+    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
+        Target potentials (component 0), and x, y, and z components of
+        potential gradient (components 1, 2, 3 resp.).
     """
-
-    local_sources = np.zeros((max_points*26*nleaves, 3), dtype=dtype)
-    local_source_densities = np.zeros((max_points*26*nleaves), dtype=dtype)
-    local_targets = np.zeros((max_points*nleaves, 3), dtype=dtype)
-    local_source_index_pointer = np.zeros(nleaves+1, np.int64)
-    local_target_index_pointer = np.zeros(nleaves+1, np.int64)
-
-    source_ptr = 0
-    target_ptr = 0
-    local_source_index_pointer[0] = source_ptr
-    local_target_index_pointer[0] = target_ptr
-
-    for i in range(nleaves):
+    for i in numba.prange(nleaves):
         target = leaves[i]
         target_leaf_index = key_to_leaf_index[target]
         target_index = key_to_index[target]
-
         targets_at_node = targets[
             target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1]
         ]
-
-        ntargets_at_node = len(targets_at_node)
-        new_target_ptr = target_ptr+ntargets_at_node
-
-        local_targets[target_ptr:new_target_ptr] = targets_at_node
-        target_ptr = new_target_ptr
-
-        local_target_index_pointer[i+1] = target_ptr
 
         u_list = u_lists[target_index]
         u_list = u_list[u_list != -1]
 
-
+        # single threaded over inner loop over u list!
         for j in range(len(u_list)):
-
             source = u_list[j]
             source_leaf_index = key_to_leaf_index[source]
+
             sources_at_node = sources[
                 source_index_pointer[source_leaf_index]:source_index_pointer[source_leaf_index+1]
             ]
-            nsources_at_node = len(sources_at_node)
 
             source_densities_at_node = source_densities[
                 source_index_pointer[source_leaf_index]:source_index_pointer[source_leaf_index+1]
-                ]
+            ]
 
-            new_source_ptr = source_ptr+nsources_at_node
-
-            local_sources[source_ptr:new_source_ptr] = sources_at_node
-            local_source_densities[source_ptr:new_source_ptr] = source_densities_at_node
-
-            source_ptr = new_source_ptr
-
-        local_source_index_pointer[i+1] = source_ptr
-
-    local_sources = local_sources[local_source_index_pointer[0]:local_source_index_pointer[-1]]
-    local_source_densities = local_source_densities[local_source_index_pointer[0]:local_source_index_pointer[-1]]
-    local_targets = local_targets[local_target_index_pointer[0]:local_target_index_pointer[-1]]
-
-    return local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer
+            target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1],1:] += \
+                p2p_gradient_function(sources_at_node, targets_at_node, source_densities_at_node)
+            target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1], 0] += \
+               p2p_function(sources_at_node, targets_at_node, source_densities_at_node)
 
 
-@numba.njit(cache=True)
-def near_field_u_list(
-        leaves,
-        nleaves,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        key_to_index,
-        key_to_leaf_index,
-        u_lists,
-        max_points,
-        target_potentials,
-        p2p_parallel_function,
-        dtype
-    ):
-    """
-    Evaluate all near fields particles, corresponding to members of the U list,
-    for all leaves.
-
-    Parameters:
-    -----------
-    leaves: np.array(shape=(nleaves), dtype=np.int64)
-	    Octree leaves.
-    nleaves : int
-    	Number of leaves.
-    targets : np.array(shape=(ntargets, 3), dtype=float)
-        All target coordinates.
-    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning targets by leaf.
-    sources : np.array(shape=(nsources, 3), dtype=float)
-        All source coordinates.
-    source_densities : np.array(shape=(nsources), dtype=float)
-        Densities at source coordinates.
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning sources by leaf.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
-        All U lists for nodes in octree.
-    max_points : int
-        Max points allowed in a node.
-    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
-        Target potentials (component 0), and x, y, and z components of
-        potential gradient (components 1, 2, 3 resp.).
-    p2p_parallel_function : function
-	    Parallel P2P function handle for this kernel.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-    """
-    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_u_list_data(
-            leaves=leaves,
-            nleaves=nleaves,
-            targets=targets,
-            target_index_pointer=target_index_pointer,
-            sources=sources,
-            source_densities=source_densities,
-            source_index_pointer=source_index_pointer,
-            key_to_index=key_to_index,
-            key_to_leaf_index=key_to_leaf_index,
-            u_lists=u_lists,
-            max_points=max_points,
-            dtype=dtype
-        )
-
-    target_potentials_vec = p2p_parallel_function(
-        sources=local_sources,
-        targets=local_targets,
-        source_densities=local_source_densities,
-        source_index_pointer=local_source_index_pointer,
-        target_index_pointer=local_target_index_pointer
-    )
-
-    nleaves = len(local_target_index_pointer) - 1
-
-    for i in range(nleaves):
-        res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
-        leaf = leaves[i]
-        leaf_idx = key_to_leaf_index[leaf]
-        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
-
-
-@numba.njit(cache=True)
-def prepare_node_data(
-        leaves,
-        nleaves,
-        key_to_leaf_index,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        max_points,
-        dtype
-    ):
-    """
-    Prepare source and target data within each node in order to maximize cache
-    re-use.
-
-    Notes:
-    ------
-    Uses same strategy as over U lists.
-
-    Parameters:
-    -----------
-    leaves: np.array(shape=(nleaves), dtype=np.int64)
-	    Octree leaves.
-    nleaves : int
-    	Number of leaves.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    targets : np.array(shape=(ntargets, 3), dtype=float)
-        All target coordinates.
-    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning targets by leaf.
-    sources : np.array(shape=(nsources, 3), dtype=float)
-        All source coordinates.
-    source_densities : np.array(shape=(nsources), dtype=float)
-        Densities at source coordinates.
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning sources by leaf.
-    max_points : int
-        Max points allowed in a node.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-
-    Returns:
-    --------
-    5-tuple containing the re-batched sources, targets, source densities, source index pointers
-    and target index pointers respectively.
-    """
-    local_sources = np.zeros((max_points*nleaves, 3), dtype=dtype)
-    local_source_densities = np.zeros((max_points*nleaves), dtype=dtype)
-    local_targets = np.zeros((max_points*nleaves, 3), dtype=dtype)
-    local_source_index_pointer = np.zeros(nleaves+1, np.int64)
-    local_target_index_pointer = np.zeros(nleaves+1, np.int64)
-
-    source_ptr = 0
-    target_ptr = 0
-    local_source_index_pointer[0] = source_ptr
-    local_target_index_pointer[0] = target_ptr
-
-    for i in range(nleaves):
-        target = leaves[i]
-        target_leaf_index = key_to_leaf_index[target]
-
-        targets_at_node = targets[
-            target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1]
-        ]
-
+        # Now compute contribution due to sources in the node itself
         sources_at_node = sources[
             source_index_pointer[target_leaf_index]:source_index_pointer[target_leaf_index+1]
         ]
@@ -1200,98 +1008,7 @@ def prepare_node_data(
             source_index_pointer[target_leaf_index]:source_index_pointer[target_leaf_index+1]
         ]
 
-        ntargets_at_node = len(targets_at_node)
-        new_target_ptr = target_ptr+ntargets_at_node
-
-        local_targets[target_ptr:new_target_ptr] = targets_at_node
-        target_ptr = new_target_ptr
-
-        local_target_index_pointer[i+1] = target_ptr
-
-        nsources_at_node = len(sources_at_node)
-        new_source_ptr = source_ptr+nsources_at_node
-
-        local_sources[source_ptr:new_source_ptr] = sources_at_node
-        local_source_densities[source_ptr:new_source_ptr] = source_densities_at_node
-        source_ptr = new_source_ptr
-
-        local_source_index_pointer[i+1] = source_ptr
-
-    return local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer
-
-
-@numba.njit(cache=True)
-def near_field_node(
-        leaves,
-        nleaves,
-        key_to_leaf_index,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        max_points,
-        target_potentials,
-        p2p_parallel_function,
-        dtype
-    ):
-    """
-    Compute near field interactions for sources and targets within each node.
-
-    Parameters:
-    -----------
-    leaves: np.array(shape=(nleaves), dtype=np.int64)
-	    Octree leaves.
-    nleaves : int
-    	Number of leaves.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    targets : np.array(shape=(ntargets, 3), dtype=float)
-        All target coordinates.
-    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning targets by leaf.
-    sources : np.array(shape=(nsources, 3), dtype=float)
-        All source coordinates.
-    source_densities : np.array(shape=(nsources), dtype=float)
-        Densities at source coordinates.
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning sources by leaf.
-    max_points : int
-        Max points allowed in a node.
-    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
-        Target potentials (component 0), and x, y, and z components of
-        potential gradient (components 1, 2, 3 resp.).
-    p2p_parallel_function : function
-	    Parallel P2P function handle for this kernel.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-    """
-
-    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_node_data(
-        leaves,
-        nleaves,
-        key_to_leaf_index,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        max_points,
-        dtype
-    )
-
-    target_potentials_vec = p2p_parallel_function(
-        sources=local_sources,
-        targets=local_targets,
-        source_densities=local_source_densities,
-        source_index_pointer=local_source_index_pointer,
-        target_index_pointer=local_target_index_pointer
-    )
-
-    nleaves = len(local_target_index_pointer) - 1
-
-    for i in range(nleaves):
-        res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
-        leaf = leaves[i]
-        leaf_idx = key_to_leaf_index[leaf]
-        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
+        target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1],1:] += \
+            p2p_gradient_function(sources_at_node, targets_at_node, source_densities_at_node)
+        target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1], 0] += \
+           p2p_function(sources_at_node, targets_at_node, source_densities_at_node)
