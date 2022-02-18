@@ -259,7 +259,8 @@ def p2m(
     )
 
 
-@numba.njit(cache=True)
+
+@numba.njit(cache=True, parallel=True)
 def m2m(
         keys,
         multipole_expansions,
