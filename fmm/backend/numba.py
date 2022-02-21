@@ -269,9 +269,7 @@ def m2m(
         nequivalent_points,
     ):
     """
-    M2M operator serially applied over keys in a given level. Parallelization
-    doesn't offer much benefit due to blocking writes to the parent multipole
-    expansion.
+    M2M operator parallelized over keys in a given level.
 
     Notes:
     ------
@@ -314,57 +312,6 @@ def m2m(
         multipole_expansions[parent_lidx:parent_ridx] += (
             m2m[operator_idx][0] @ multipole_expansions[child_lidx:child_ridx]
         )
-
-
-@numba.njit(cache=True, parallel=False)
-def m2l_core(
-        key,
-        v_list,
-        u,
-        s,
-        vt,
-        dc2e_inv_a,
-        dc2e_inv_b,
-        local_expansions,
-        multipole_expansions,
-        nequivalent_points,
-        key_to_index,
-        hash_to_index,
-        scale
-):
-    """
-    Application of the M2L operator over the V list of a given node.
-
-    Parameters:
-    -----------
-    key : np.int64
-	    Operator applied to this key.
-    v_list : np.array(shape=(nv_list), dtype=np.int64)
-	    V list of this key.
-    u : np.array(shape=(ncheck_points, k), dtype=float)
-        Left singular vectors of M2L matrix for all transfer vectors at this level.
-    s : np.array(shape=(k, k), dtype=float)
-        Singular values of M2L matrix for all transfer vectors at this level.
-    vt : np.array(shape=(k, nequivalent_points*316))
-        Right singular values of M2L matrix for all transfer vectors at this level.
-    dc2e_inv_a : np.array(dtype=float)
-        First component of inverse of downward check to equivalent Gram matrix.
-    dc2e_inv_b : np.array(dtype=float)
-        Second component of inverse of downward check to equivalent Gram matrix.
-    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
-        Multipole expansions, aligned by global index from `key_to_index`.
-    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
-        Local expansions, aligned by global index from `key_to_index`.
-    nequivalent_points : int
-        Number of quadrature points on equivalent_surface.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    hash_to_index : numba.typed.Dict.empty(key_type=numba.types.int64, value_type=numba.types.int64)
-        Map between transfer vector hash and index of right singular vector
-        components at a given level.
-    scale : float
-        Kernel scale for keys at this level.
-    """
 
 
 @numba.njit(cache=True, parallel=True)
@@ -458,7 +405,6 @@ def m2l(
             )
 
 
-
 @numba.njit(cache=True, parallel=True)
 def l2l(
     keys,
@@ -467,6 +413,28 @@ def l2l(
     key_to_index,
     nequivalent_points
 ):
+    """
+    L2L operator parallelized over keys in a given level.
+
+    Notes:
+    ------
+    As it's not possible to know group siblings contained in the tree apriori
+    due to the relative cost of searching the tree for siblings, it's not
+    possible to parallelize the operation over groups of siblings.
+
+    Parameters:
+    -----------
+    keys : np.array(shape=(nkeys), dtype=np.int64)
+        All nodes at a given level of the octree.
+    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
+        Local expansions, aligned by global index from `key_to_index`.
+    l2l : np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)
+	    Precomputed M2M operators.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
+    nequivalent_points : int
+        Number of quadrature points on equivalent_surface.
+    """
     nkeys = len(keys)
     for i in numba.prange(nkeys):
         child = keys[i]
@@ -836,6 +804,8 @@ def l2t(
         dtype
     ):
     """
+    L2T operator, parallelized over leaves.
+
     Parameters:
     -----------
     leaves: np.array(shape=(nleaves), dtype=np.int64)
@@ -918,6 +888,8 @@ def near_field(
     p2p_gradient_function
 ):
     """
+    Near field operator, parallelized over leaves.
+
     Parameters:
     -----------
     leaves: np.array(shape=(nleaves), dtype=np.int64)
