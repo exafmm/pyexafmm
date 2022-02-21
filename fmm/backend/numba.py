@@ -259,7 +259,8 @@ def p2m(
     )
 
 
-@numba.njit(cache=True)
+
+@numba.njit(cache=True, parallel=True)
 def m2m(
         keys,
         multipole_expansions,
@@ -268,9 +269,7 @@ def m2m(
         nequivalent_points,
     ):
     """
-    M2M operator serially applied over keys in a given level. Parallelization
-    doesn't offer much benefit due to blocking writes to the parent multipole
-    expansion.
+    M2M operator parallelized over keys in a given level.
 
     Notes:
     ------
@@ -293,7 +292,7 @@ def m2m(
     """
     nkeys = len(keys)
 
-    for i in range(nkeys):
+    for i in numba.prange(nkeys):
         child = keys[i]
         parent = morton.find_parent(child)
 
@@ -312,85 +311,6 @@ def m2m(
         # Add child contribution to parent multipole expansion
         multipole_expansions[parent_lidx:parent_ridx] += (
             m2m[operator_idx][0] @ multipole_expansions[child_lidx:child_ridx]
-        )
-
-
-@numba.njit(cache=True, parallel=False)
-def m2l_core(
-        key,
-        v_list,
-        u,
-        s,
-        vt,
-        dc2e_inv_a,
-        dc2e_inv_b,
-        local_expansions,
-        multipole_expansions,
-        nequivalent_points,
-        key_to_index,
-        hash_to_index,
-        scale
-):
-    """
-    Application of the M2L operator over the V list of a given node.
-
-    Parameters:
-    -----------
-    key : np.int64
-	    Operator applied to this key.
-    v_list : np.array(shape=(nv_list), dtype=np.int64)
-	    V list of this key.
-    u : np.array(shape=(ncheck_points, k), dtype=float)
-        Left singular vectors of M2L matrix for all transfer vectors at this level.
-    s : np.array(shape=(k, k), dtype=float)
-        Singular values of M2L matrix for all transfer vectors at this level.
-    vt : np.array(shape=(k, nequivalent_points*316))
-        Right singular values of M2L matrix for all transfer vectors at this level.
-    dc2e_inv_a : np.array(dtype=float)
-        First component of inverse of downward check to equivalent Gram matrix.
-    dc2e_inv_b : np.array(dtype=float)
-        Second component of inverse of downward check to equivalent Gram matrix.
-    multipole_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
-        Multipole expansions, aligned by global index from `key_to_index`.
-    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
-        Local expansions, aligned by global index from `key_to_index`.
-    nequivalent_points : int
-        Number of quadrature points on equivalent_surface.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    hash_to_index : numba.typed.Dict.empty(key_type=numba.types.int64, value_type=numba.types.int64)
-        Map between transfer vector hash and index of right singular vector
-        components at a given level.
-    scale : float
-        Kernel scale for keys at this level.
-    """
-    nv_list = len(v_list)
-
-    # Indices of local expansion
-    l_lidx = key_to_index[key]*nequivalent_points
-    l_ridx = l_lidx+nequivalent_points
-
-    for i in range(nv_list):
-
-        source = v_list[i]
-
-        # Locd correct components of compressed M2L matrix
-        transfer_vector = morton.find_transfer_vector(key, source)
-        v_idx = hash_to_index[transfer_vector]
-        v_lidx = v_idx*nequivalent_points
-        v_ridx = v_lidx+nequivalent_points
-        vt_sub = np.copy(vt[:, v_lidx:v_ridx])
-
-        # Indices of multipole expansion
-        m_lidx = key_to_index[source]*nequivalent_points
-        m_ridx = m_lidx+nequivalent_points
-
-        local_expansions[l_lidx:l_ridx] += scale*(
-            dc2e_inv_a @ (
-                dc2e_inv_b @ (
-                    u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx]))
-                )
-            )
         )
 
 
@@ -455,63 +375,86 @@ def m2l(
         v_list = v_list[v_list != -1]
         v_list = v_list[v_list != 0]
 
-        m2l_core(
-            key=key,
-            v_list=v_list,
-            u=u,
-            s=s,
-            vt=vt,
-            dc2e_inv_a=dc2e_inv_a,
-            dc2e_inv_b=dc2e_inv_b,
-            local_expansions=local_expansions,
-            multipole_expansions=multipole_expansions,
-            nequivalent_points=nequivalent_points,
-            key_to_index=key_to_index,
-            hash_to_index=hash_to_index,
-            scale=scale
-        )
+        nv_list = len(v_list)
+
+        # Indices of local expansion
+        l_lidx = key_to_index[key]*nequivalent_points
+        l_ridx = l_lidx+nequivalent_points
+
+        for j in range(nv_list):
+
+            source = v_list[j]
+
+            # Locate correct components of compressed M2L matrix
+            transfer_vector = morton.find_transfer_vector(key, source)
+            v_idx = hash_to_index[transfer_vector]
+            v_lidx = v_idx*nequivalent_points
+            v_ridx = v_lidx+nequivalent_points
+            vt_sub = np.copy(vt[:, v_lidx:v_ridx])
+
+            # Indices of multipole expansion
+            m_lidx = key_to_index[source]*nequivalent_points
+            m_ridx = m_lidx+nequivalent_points
+
+            local_expansions[l_lidx:l_ridx] += scale*(
+                dc2e_inv_a @ (
+                    dc2e_inv_b @ (
+                        u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx]))
+                    )
+                )
+            )
 
 
-@numba.njit(cache=True)
+@numba.njit(cache=True, parallel=True)
 def l2l(
-        key,
-        local_expansions,
-        l2l,
-        key_to_index,
-        nequivalent_points
-     ):
+    keys,
+    local_expansions,
+    l2l,
+    key_to_index,
+    nequivalent_points
+):
     """
-    L2L operator applied to a parent key.
+    L2L operator parallelized over keys in a given level.
+
+    Notes:
+    ------
+    As it's not possible to know group siblings contained in the tree apriori
+    due to the relative cost of searching the tree for siblings, it's not
+    possible to parallelize the operation over groups of siblings.
 
     Parameters:
     -----------
-    key : np.int64
-        Operator applied to this key.
+    keys : np.array(shape=(nkeys), dtype=np.int64)
+        All nodes at a given level of the octree.
     local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
-	    Local expansions, aligned by global index from `key_to_index`.
+        Local expansions, aligned by global index from `key_to_index`.
     l2l : np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)
-        Precomputed L2L operators.
+	    Precomputed M2M operators.
     key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
         Map from key to global index.
     nequivalent_points : int
         Number of quadrature points on equivalent_surface.
     """
-    parent = morton.find_parent(key)
-    parent_idx = key_to_index[parent]
-    parent_lidx = parent_idx*nequivalent_points
-    parent_ridx = parent_lidx+nequivalent_points
-    parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
+    nkeys = len(keys)
+    for i in numba.prange(nkeys):
+        child = keys[i]
 
-    # Compute expansion index
-    child_idx = key_to_index[key]
-    child_lidx = child_idx*nequivalent_points
-    child_ridx = child_lidx+nequivalent_points
+        parent = morton.find_parent(child)
+        parent_idx = key_to_index[parent]
+        parent_lidx = parent_idx*nequivalent_points
+        parent_ridx = parent_lidx+nequivalent_points
+        parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
 
-    # Compute operator index
-    operator_idx = key == morton.find_siblings(key)
+        # Compute expansion index
+        child_idx = key_to_index[child]
+        child_lidx = child_idx*nequivalent_points
+        child_ridx = child_lidx+nequivalent_points
 
-    # Compute contribution to local expansion of child from parent
-    local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
+        # Compute operator index
+        operator_idx = child == morton.find_siblings(child)
+
+        # Compute contribution to local expansion of child from parent
+        local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
 
 
 @numba.njit(cache=True, parallel=True)
@@ -861,6 +804,8 @@ def l2t(
         dtype
     ):
     """
+    L2T operator, parallelized over leaves.
+
     Parameters:
     -----------
     leaves: np.array(shape=(nleaves), dtype=np.int64)
@@ -926,24 +871,24 @@ def l2t(
         target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
 
 
-@numba.njit(cache=True)
-def prepare_u_list_data(
-        leaves,
-        nleaves,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        key_to_index,
-        key_to_leaf_index,
-        u_lists,
-        max_points,
-        dtype
-    ):
+@numba.njit(cache=True, parallel=True)
+def near_field(
+    leaves,
+    nleaves,
+    key_to_leaf_index,
+    key_to_index,
+    targets,
+    u_lists,
+    target_index_pointer,
+    sources,
+    source_densities,
+    source_index_pointer,
+    target_potentials,
+    p2p_function,
+    p2p_gradient_function
+):
     """
-    Prepare U list data to maximise cache re-use by allocating aligned arrays
-    aligning source and target coordinates.
+    Near field operator, parallelized over leaves.
 
     Parameters:
     -----------
@@ -951,8 +896,14 @@ def prepare_u_list_data(
 	    Octree leaves.
     nleaves : int
     	Number of leaves.
+    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to leaf index.
+    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
+        Map from key to global index.
     targets : np.array(shape=(ntargets, 3), dtype=float)
         All target coordinates.
+    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
+        All U lists for nodes in octree.
     target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
         Index pointer aligning targets by leaf.
     sources : np.array(shape=(nsources, 3), dtype=float)
@@ -961,237 +912,41 @@ def prepare_u_list_data(
         Densities at source coordinates.
     source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
         Index pointer aligning sources by leaf.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
-        All U lists for nodes in octree.
-    max_points : int
-        Max points allowed in a node.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-
-    Returns:
-    --------
-    5-tuple containing the re-batched sources, targets, source densities, source index pointers
-    and target index pointers respectively.
+    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
+        Target potentials (component 0), and x, y, and z components of
+        potential gradient (components 1, 2, 3 resp.).
     """
-
-    local_sources = np.zeros((max_points*26*nleaves, 3), dtype=dtype)
-    local_source_densities = np.zeros((max_points*26*nleaves), dtype=dtype)
-    local_targets = np.zeros((max_points*nleaves, 3), dtype=dtype)
-    local_source_index_pointer = np.zeros(nleaves+1, np.int64)
-    local_target_index_pointer = np.zeros(nleaves+1, np.int64)
-
-    source_ptr = 0
-    target_ptr = 0
-    local_source_index_pointer[0] = source_ptr
-    local_target_index_pointer[0] = target_ptr
-
-    for i in range(nleaves):
+    for i in numba.prange(nleaves):
         target = leaves[i]
         target_leaf_index = key_to_leaf_index[target]
         target_index = key_to_index[target]
-
         targets_at_node = targets[
             target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1]
         ]
-
-        ntargets_at_node = len(targets_at_node)
-        new_target_ptr = target_ptr+ntargets_at_node
-
-        local_targets[target_ptr:new_target_ptr] = targets_at_node
-        target_ptr = new_target_ptr
-
-        local_target_index_pointer[i+1] = target_ptr
 
         u_list = u_lists[target_index]
         u_list = u_list[u_list != -1]
 
-
+        # single threaded over inner loop over u list!
         for j in range(len(u_list)):
-
             source = u_list[j]
             source_leaf_index = key_to_leaf_index[source]
+
             sources_at_node = sources[
                 source_index_pointer[source_leaf_index]:source_index_pointer[source_leaf_index+1]
             ]
-            nsources_at_node = len(sources_at_node)
 
             source_densities_at_node = source_densities[
                 source_index_pointer[source_leaf_index]:source_index_pointer[source_leaf_index+1]
-                ]
+            ]
 
-            new_source_ptr = source_ptr+nsources_at_node
-
-            local_sources[source_ptr:new_source_ptr] = sources_at_node
-            local_source_densities[source_ptr:new_source_ptr] = source_densities_at_node
-
-            source_ptr = new_source_ptr
-
-        local_source_index_pointer[i+1] = source_ptr
-
-    local_sources = local_sources[local_source_index_pointer[0]:local_source_index_pointer[-1]]
-    local_source_densities = local_source_densities[local_source_index_pointer[0]:local_source_index_pointer[-1]]
-    local_targets = local_targets[local_target_index_pointer[0]:local_target_index_pointer[-1]]
-
-    return local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer
+            target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1],1:] += \
+                p2p_gradient_function(sources_at_node, targets_at_node, source_densities_at_node)
+            target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1], 0] += \
+               p2p_function(sources_at_node, targets_at_node, source_densities_at_node)
 
 
-@numba.njit(cache=True)
-def near_field_u_list(
-        leaves,
-        nleaves,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        key_to_index,
-        key_to_leaf_index,
-        u_lists,
-        max_points,
-        target_potentials,
-        p2p_parallel_function,
-        dtype
-    ):
-    """
-    Evaluate all near fields particles, corresponding to members of the U list,
-    for all leaves.
-
-    Parameters:
-    -----------
-    leaves: np.array(shape=(nleaves), dtype=np.int64)
-	    Octree leaves.
-    nleaves : int
-    	Number of leaves.
-    targets : np.array(shape=(ntargets, 3), dtype=float)
-        All target coordinates.
-    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning targets by leaf.
-    sources : np.array(shape=(nsources, 3), dtype=float)
-        All source coordinates.
-    source_densities : np.array(shape=(nsources), dtype=float)
-        Densities at source coordinates.
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning sources by leaf.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    u_lists : np.array(shape=(ncomplete, nu_list), dtype=np.int64)
-        All U lists for nodes in octree.
-    max_points : int
-        Max points allowed in a node.
-    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
-        Target potentials (component 0), and x, y, and z components of
-        potential gradient (components 1, 2, 3 resp.).
-    p2p_parallel_function : function
-	    Parallel P2P function handle for this kernel.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-    """
-    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_u_list_data(
-            leaves=leaves,
-            nleaves=nleaves,
-            targets=targets,
-            target_index_pointer=target_index_pointer,
-            sources=sources,
-            source_densities=source_densities,
-            source_index_pointer=source_index_pointer,
-            key_to_index=key_to_index,
-            key_to_leaf_index=key_to_leaf_index,
-            u_lists=u_lists,
-            max_points=max_points,
-            dtype=dtype
-        )
-
-    target_potentials_vec = p2p_parallel_function(
-        sources=local_sources,
-        targets=local_targets,
-        source_densities=local_source_densities,
-        source_index_pointer=local_source_index_pointer,
-        target_index_pointer=local_target_index_pointer
-    )
-
-    nleaves = len(local_target_index_pointer) - 1
-
-    for i in range(nleaves):
-        res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
-        leaf = leaves[i]
-        leaf_idx = key_to_leaf_index[leaf]
-        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
-
-
-@numba.njit(cache=True)
-def prepare_node_data(
-        leaves,
-        nleaves,
-        key_to_leaf_index,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        max_points,
-        dtype
-    ):
-    """
-    Prepare source and target data within each node in order to maximize cache
-    re-use.
-
-    Notes:
-    ------
-    Uses same strategy as over U lists.
-
-    Parameters:
-    -----------
-    leaves: np.array(shape=(nleaves), dtype=np.int64)
-	    Octree leaves.
-    nleaves : int
-    	Number of leaves.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    targets : np.array(shape=(ntargets, 3), dtype=float)
-        All target coordinates.
-    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning targets by leaf.
-    sources : np.array(shape=(nsources, 3), dtype=float)
-        All source coordinates.
-    source_densities : np.array(shape=(nsources), dtype=float)
-        Densities at source coordinates.
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning sources by leaf.
-    max_points : int
-        Max points allowed in a node.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-
-    Returns:
-    --------
-    5-tuple containing the re-batched sources, targets, source densities, source index pointers
-    and target index pointers respectively.
-    """
-    local_sources = np.zeros((max_points*nleaves, 3), dtype=dtype)
-    local_source_densities = np.zeros((max_points*nleaves), dtype=dtype)
-    local_targets = np.zeros((max_points*nleaves, 3), dtype=dtype)
-    local_source_index_pointer = np.zeros(nleaves+1, np.int64)
-    local_target_index_pointer = np.zeros(nleaves+1, np.int64)
-
-    source_ptr = 0
-    target_ptr = 0
-    local_source_index_pointer[0] = source_ptr
-    local_target_index_pointer[0] = target_ptr
-
-    for i in range(nleaves):
-        target = leaves[i]
-        target_leaf_index = key_to_leaf_index[target]
-
-        targets_at_node = targets[
-            target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1]
-        ]
-
+        # Now compute contribution due to sources in the node itself
         sources_at_node = sources[
             source_index_pointer[target_leaf_index]:source_index_pointer[target_leaf_index+1]
         ]
@@ -1200,98 +955,7 @@ def prepare_node_data(
             source_index_pointer[target_leaf_index]:source_index_pointer[target_leaf_index+1]
         ]
 
-        ntargets_at_node = len(targets_at_node)
-        new_target_ptr = target_ptr+ntargets_at_node
-
-        local_targets[target_ptr:new_target_ptr] = targets_at_node
-        target_ptr = new_target_ptr
-
-        local_target_index_pointer[i+1] = target_ptr
-
-        nsources_at_node = len(sources_at_node)
-        new_source_ptr = source_ptr+nsources_at_node
-
-        local_sources[source_ptr:new_source_ptr] = sources_at_node
-        local_source_densities[source_ptr:new_source_ptr] = source_densities_at_node
-        source_ptr = new_source_ptr
-
-        local_source_index_pointer[i+1] = source_ptr
-
-    return local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer
-
-
-@numba.njit(cache=True)
-def near_field_node(
-        leaves,
-        nleaves,
-        key_to_leaf_index,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        max_points,
-        target_potentials,
-        p2p_parallel_function,
-        dtype
-    ):
-    """
-    Compute near field interactions for sources and targets within each node.
-
-    Parameters:
-    -----------
-    leaves: np.array(shape=(nleaves), dtype=np.int64)
-	    Octree leaves.
-    nleaves : int
-    	Number of leaves.
-    key_to_leaf_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to leaf index.
-    targets : np.array(shape=(ntargets, 3), dtype=float)
-        All target coordinates.
-    target_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning targets by leaf.
-    sources : np.array(shape=(nsources, 3), dtype=float)
-        All source coordinates.
-    source_densities : np.array(shape=(nsources), dtype=float)
-        Densities at source coordinates.
-    source_index_pointer : np.array(shape=(nleaves+1), dtype=int)
-        Index pointer aligning sources by leaf.
-    max_points : int
-        Max points allowed in a node.
-    target_potentials : np.array(shape=(ntargets, 4), dtype=float)
-        Target potentials (component 0), and x, y, and z components of
-        potential gradient (components 1, 2, 3 resp.).
-    p2p_parallel_function : function
-	    Parallel P2P function handle for this kernel.
-    dtype : type
-        Corresponds to precision of experiment ∈ {np.float32, np.float64}.
-    """
-
-    local_sources, local_targets, local_source_densities, local_source_index_pointer, local_target_index_pointer = prepare_node_data(
-        leaves,
-        nleaves,
-        key_to_leaf_index,
-        targets,
-        target_index_pointer,
-        sources,
-        source_densities,
-        source_index_pointer,
-        max_points,
-        dtype
-    )
-
-    target_potentials_vec = p2p_parallel_function(
-        sources=local_sources,
-        targets=local_targets,
-        source_densities=local_source_densities,
-        source_index_pointer=local_source_index_pointer,
-        target_index_pointer=local_target_index_pointer
-    )
-
-    nleaves = len(local_target_index_pointer) - 1
-
-    for i in range(nleaves):
-        res = target_potentials_vec[local_target_index_pointer[i]:local_target_index_pointer[i+1]]
-        leaf = leaves[i]
-        leaf_idx = key_to_leaf_index[leaf]
-        target_potentials[target_index_pointer[leaf_idx]:target_index_pointer[leaf_idx+1], :] += res
+        target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1],1:] += \
+            p2p_gradient_function(sources_at_node, targets_at_node, source_densities_at_node)
+        target_potentials[target_index_pointer[target_leaf_index]:target_index_pointer[target_leaf_index+1], 0] += \
+           p2p_function(sources_at_node, targets_at_node, source_densities_at_node)
