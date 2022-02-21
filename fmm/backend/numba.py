@@ -365,34 +365,6 @@ def m2l_core(
     scale : float
         Kernel scale for keys at this level.
     """
-    nv_list = len(v_list)
-
-    # Indices of local expansion
-    l_lidx = key_to_index[key]*nequivalent_points
-    l_ridx = l_lidx+nequivalent_points
-
-    for i in range(nv_list):
-
-        source = v_list[i]
-
-        # Locd correct components of compressed M2L matrix
-        transfer_vector = morton.find_transfer_vector(key, source)
-        v_idx = hash_to_index[transfer_vector]
-        v_lidx = v_idx*nequivalent_points
-        v_ridx = v_lidx+nequivalent_points
-        vt_sub = np.copy(vt[:, v_lidx:v_ridx])
-
-        # Indices of multipole expansion
-        m_lidx = key_to_index[source]*nequivalent_points
-        m_ridx = m_lidx+nequivalent_points
-
-        local_expansions[l_lidx:l_ridx] += scale*(
-            dc2e_inv_a @ (
-                dc2e_inv_b @ (
-                    u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx]))
-                )
-            )
-        )
 
 
 @numba.njit(cache=True, parallel=True)
@@ -456,63 +428,35 @@ def m2l(
         v_list = v_list[v_list != -1]
         v_list = v_list[v_list != 0]
 
-        m2l_core(
-            key=key,
-            v_list=v_list,
-            u=u,
-            s=s,
-            vt=vt,
-            dc2e_inv_a=dc2e_inv_a,
-            dc2e_inv_b=dc2e_inv_b,
-            local_expansions=local_expansions,
-            multipole_expansions=multipole_expansions,
-            nequivalent_points=nequivalent_points,
-            key_to_index=key_to_index,
-            hash_to_index=hash_to_index,
-            scale=scale
-        )
+        nv_list = len(v_list)
 
+        # Indices of local expansion
+        l_lidx = key_to_index[key]*nequivalent_points
+        l_ridx = l_lidx+nequivalent_points
 
-@numba.njit(cache=True)
-def l2l_core(
-        key,
-        local_expansions,
-        l2l,
-        key_to_index,
-        nequivalent_points
-     ):
-    """
-    L2L operator applied to a parent key.
+        for j in range(nv_list):
 
-    Parameters:
-    -----------
-    key : np.int64
-        Operator applied to this key.
-    local_expansions : np.array(shape=(nequivalent_points*ncomplete), dtype=float)
-	    Local expansions, aligned by global index from `key_to_index`.
-    l2l : np.array(shape=(8, ncheck_points, nequivalent_points), dtype=float)
-        Precomputed L2L operators.
-    key_to_index : numba.typed.Dict(key_type=np.int64, value_type=np.int64)
-        Map from key to global index.
-    nequivalent_points : int
-        Number of quadrature points on equivalent_surface.
-    """
-    parent = morton.find_parent(key)
-    parent_idx = key_to_index[parent]
-    parent_lidx = parent_idx*nequivalent_points
-    parent_ridx = parent_lidx+nequivalent_points
-    parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
+            source = v_list[j]
 
-    # Compute expansion index
-    child_idx = key_to_index[key]
-    child_lidx = child_idx*nequivalent_points
-    child_ridx = child_lidx+nequivalent_points
+            # Locate correct components of compressed M2L matrix
+            transfer_vector = morton.find_transfer_vector(key, source)
+            v_idx = hash_to_index[transfer_vector]
+            v_lidx = v_idx*nequivalent_points
+            v_ridx = v_lidx+nequivalent_points
+            vt_sub = np.copy(vt[:, v_lidx:v_ridx])
 
-    # Compute operator index
-    operator_idx = key == morton.find_siblings(key)
+            # Indices of multipole expansion
+            m_lidx = key_to_index[source]*nequivalent_points
+            m_ridx = m_lidx+nequivalent_points
 
-    # Compute contribution to local expansion of child from parent
-    local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
+            local_expansions[l_lidx:l_ridx] += scale*(
+                dc2e_inv_a @ (
+                    dc2e_inv_b @ (
+                        u @ (s @ (vt_sub @ multipole_expansions[m_lidx:m_ridx]))
+                    )
+                )
+            )
+
 
 
 @numba.njit(cache=True, parallel=True)
@@ -525,8 +469,24 @@ def l2l(
 ):
     nkeys = len(keys)
     for i in numba.prange(nkeys):
-        key = keys[i]
-        l2l_core(key, local_expansions, l2l, key_to_index, nequivalent_points)
+        child = keys[i]
+
+        parent = morton.find_parent(child)
+        parent_idx = key_to_index[parent]
+        parent_lidx = parent_idx*nequivalent_points
+        parent_ridx = parent_lidx+nequivalent_points
+        parent_equivalent_density = local_expansions[parent_lidx:parent_ridx]
+
+        # Compute expansion index
+        child_idx = key_to_index[child]
+        child_lidx = child_idx*nequivalent_points
+        child_ridx = child_lidx+nequivalent_points
+
+        # Compute operator index
+        operator_idx = child == morton.find_siblings(child)
+
+        # Compute contribution to local expansion of child from parent
+        local_expansions[child_lidx:child_ridx] += l2l[operator_idx][0] @ parent_equivalent_density
 
 
 @numba.njit(cache=True, parallel=True)
