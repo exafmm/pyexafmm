@@ -12,7 +12,7 @@ with open(PATH_VERSION, mode='r', encoding='utf-8') as f:
 
 requirements = [
     "adaptoctree==1.3.0",
-    "scipy==1.6.1",
+    "scipy==1.10.0",
     "h5py==2.10.0",
     "scikit-learn==0.24.2",
     "click==7.1.2",
