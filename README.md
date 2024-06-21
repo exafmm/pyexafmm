@@ -2,39 +2,22 @@
 PyExaFMM
 </h1>
 
-[![Anaconda-Server Badge](https://img.shields.io/conda/v/skailasa/pyexafmm.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/latest_release_date.svg)](https://anaconda.org/skailasa/pyexafmm) [![Anaconda-Server Badge](https://anaconda.org/skailasa/pyexafmm/badges/platforms.svg)](https://anaconda.org/skailasa/pyexafmm)
-
 PyExaFMM is an adaptive particle kernel-independent FMM based on [1], written in pure Python with some extensions. Representing a compromise between portability, maintainability, and performance.
+
+PyExaFMM is no longer supported actively, and instead serves as an example for the kernel independent FMM in Python.
 
 ## Install
 
-Download from Anaconda cloud into a conda/mini-conda environment:
+
+Build from source
 
 ```bash
-conda install -c skailasa pyexafmm
-```
-
-Developers may want to build from source:
-
-```bash
-# Add required channels
-conda config --env --add channels skailasa
-conda config --env --add channels conda-forge
-conda config --env --add channels anaconda
-conda config --env --add channels nvidia
-
 # Clone
 git clone git@github.com:exafmm/pyexafmm.git
 cd pyexafmm
 
 # Build
-conda build conda.recipe
-
-# Install
-conda install --use-local pyexafmm
-
-# Editable mode for live development
-python setup.py develop
+python -m pip install .
 ```
 
 ## Configuration
