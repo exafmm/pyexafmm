@@ -9,7 +9,6 @@ description = "A Python FMM accelerated with Numba"
 authors = [
     { name = "Srinath Kailasa", email = "srinathkailasa@gmail.com" }
 ]
-keywords = ["AdaptOctree"]
 classifiers = [
     "Programming Language :: Python :: 3.8"
 ]
