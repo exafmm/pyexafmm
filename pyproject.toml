@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fmm"
+version = "1.3.0"
+description = "A Python FMM accelerated with Numba"
+authors = [
+    { name = "Srinath Kailasa", email = "srinathkailasa@gmail.com" }
+]
+keywords = ["AdaptOctree"]
+classifiers = [
+    "Programming Language :: Python :: 3.8"
+]
+
+dependencies = [
+    "adaptoctree @ git+https://github.com/Excalibur-SLE/AdaptOctree.git",
+    "scipy",
+    "h5py",
+    "scikit-learn",
+    "click",
+    "pytest"
+]
+readme = {file = "README.md", content-type = "text/markdown"}
+license = {file = "LICENSE"}
+urls = { "Homepage"="https://github.com/exafmm/pyexafmm/"}
+
+
+[tool.setuptools.packages.find]
+exclude = ["*.test"]
+
+[project.scripts]
+fmm = "ci.cli:cli"
